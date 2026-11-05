@@ -1,0 +1,28 @@
+name: LittleBearTutor
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: cn.littlebear.tutor.ipad
+    SWIFT_VERSION: 5.0
+    TARGETED_DEVICE_FAMILY: "2"
+    INFOPLIST_KEY_NSMicrophoneUsageDescription: "用于将你说的问题识别成文字，确认后才发送给辅导服务。"
+    INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "用于把你说的问题识别成文字，识别结果会先显示供你修改。"
+    INFOPLIST_KEY_NSLocalNetworkUsageDescription: "用于连接家长配置的家庭辅导服务。"
+    INFOPLIST_KEY_NSCameraUsageDescription: "拍摄当前作业题目，只有在你确认发送时才会交给辅导服务。"
+    INFOPLIST_KEY_CFBundleDisplayName: 小熊伴学
+targets:
+  LittleBearTutor:
+    type: application
+    platform: iOS
+    sources:
+      - path: LittleBearTutor
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        PRODUCT_NAME: LittleBearTutor
+    scheme:
+      testTargets: []
