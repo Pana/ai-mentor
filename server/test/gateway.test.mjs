@@ -159,3 +159,10 @@ test('gives up after a second blank reply', async t => {
   assert.equal((await post()).status, 502);
   assert.equal(calls, 2);
 });
+
+test('accepts a numeric practice answer as text', () => {
+  const content = JSON.stringify({ message: '试试', exercise: { concept: '加法', prompt: '35 + 27 = ？', answer: 62, hints: ['a', 'b', 'c'], explanation: 'e' } });
+  const result = validateReply(content, { mode: 'practice', subject: 'MATH' });
+  assert.equal(result.exercise.answer, '62');
+  assert.throws(() => validateReply(content.replace('62', 'null'), { mode: 'practice', subject: 'MATH' }));
+});

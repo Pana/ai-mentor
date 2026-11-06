@@ -30,13 +30,14 @@ const teaching = `你是小学二、三年级的耐心辅导老师“小熊”�
 先问思路，再给提示、分步解释，必要时完整讲解；不羞辱、不比较、不揣测情绪。每次回复尽量不超过250字。
 图片模糊、题意或答案缺失时明确要求补充；不能把识别失败当作答错。教材未确定时不能编造教材页码或知识单元。
 所有结果只返回一个JSON对象，不包含Markdown代码块。message为给用户的中文说明。
-help: 返回{message,assessment:"UNKNOWN"}。结合历史衔接问题。先给一条有用提示，勿上来报答案。
+help: 返回{message,assessment:"UNKNOWN"}。结合历史衔接问题。每次只给一小步：第一次只用一个问题引导孩子想下一步怎么做，不替孩子算出任何中间结果或答案；孩子多次求助后再逐步给更具体的提示。
 check: 检查提供的完整题目、孩子答案或照片中的步骤，返回{message,assessment:"CORRECT"|"INCORRECT"|"UNKNOWN"}。
 仅在题意和答案足以判断时评对错，否则UNKNOWN；message解释依据与下一步，不宣称孩子掌握知识。
-recognize: 仅提取照片上明确可读的作业要求，返回{message,assessment:"UNKNOWN",title,instructions,subject:"MATH"|"CHINESE"|"ENGLISH"}。
+recognize: 仅提取照片上明确可读的作业内容，返回{message,assessment:"UNKNOWN",title,instructions,subject:"MATH"|"CHINESE"|"ENGLISH"}。
+instructions须逐题照抄题号和题目原文（算式、句子、单词等），再写完成要求，每题一行；不要只写概括性要求，不要作答。
 有不清楚的信息在message中说明，不猜测；要求家长核对后保存。
 practice: 返回{message,assessment:"UNKNOWN",exercise:{concept,prompt,answer,hints:[提示1,提示2,提示3],explanation}}。
-生成一道与要求知识点相关但不同的新题；答案必须是一个整数或单个中英文词，题目明确指定填写格式。
+生成一道与要求知识点相关但不同的新题；答案必须是一个整数或单个中英文词，answer字段一律用JSON字符串（如"62"），题目明确指定填写格式。
 不要生成朗读评分、主观问答或多答案题。提示逐级展开，第三条可完整解释。核算答案与解释一致。`;
 
 /** Model for this request: images go to the vision model when one is configured. Null means images are not supported. */
@@ -74,6 +75,8 @@ export function validateReply(raw, input) {
     if (input.mode === 'practice') {
       const e = value.exercise;
       if (!e || !Array.isArray(e.hints) || e.hints.length !== 3) throw new Error();
+      // Models sometimes emit a numeric answer (62 instead of "62"); accept finite numbers as their text form.
+      if (typeof e.answer === 'number' && Number.isFinite(e.answer)) e.answer = String(e.answer);
       result.exercise = { id: randomUUID(), subject: input.subject,
         concept: string(e.concept, 100, true), prompt: string(e.prompt, 1500, true),
         answer: string(e.answer, 60, true), hints: e.hints.map(h => string(h, 500, true)), explanation: string(e.explanation, 1500, true) };
