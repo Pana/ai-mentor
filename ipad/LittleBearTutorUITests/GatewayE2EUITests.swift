@@ -1,0 +1,79 @@
+import XCTest
+
+/// Full round trip through the real gateway and a mock model. Run via `scripts/ipad-e2e.sh`;
+/// skipped in normal test runs because no gateway is configured.
+final class GatewayE2EUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    /// Opens a page via the tab bar (iPhone, narrow windows) or the sidebar (full-screen iPad).
+    private func openSidebar(_ app: XCUIApplication, _ title: String) {
+        if app.keyboards.element.exists, app.buttons["完成"].exists { app.buttons["完成"].tap() }
+        let tab = app.tabBars.buttons[title]
+        if tab.waitForExistence(timeout: 1) {
+            tab.tap()
+            let back = app.navigationBars.buttons["BackButton"]   // return to the tab's root page
+            while back.exists && !app.navigationBars[title].exists { back.tap() }
+        } else {
+            let cell = app.cells.containing(.staticText, identifier: title).firstMatch
+            XCTAssertTrue(cell.waitForExistence(timeout: 5), "sidebar item \(title)")
+            cell.tap()
+        }
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "page \(title) opened")
+    }
+
+    func testHelpCheckAndGeneratedPractice() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let url = env["E2E_GATEWAY_URL"], let token = env["E2E_TOKEN"] else {
+            throw XCTSkip("Run scripts/ipad-e2e.sh to provide a local gateway.")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing-reset", "-ui-testing-sample-photo", "-e2e-service", url, token]
+        app.launch()
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        app.buttons["先体验示例家庭"].tap()
+
+        // Homework: ask for a hint, then a provisional check.
+        openSidebar(app, "我的作业")
+        app.staticTexts["小熊的橡果问题"].firstMatch.tap()
+        let answer = app.textFields["记录你的答案或想法（可选）"]
+        XCTAssertTrue(answer.waitForExistence(timeout: 5))
+        answer.tap(); answer.typeText("42")
+        let question = app.textFields["说说你卡在哪里，或写下你的思路"]
+        question.tap(); question.typeText("个位怎么算")
+        app.buttons["发送问题"].tap()
+        XCTAssertTrue(app.staticTexts["小熊：先看看个位：4 加 8 等于多少？满十要怎么办？"].waitForExistence(timeout: 15))
+        app.buttons["帮我检查"].tap()
+        XCTAssertTrue(app.staticTexts["AI 检查建议：目前看起来正确。最终完成状态由家长确认。"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["进行中"].exists, "an AI check never completes homework")
+
+        // Practice: generate an AI exercise and answer it.
+        openSidebar(app, "练一练")
+        app.buttons["生成新题"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["算一算：35 + 27 = ？请填写一个整数。"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["这是 AI 生成题，参考答案可能有误；结果不计入独立掌握证据。"].exists)
+        let field = app.textFields["写下你的答案"]
+        field.tap(); field.typeText("62")
+        app.buttons["我写好了，检查一下"].tap()
+        XCTAssertTrue(app.staticTexts["已完成"].waitForExistence(timeout: 5))
+
+        // Progress: the generated exercise is recorded but not counted as mastery.
+        openSidebar(app, "我的进步")
+        XCTAssertTrue(app.staticTexts["待核验"].waitForExistence(timeout: 5))
+
+        // Photo recognition: crop a sample worksheet, send it, confirm the draft before saving.
+        openSidebar(app, "我的作业")
+        app.buttons["添加作业"].tap()
+        app.buttons["使用示例图片"].tap()
+        XCTAssertTrue(app.buttons["使用选中区域"].waitForExistence(timeout: 5))
+        app.buttons["使用选中区域"].tap()
+        app.buttons["识别作业要求（发送这张图片）"].tap()
+        XCTAssertTrue(app.staticTexts["已识别，请家长核对。"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["确认添加"].isEnabled, "recognized drafts need parent confirmation")
+        let confirm = app.switches["我已核对图片，并修正了不清楚的内容"]
+        if !confirm.isHittable { app.swipeUp() }
+        confirm.switches.firstMatch.tap()
+        XCTAssertTrue(app.buttons["确认添加"].isEnabled)
+        app.buttons["确认添加"].tap()
+        XCTAssertTrue(app.staticTexts["口算练习"].waitForExistence(timeout: 5))
+    }
+}

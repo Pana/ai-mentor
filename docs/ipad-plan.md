@@ -1,12 +1,12 @@
 # iPad 客户端开发计划
 
-当前项目有 Android 客户端和无状态 AI 网关。用户拥有 Apple 芯片 Mac 与 iPad，已开始新增原生 SwiftUI iPad 客户端；本文件定义复用边界和第一阶段顺序。
+**iPad 为首发平台**（2026-11-06 确认）。用户拥有 Apple 芯片 Mac 与 iPad；SwiftUI 客户端已在 Xcode 27.2 编译通过并在模拟器启动。本文件定义复用边界和第一阶段顺序。
 
 ## 环境要求
 
 在 Mac 上安装与 macOS 兼容的 Xcode，使用 Swift 5、SwiftUI 和 iPadOS SDK。需要一个 Apple ID；真机调试、TestFlight 和发布需要按 Apple 账号类型配置签名。具体 Mac 型号、macOS、Xcode 版本和 iPad 型号待记录。
 
-Linux 当前无法生成 iPad `.app` / `.ipa`、运行 iOS Simulator 或完成 Apple 签名。Mac 的 Xcode 工程应放在本项目旁边或单独目录，并通过正常 Git 仓库或源码迁移包同步；不要把 DerivedData、Provisioning Profile 或签名证书提交到仓库。
+Xcode 工程由 `ipad/project.yml` 经 XcodeGen 生成（`cd ipad && xcodegen generate`），生成的 `.xcodeproj` 不提交；修改工程设置请改 `project.yml`。不要把 DerivedData、Provisioning Profile、签名证书或 `DEVELOPMENT_TEAM` 提交到仓库。
 
 ## 复用与重写边界
 
@@ -31,13 +31,13 @@ Linux 当前无法生成 iPad `.app` / `.ipa`、运行 iOS Simulator 或完成 A
 5. 家长检查、知识证据、复习安排和本地数据删除。
 6. 在真实 iPad 上按 [iPad 验收清单](ipad-validation.md) 验收横屏、键盘、相机、麦克风、TTS、后台和网络中断。
 
-当前垂直切片已经覆盖第 2 至第 4 项的最小文字流程，并已加入 LocalAuthentication 家长设置门禁、题目图片预览、家长检查证据、TTS 和语音输入；第 1、5、6 项和相机/语音权限仍需要在 Mac/Xcode 与真实 iPad 上补齐。
+第 1 至第 5 项已实现，并有 17 项单元测试和 1 项 UI 冒烟测试；功能清单见 [首版候选状态](first-version-status.md)。学习计时尚未写入记录（第 3 项的重启恢复部分），第 6 项真机验收尚未开始。
 
 生成题、识题和语音输入继续使用网关与同一套请求约束；服务端不因客户端是 Android 或 iPad 而放宽校验。
 
 ## Mac 上的初始检查
 
-在 Mac 终端执行并记录输出：
+已记录：Xcode 27.2（27B52），XcodeGen 2.46.0，可用 iPad 模拟器包括 iPad Air 11-inch (M4)。仍需记录 Mac 型号与 macOS 版本，命令如下：
 
 ```sh
 sw_vers
@@ -49,11 +49,11 @@ xcrun simctl list devices available
 
 ## 与 Android 的关系
 
-Android 版本继续保留，直到 iPad 垂直切片通过实机验收。两端共用同一份 PRD、网关接口和学习证据语义；平台特有能力分别实现。不要把 Android APK 的通过状态当作 iPad 版本通过。
+iPad 为首发平台；Android 客户端保留但暂停新功能。两端共用同一份 PRD、网关接口和学习证据语义；平台特有能力分别实现。不要把 Android APK 的通过状态当作 iPad 版本通过。
 
 ## 需要补充的信息
 
-- Mac 型号、芯片（Apple Silicon 或 Intel）、macOS 和 Xcode 版本。
+- Mac 型号与 macOS 版本（Xcode 27.2 已确认）。
 - iPad 型号、iPadOS 版本、存储空间，以及是否愿意开启开发者模式。
 - 是否已有 Apple Developer 账号，或先使用个人 Apple ID 做本机 Debug 验收。
 - 首版是否需要 App Store/TestFlight，还是只在家庭 iPad 本机安装。

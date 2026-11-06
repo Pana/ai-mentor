@@ -28,12 +28,12 @@ struct ParentSettingsGate: View {
     var body: some View {
         Group {
             if auth.unlocked { SettingsView(onLock: auth.lock) }
-            else VStack(spacing: 20) {
+            else { VStack(spacing: 20) {
                 Image(systemName: "lock.shield").font(.system(size: 52)).foregroundStyle(.green)
                 Text("家长设置已锁定").font(.title2.bold())
                 Text(auth.message ?? "使用 iPad 锁屏密码或 Face ID 进入。").foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button("验证家长身份") { auth.authenticate() }.buttonStyle(.borderedProminent)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(40) }
         }
         .navigationTitle("家长设置")
         .task { if !auth.unlocked { auth.authenticate() } }

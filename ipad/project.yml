@@ -5,9 +5,15 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    PRODUCT_BUNDLE_IDENTIFIER: cn.littlebear.tutor.ipad
     SWIFT_VERSION: 5.0
-    TARGETED_DEVICE_FAMILY: "2"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: 1
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
     INFOPLIST_KEY_NSMicrophoneUsageDescription: "用于将你说的问题识别成文字，确认后才发送给辅导服务。"
     INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "用于把你说的问题识别成文字，识别结果会先显示供你修改。"
     INFOPLIST_KEY_NSLocalNetworkUsageDescription: "用于连接家长配置的家庭辅导服务。"
@@ -20,9 +26,38 @@ targets:
     sources:
       - path: LittleBearTutor
     settings:
+      configs:
+        Debug:
+          INFOPLIST_FILE: Config/Debug-Info.plist
       base:
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
         PRODUCT_NAME: LittleBearTutor
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     scheme:
-      testTargets: []
+      testTargets:
+        - LittleBearTutorTests
+        - LittleBearTutorUITests
+  LittleBearTutorTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: LittleBearTutorTests
+    dependencies:
+      - target: LittleBearTutor
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: cn.littlebear.tutor.ipad.tests
+  LittleBearTutorUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: LittleBearTutorUITests
+    dependencies:
+      - target: LittleBearTutor
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: cn.littlebear.tutor.ipad.uitests
+        TEST_TARGET_NAME: LittleBearTutor
