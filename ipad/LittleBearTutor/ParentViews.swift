@@ -46,7 +46,7 @@ struct SettingsView: View {
                 }
             } header: { Text("作业管理") } footer: { Text("修改题意后，作业会回到“待开始”，之前的小熊对话和检查意见会清除。") }
             Section {
-                TextField("HTTPS 服务地址", text: $url).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                TextField(debugBuild ? "服务地址（HTTPS，或调试用 http://192.168.x.x:8787）" : "HTTPS 服务地址", text: $url).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                 SecureField(model.serviceConfigured ? "设备访问凭证（已保存，修改时重新填写）" : "设备访问凭证", text: $token)
                 Toggle("允许发送当前题目与可选图片", isOn: $consent)
                 Button("保存") { model.saveService(url: url, token: token, consent: consent); token = "" }
@@ -176,3 +176,9 @@ struct EditTaskView: View {
         }
     }
 }
+
+#if DEBUG
+private let debugBuild = true
+#else
+private let debugBuild = false
+#endif

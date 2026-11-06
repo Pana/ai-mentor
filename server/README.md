@@ -47,7 +47,8 @@ MODEL_JSON_MODE=true
 ## iPad 联调
 
 - **模拟器**：Debug 版允许 `http://127.0.0.1:8787`。`scripts/ipad-e2e.sh` 会启动网关和模拟模型（`scripts/mock-model.mjs`），在模拟器里跑一遍求助、检查和生成练习。
-- **真实 iPad**：App 只接受 HTTPS。需要把网关放在 HTTPS 后面，例如云服务器 + 反向代理（Caddy/Nginx 自动证书），或用隧道服务为本机网关提供 HTTPS 地址。家长设置里填写该 HTTPS 根地址和设备凭证。
+- **真机测试（同一 Wi-Fi）**：运行 `scripts/lan-gateway.sh`。脚本读取 `server/.env`（设备凭证为空时自动生成），让网关监听 Mac 的 Wi-Fi 地址，打印服务地址并把设备凭证复制到剪贴板。在 Debug 版 App 的家长设置里填写 `http://<Mac 的 Wi-Fi 地址>:8787` 和凭证即可。只有 Debug 版允许局域网 http，Release 版不包含该例外。
+- **正式使用**：App 只接受 HTTPS。需要把网关放在 HTTPS 后面，例如云服务器 + 反向代理（Caddy/Nginx 自动证书），或用隧道服务为本机网关提供 HTTPS 地址。家长设置里填写该 HTTPS 根地址和设备凭证。
 
 ## 小米平板本机联调（Android，保留）
 

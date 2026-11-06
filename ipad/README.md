@@ -14,7 +14,7 @@
 
 ## 在 iPhone 上测试
 
-同一个工程也能装到 iPhone（首发仍以 iPad 为准）：连接 iPhone，在 Xcode 运行目标里选它即可。iPhone 上是底部标签栏布局。示例家庭、练习、拍题目与框选、语音、Face ID 家长验证都可以在 iPhone 上验证；AI 辅导需要 HTTPS 网关（见 `server/README.md`）。
+同一个工程也能装到 iPhone（首发仍以 iPad 为准）：连接 iPhone，在 Xcode 运行目标里选它即可。iPhone 上是底部标签栏布局。示例家庭、练习、拍题目与框选、语音、Face ID 家长验证都可以在 iPhone 上验证；测试 AI 辅导时，在 Mac 上运行 `scripts/lan-gateway.sh`，按提示在 App 家长设置中填写局域网地址和设备凭证（仅 Debug 版支持局域网 http；正式使用需要 HTTPS 网关，见 `server/README.md`）。
 
 ## 测试
 

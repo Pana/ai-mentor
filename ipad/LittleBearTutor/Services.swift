@@ -179,17 +179,22 @@ struct TutorClient: Sendable {
     static func validate(url: String, token: String) throws -> URL {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let parsed = URL(string: trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed),
-              parsed.scheme == "https" || isDebugLoopback(parsed), parsed.host != nil,
+              parsed.scheme == "https" || isDebugLocal(parsed), parsed.host != nil,
               parsed.user == nil, parsed.query == nil, parsed.fragment == nil
         else { throw TutorError.invalidConfiguration }
         guard (24...512).contains(token.count), !token.contains(where: \.isWhitespace) else { throw TutorError.invalidConfiguration }
         return parsed
     }
 
-    /// Debug builds may talk to a gateway on this Mac over plain HTTP (simulator only). Release requires HTTPS.
-    private static func isDebugLoopback(_ url: URL) -> Bool {
+    /// Debug builds may reach a gateway on the Mac over plain HTTP: loopback (simulator) or the home Wi-Fi
+    /// (a phone or iPad testing against the Mac). Release builds always require HTTPS.
+    static func isDebugLocal(_ url: URL) -> Bool {
         #if DEBUG
-        return url.scheme == "http" && ["localhost", "127.0.0.1"].contains(url.host ?? "")
+        guard url.scheme == "http", let host = url.host?.lowercased() else { return false }
+        if ["localhost", "127.0.0.1"].contains(host) || host.hasSuffix(".local") { return true }
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return false }
+        return parts[0] == 10 || (parts[0] == 172 && (16...31).contains(parts[1])) || (parts[0] == 192 && parts[1] == 168)
         #else
         return false
         #endif
@@ -230,6 +235,12 @@ struct TutorClient: Sendable {
 }
 
 enum TutorError: LocalizedError, Equatable {
+    #if DEBUG
+    static let configurationHint = "服务地址需为 HTTPS（调试版也可用局域网地址，如 http://192.168.x.x:8787），设备访问凭证至少 24 个字符且不含空格。"
+    #else
+    static let configurationHint = "服务地址必须是 HTTPS，设备访问凭证至少 24 个字符且不含空格。"
+    #endif
+
     case notEnabled, invalidConfiguration, network, unauthorized, rateLimited, modelNotConfigured, imagesNotSupported, serviceUnavailable, invalidReply
 
     init(status: Int) {
@@ -245,7 +256,7 @@ enum TutorError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .notEnabled: "请家长先在家长设置中开启辅导服务。"
-        case .invalidConfiguration: "服务地址必须是 HTTPS，设备访问凭证至少 24 个字符且不含空格。"
+        case .invalidConfiguration: Self.configurationHint
         case .network: "无法连接辅导服务，请检查网络后重试。已有记录已保留。"
         case .unauthorized: "访问凭证无效，请家长检查服务设置。"
         case .rateLimited: "请求较多，请稍后再试。"

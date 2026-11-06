@@ -58,6 +58,7 @@
 - 同一个 App 可安装到 iPhone，用于真机测试（首发目标仍是 iPad）。窄屏（iPhone、iPad 分屏）使用底部标签栏，左上角切换孩子；全屏 iPad 仍是侧边栏。
 - 学习页键盘上方加“完成”按钮，避免键盘挡住标签栏。
 - 全部单元、UI 和端到端测试在 iPhone 18 Pro 与 iPad Air 11-inch (M4) 模拟器上通过。
+- Debug 版可通过家庭 Wi-Fi 以 http 连接 Mac 上的网关（`scripts/lan-gateway.sh`），仅限 127.0.0.1、10.x、172.16–31.x、192.168.x 与 .local；Release 版没有该例外（已核对构建产物 Info.plist）。经 Wi-Fi 地址的端到端测试通过。
 
 ### iPad 仍未做
 

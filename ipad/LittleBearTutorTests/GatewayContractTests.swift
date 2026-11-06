@@ -74,4 +74,14 @@ final class GatewayContractTests: XCTestCase {
         XCTAssertTrue(data.starts(with: [0xFF, 0xD8, 0xFF]))
         XCTAssertLessThanOrEqual(try XCTUnwrap(UIImage(data: data)).size.width, 2000)
     }
+
+    func testDebugBuildAllowsOnlyLocalHTTP() throws {
+        // Unit tests run the Debug configuration.
+        for local in ["http://127.0.0.1:8787", "http://192.168.0.105:8787", "http://10.0.0.8:8787", "http://172.20.1.2:8787", "http://my-mac.local:8787"] {
+            XCTAssertNoThrow(try TutorClient.validate(url: local, token: token), local)
+        }
+        for remote in ["http://tutor.example.com", "http://8.8.8.8:8787", "http://172.32.0.1", "http://192.169.0.1", "http://192.168.0"] {
+            XCTAssertThrowsError(try TutorClient.validate(url: remote, token: token), remote)
+        }
+    }
 }
