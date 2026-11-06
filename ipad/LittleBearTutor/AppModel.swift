@@ -1,98 +1,31 @@
 import Foundation
 import SwiftUI
 
-enum Subject: String, Codable, CaseIterable, Identifiable, Sendable {
-    case math = "数学", chinese = "语文", english = "英语"
-    var id: String { rawValue }
-}
-
-enum WorkStatus: String, Codable, Sendable {
-    case ready = "待开始", active = "进行中", review = "待检查", correction = "待订正", done = "已完成"
-}
-
-struct Child: Codable, Identifiable, Hashable, Sendable {
-    var id = UUID()
-    var name: String
-    var grade: Int = 2
-    var textbook: String = "教材版本待确认"
-}
-
-struct TutorTurn: Codable, Identifiable, Sendable {
-    var id = UUID()
-    var question: String
-    var reply: String
-    var assessment: String = "UNKNOWN"
-}
-
-struct Homework: Codable, Identifiable, Sendable {
-    var id = UUID()
-    var childID: UUID
-    var subject: Subject
-    var title: String
-    var instructions: String = ""
-    var status: WorkStatus = .ready
-    var draft: String = ""
-    var photoPath: String?
-    var conversation: [TutorTurn] = []
-    var reviewNote: String = ""
-    var aiAssessment: String = "UNKNOWN"
-}
-
-struct Evidence: Codable, Identifiable, Sendable {
-    var id = UUID()
-    var childID: UUID
-    var taskID: UUID
-    var subject: Subject
-    var concept: String
-    var answer: String
-    var correct: Bool
-    var independent: Bool
-    var note: String = ""
-    var time = Date()
-}
-
-struct Family: Codable {
-    var schemaVersion = 1
-    var demo = false
-    var children: [Child] = []
-    var tasks: [Homework] = []
-    var evidence: [Evidence] = []
-
-    func tasks(for child: UUID) -> [Homework] { tasks.filter { $0.childID == child } }
-    func child(_ id: UUID?) -> Child? { children.first { $0.id == id } }
-    func task(_ id: UUID?) -> Homework? { tasks.first { $0.id == id } }
-
-    static func demoFamily() -> Family {
-        let lin = Child(name: "林林", grade: 2)
-        let qi = Child(name: "琪琪", grade: 3)
-        let names: [(Subject, String, String)] = [
-            (.math, "小熊的橡果问题", "小熊有 24 颗橡果，又找到 18 颗。现在一共有多少颗？"),
-            (.chinese, "读一读，找一找", "读一读：春天来了，小草绿了，燕子飞回来了。短文描写的是哪个季节？"),
-            (.english, "水果单词小练习", "苹果的英文怎么写？填写一个单词。")
-        ]
-        var family = Family(demo: true, children: [lin, qi])
-        family.tasks = [lin, qi].flatMap { child in names.map { subject, title, instructions in
-            Homework(childID: child.id, subject: subject, title: title, instructions: instructions)
-        } }
-        return family
-    }
-}
-
 @MainActor final class AppModel: ObservableObject {
     @Published private(set) var family = Family()
     @Published var selectedChildID: UUID?
-    @Published var selectedTaskID: UUID?
     @Published var errorMessage: String?
-    @Published var tutorBusy = false
-    @Published var serviceURL = ""
+    @Published private(set) var tutorBusy = false
+    @Published private(set) var serviceURL = ""
     @Published private(set) var serviceConfigured = false
 
-    private let store = LocalStore()
+    private let store: LocalStore
     private let credentials = CredentialStore()
     private let tutor = TutorClient()
+    let photos = PhotoStore()
+    private var tutorJob: Task<Void, Never>?
+    /// Incremented on every cancel/new request so a late reply from an abandoned request is dropped.
+    private var tutorEpoch = 0
 
-    init() {
-        family = store.load() ?? Family()
+    init(store: LocalStore = LocalStore()) {
+        self.store = store
+        switch store.load() {
+        case .empty: family = Family()
+        case .loaded(let saved): family = saved
+        case .unreadable(let backup):
+            family = Family()
+            errorMessage = "本地记录无法读取，已另存为 \(backup) 以便恢复，当前从空白家庭开始。"
+        }
         selectedChildID = family.children.first?.id
         let config = credentials.load()
         serviceURL = config.url
@@ -100,110 +33,249 @@ struct Family: Codable {
     }
 
     var selectedChild: Child? { family.child(selectedChildID) }
-    var selectedTask: Homework? { family.task(selectedTaskID) }
 
-    func useDemo() { family = .demoFamily(); selectedChildID = family.children.first?.id; persist() }
-    func persist() { do { try store.save(family) } catch { errorMessage = "本地记录保存失败，请检查设备存储空间。" } }
-    func addChild(name: String, grade: Int, textbook: String) {
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        family.children.append(Child(name: name.trimmingCharacters(in: .whitespacesAndNewlines), grade: grade, textbook: textbook))
-        selectedChildID = family.children.last?.id; persist()
+    // MARK: Persistence
+
+    private func persist() {
+        do { try store.save(family) } catch { errorMessage = "本地记录保存失败，请检查设备存储空间。" }
     }
-    func addTask(subject: Subject, title: String, instructions: String, photoPath: String? = nil) {
-        guard let child = selectedChild, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        family.tasks.append(Homework(childID: child.id, subject: subject, title: title, instructions: instructions, photoPath: photoPath))
-        persist()
-    }
-    func updateDraft(_ text: String) {
-        guard let id = selectedTaskID, let index = family.tasks.firstIndex(where: { $0.id == id }) else { return }
-        family.tasks[index].draft = String(text.prefix(2000)); family.tasks[index].status = .active; persist()
-    }
-    func submitTask() {
-        guard let id = selectedTaskID, let index = family.tasks.firstIndex(where: { $0.id == id }) else { return }
-        family.tasks[index].status = .review; persist()
-    }
-    func attachPhoto(_ data: Data) {
-        guard let id = selectedTaskID, let index = family.tasks.firstIndex(where: { $0.id == id }) else { return }
+
+    /// Applies a rule from `Family`; on failure nothing changes and the message is shown.
+    @discardableResult
+    private func mutate<T>(_ change: (inout Family) throws -> T) -> T? {
+        var next = family
         do {
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-            let path = base.appendingPathComponent("photo-\(id.uuidString).jpg")
-            try data.write(to: path, options: .atomic)
-            family.tasks[index].photoPath = path.path
+            let result = try change(&next)
+            family = next
             persist()
-        } catch { errorMessage = "题目图片保存失败，请重试。" }
-    }
-    func saveService(url: String, token: String, consent: Bool) {
-        do {
-            if !consent && url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                credentials.clear(); serviceURL = ""; serviceConfigured = false; errorMessage = nil; return
-            }
-            guard let parsed = URL(string: url), parsed.scheme == "https", parsed.host != nil else { throw LocalError.invalidService }
-            guard token.count >= 24 && !token.contains(where: { $0.isWhitespace }) else { throw LocalError.invalidService }
-            try credentials.save(url: url, token: token, consent: consent)
-            serviceURL = url; serviceConfigured = consent && !token.isEmpty; errorMessage = nil
-        } catch { errorMessage = "服务地址必须是 HTTPS，并填写设备访问凭证。" }
-    }
-    func askTutor(message: String, includePhoto: Bool) {
-        guard let child = selectedChild, let task = selectedTask else { return }
-        guard serviceConfigured else { errorMessage = "请家长先配置辅导服务。"; return }
-        tutorBusy = true
-        let config = credentials.load()
-        Task { @MainActor in
-            defer { tutorBusy = false }
-            do {
-                let reply = try await tutor.ask(config: config, child: child, task: task, message: message, includePhoto: includePhoto ? task.photoPath : nil)
-                guard let index = family.tasks.firstIndex(where: { $0.id == task.id }) else { return }
-                family.tasks[index].conversation.append(TutorTurn(question: message, reply: reply.message, assessment: reply.assessment))
-                family.tasks[index].aiAssessment = reply.assessment
-                persist()
-            } catch { errorMessage = error.localizedDescription }
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
         }
     }
 
-    func markTask(_ taskID: UUID, passed: Bool, note: String, concept: String = "", independent: Bool = false) {
-        guard let index = family.tasks.firstIndex(where: { $0.id == taskID }), family.tasks[index].status == .review else { return }
-        let task = family.tasks[index]
-        family.tasks[index].status = passed ? .done : .correction
-        family.tasks[index].reviewNote = String(note.prefix(1000))
-        if !concept.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            family.evidence.append(Evidence(childID: task.childID, taskID: task.id, subject: task.subject,
-                concept: String(concept.prefix(100)), answer: task.draft.isEmpty ? "纸面作业" : task.draft,
-                correct: passed, independent: passed && independent, note: String(note.prefix(1000))))
-        }
+    // MARK: Family and children
+
+    func useDemo() {
+        family = .demoFamily()
+        selectedChildID = family.children.first?.id
         persist()
     }
-    func deleteTask(_ taskID: UUID) {
-        guard let task = family.tasks.first(where: { $0.id == taskID }) else { return }
-        family.tasks.removeAll { $0.id == taskID }
-        family.evidence.removeAll { $0.taskID == taskID }
-        if let path = task.photoPath { try? FileManager.default.removeItem(atPath: path) }
-        if selectedTaskID == taskID { selectedTaskID = nil }
-        persist()
+
+    func selectChild(_ id: UUID) {
+        guard id != selectedChildID else { return }
+        cancelTutor()
+        selectedChildID = id
     }
+
+    func addChild(name: String, grade: Int, textbook: String) {
+        if let id = mutate({ try $0.addChild(name: name, grade: grade, textbook: textbook) }) { selectedChildID = id }
+    }
+
     func deleteChild(_ childID: UUID) {
-        let taskIDs = family.tasks.filter { $0.childID == childID }.map(\.id)
-        for task in family.tasks where task.childID == childID { if let path = task.photoPath { try? FileManager.default.removeItem(atPath: path) } }
-        family.children.removeAll { $0.id == childID }
-        family.tasks.removeAll { $0.childID == childID }
-        family.evidence.removeAll { $0.childID == childID || taskIDs.contains($0.taskID) }
-        if selectedChildID == childID { selectedChildID = family.children.first?.id; selectedTaskID = nil }
+        cancelTutor()
+        let removed = mutate { $0.deleteChild(childID) } ?? []
+        removed.forEach { photos.delete($0) }
+        if selectedChildID == childID { selectedChildID = family.children.first?.id }
+    }
+
+    func clearLocalFamily() {
+        cancelTutor()
+        family = Family()
+        selectedChildID = nil
+        photos.deleteAll()
+        credentials.clear()
+        serviceURL = ""
+        serviceConfigured = false
         persist()
     }
-    func clearLocalFamily() {
-        for task in family.tasks { if let path = task.photoPath { try? FileManager.default.removeItem(atPath: path) } }
-        family = Family(); selectedChildID = nil; selectedTaskID = nil; credentials.clear(); serviceURL = ""; serviceConfigured = false; persist()
+
+    // MARK: Homework
+
+    func addTask(subject: Subject, title: String, instructions: String, photoPath: String? = nil) {
+        guard let child = selectedChild else { return }
+        mutate {
+            try $0.addTask(Homework(childID: child.id, subject: subject, title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    instructions: instructions.trimmingCharacters(in: .whitespacesAndNewlines), photoPath: photoPath))
+        }
+    }
+
+    func openTask(_ id: UUID) { mutate { try $0.open(id) } }
+    func saveDraft(_ id: UUID, _ text: String) { mutate { try $0.saveDraft(id, text) } }
+    func submitTask(_ id: UUID) { mutate { try $0.submit(id) } }
+    func hint(_ id: UUID) { mutate { try $0.hint(id) } }
+    func checkExercise(_ id: UUID, answer: String) { mutate { try $0.check(id, answer: answer) } }
+
+    func parentReview(_ id: UUID, passed: Bool, note: String, concept: String, independent: Bool) -> Bool {
+        mutate { try $0.parentReview(id, passed: passed, note: note, concept: concept, independent: independent) } != nil
+    }
+
+    func deleteTask(_ id: UUID) {
+        cancelTutor()
+        photos.delete(mutate { $0.deleteTask(id) } ?? nil)
+    }
+
+    // MARK: Photos
+
+    func photoURL(_ name: String?) -> URL? { photos.url(for: name) }
+
+    /// Saves picked image data as a gateway-ready JPEG and returns its file name.
+    func storePhoto(_ data: Data) -> String? {
+        do { return try photos.save(data) } catch { errorMessage = error.localizedDescription; return nil }
+    }
+
+    /// Deletes a photo that no task references (e.g. an add-task sheet that was cancelled).
+    func discardPhoto(_ name: String?) {
+        guard let name, !family.tasks.contains(where: { $0.photoPath == name }) else { return }
+        photos.delete(name)
+    }
+
+    func attachPhoto(_ data: Data, to taskID: UUID) {
+        guard let name = storePhoto(data) else { return }
+        let old = family.task(taskID)?.photoPath
+        let saved: Void? = mutate { family -> Void in
+            guard let i = family.tasks.firstIndex(where: { $0.id == taskID }) else { throw FamilyError("找不到这项作业") }
+            family.tasks[i].photoPath = name
+            family.tasks[i].revision += 1
+        }
+        if saved == nil { photos.delete(name) } else if old != name { discardPhoto(old) }
+    }
+
+    // MARK: Service settings
+
+    func saveService(url: String, token: String, consent: Bool) {
+        cancelTutor()
+        // Turning consent off removes the stored token; nothing is sent until a parent configures it again.
+        if !consent {
+            credentials.clear(); serviceURL = ""; serviceConfigured = false; return
+        }
+        do {
+            let parsed = try TutorClient.validate(url: url, token: token)
+            try credentials.save(url: parsed.absoluteString, token: token, consent: consent)
+            serviceURL = parsed.absoluteString
+            serviceConfigured = consent
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: Tutor requests
+
+    func cancelTutor() {
+        tutorEpoch += 1
+        tutorJob?.cancel()
+        tutorJob = nil
+        tutorBusy = false
+    }
+
+    /// Asks for a hint (`help`) or a provisional check (`check`) on a homework task.
+    func askTutor(taskID: UUID, mode: String, message: String, includePhoto: Bool, onSuccess: @escaping () -> Void = {}) {
+        guard let task = family.task(taskID), let child = family.child(task.childID) else { return }
+        let question = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = question.isEmpty ? (mode == "check" ? "帮我检查这份作业" : "给我一点提示") : question
+        request(mode: mode, child: child, subject: task.subject, task: task, message: shown,
+                photo: includePhoto ? task.photoPath : nil) { [weak self] reply in
+            guard let self else { return }
+            let turn = TutorTurn(question: shown, reply: reply.message, mode: mode, assessment: reply.assessment ?? "UNKNOWN")
+            if self.mutate({ try $0.applyTutor(task.id, revision: task.revision, turn: turn) }) != nil { onSuccess() }
+        }
+    }
+
+    /// Reads homework requirements from a photo. The result is a draft the parent must confirm.
+    func recognize(photo: String, subject: Subject, onResult: @escaping (TutorResponse) -> Void) {
+        guard let child = selectedChild else { return }
+        request(mode: "recognize", child: child, subject: subject, task: nil,
+                message: "请识别照片中的作业要求", photo: photo, onResult: onResult)
+    }
+
+    /// Opens a similar AI-generated exercise, or falls back to the local bank when the service is off.
+    func generatePractice(subject: Subject, concept: String, onCreated: @escaping (UUID) -> Void) {
+        guard let child = selectedChild else { return }
+        guard serviceConfigured else {
+            if let id = startLocalPractice(subject) { onCreated(id) }
+            return
+        }
+        let topic = concept.isEmpty ? "\(subject.label)基础知识" : concept
+        request(mode: "practice", child: child, subject: subject, task: nil,
+                message: "请围绕\(topic)生成一道适合\(child.grade)年级的练习", photo: nil) { [weak self] reply in
+            guard let self else { return }
+            guard let exercise = reply.exercise?.unverified(expected: subject) else {
+                self.errorMessage = "这次练习生成不完整，请重试。"; return
+            }
+            let task = Homework(childID: child.id, subject: subject, title: String(exercise.concept.prefix(100)),
+                                instructions: "AI 生成练习，答案供参考；疑问请向家长核对", practice: true, exercise: exercise)
+            if self.mutate({ try $0.addTask(task) }) != nil { onCreated(task.id) }
+        }
+    }
+
+    func startLocalPractice(_ subject: Subject) -> UUID? {
+        guard let child = selectedChild else { return nil }
+        return mutate { try $0.localPractice(child: child.id, subject: subject) }
+    }
+
+    private func request(mode: String, child: Child, subject: Subject, task: Homework?, message: String, photo: String?,
+                         onResult: @escaping (TutorResponse) -> Void) {
+        guard !tutorBusy else { return }
+        guard serviceConfigured else { errorMessage = TutorError.notEnabled.errorDescription; return }
+        let config = credentials.load()
+        tutorEpoch += 1
+        let epoch = tutorEpoch
+        tutorBusy = true
+        tutorJob = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let image = try photo.map { try self.photos.base64($0) }
+                let body = TutorRequest(mode: mode, child: child, subject: subject, task: task, message: message, image: image)
+                let reply = try await self.tutor.send(config: config, body: body)
+                guard epoch == self.tutorEpoch, !Task.isCancelled else { return }
+                self.finish(epoch)
+                guard self.family.child(child.id) != nil else { return }
+                onResult(reply)
+            } catch is CancellationError {
+                // Cancelled by the user, page change or child switch: keep local data untouched.
+            } catch {
+                guard epoch == self.tutorEpoch else { return }
+                self.errorMessage = error.localizedDescription
+            }
+            self.finish(epoch)
+        }
+    }
+
+    private func finish(_ epoch: Int) {
+        guard epoch == tutorEpoch else { return }
+        tutorBusy = false
+        tutorJob = nil
     }
 }
 
-enum LocalError: Error { case invalidService }
+// MARK: - Local JSON store
 
 struct LocalStore {
-    private var file: URL {
+    enum LoadResult { case empty, loaded(Family), unreadable(backup: String) }
+
+    var fileName = "family-v1.json"
+
+    private var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent("family-v1.json")
+        return base
     }
-    func load() -> Family? { guard let data = try? Data(contentsOf: file) else { return nil }; return try? JSONDecoder().decode(Family.self, from: data) }
-    func save(_ family: Family) throws { let data = try JSONEncoder().encode(family); try data.write(to: file, options: .atomic) }
+    private var file: URL { directory.appendingPathComponent(fileName) }
+
+    /// A file that exists but cannot be decoded is moved aside instead of being overwritten by an empty family.
+    func load() -> LoadResult {
+        guard let data = try? Data(contentsOf: file) else { return .empty }
+        if let family = try? JSONDecoder().decode(Family.self, from: data) { return .loaded(family) }
+        let backup = "\(fileName).unreadable-\(Int(Date().timeIntervalSince1970))"
+        try? FileManager.default.moveItem(at: file, to: directory.appendingPathComponent(backup))
+        return .unreadable(backup: backup)
+    }
+
+    func save(_ family: Family) throws {
+        let data = try JSONEncoder().encode(family)
+        try data.write(to: file, options: [.atomic, .completeFileProtection])
+    }
+
+    func remove() { try? FileManager.default.removeItem(at: file) }
 }

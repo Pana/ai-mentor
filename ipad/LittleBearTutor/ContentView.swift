@@ -6,10 +6,11 @@ struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     var body: some View {
         Group {
-            if model.family.children.isEmpty { WelcomeView() }
-            else { MainSplitView() }
+            if model.family.children.isEmpty { WelcomeView() } else { MainSplitView() }
         }
-        .alert("提示", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("知道了") {} } message: { Text(model.errorMessage ?? "") }
+        .alert("提示", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+            Button("知道了") {}
+        } message: { Text(model.errorMessage ?? "") }
     }
 }
 
@@ -23,50 +24,108 @@ struct WelcomeView: View {
             Button("先体验示例家庭") { model.useDemo() }.buttonStyle(.borderedProminent)
             Button("建立家庭档案") { showingAddChild = true }.buttonStyle(.bordered)
             Text("iPad 首版候选 · 学习记录只在本机保存").foregroundStyle(.secondary).font(.footnote)
-        }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
-            .sheet(isPresented: $showingAddChild) { AddChildView() }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(40)
+        .sheet(isPresented: $showingAddChild) { AddChildView() }
+    }
+}
+
+enum SidebarItem: String, CaseIterable, Identifiable {
+    case home, tasks, practice, progress, settings
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .home: "学习首页"; case .tasks: "我的作业"; case .practice: "练一练"; case .progress: "我的进步"; case .settings: "家长设置"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .home: "house"; case .tasks: "checklist"; case .practice: "pencil.and.list.clipboard"; case .progress: "chart.bar"; case .settings: "lock"
+        }
     }
 }
 
 struct MainSplitView: View {
     @EnvironmentObject private var model: AppModel
     @State private var selection: SidebarItem? = .home
+    /// One path for the detail column; cleared on every page or child change so a study page never lingers.
+    @State private var path: [UUID] = []
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            // Plain buttons instead of List(selection:): mixing selectable rows with buttons left the pages unreachable.
+            List {
                 Section("孩子") {
                     ForEach(model.family.children) { child in
-                        Button { model.selectedChildID = child.id; selection = .home } label: {
-                            Label("\(child.name) · \(child.grade) 年级", systemImage: child.id == model.selectedChildID ? "person.fill" : "person")
+                        sidebarRow("\(child.name) · \(child.grade) 年级",
+                                   icon: child.id == model.selectedChildID ? "person.fill" : "person",
+                                   selected: child.id == model.selectedChildID) {
+                            model.selectChild(child.id); selection = .home
                         }
                     }
                 }
                 Section("学习") {
-                    ForEach(SidebarItem.allCases) { item in Label(item.title, systemImage: item.icon).tag(item as SidebarItem?) }
+                    ForEach(SidebarItem.allCases) { item in
+                        sidebarRow(item.title, icon: item.icon, selected: selection == item) { selection = item }
+                    }
                 }
             }
-                .navigationTitle(model.selectedChild?.name ?? "小熊伴学")
+            .navigationTitle(model.selectedChild?.name ?? "小熊伴学")
         } detail: {
-            switch selection ?? .home {
-            case .home: HomeView()
-            case .tasks: TasksView()
-            case .progress: ProgressViewPage()
-            case .settings: ParentSettingsGate()
+            // A fresh stack per page and per child so navigation never shows another child's task.
+            NavigationStack(path: $path) {
+                Group {
+                    switch selection ?? .home {
+                    case .home: HomeView(selection: $selection)
+                    case .tasks: TasksView()
+                    case .practice: PracticeView { path.append($0) }
+                    case .progress: ProgressPage { path.append($0) }
+                    case .settings: ParentSettingsGate()
+                    }
+                }
+                .navigationDestination(for: UUID.self) { StudyView(taskID: $0) }
             }
+            .id("\(selection?.rawValue ?? "home")-\(model.selectedChildID?.uuidString ?? "")")
+            .onChange(of: selection) { path = [] }
+            .onChange(of: model.selectedChildID) { path = [] }
         }
+    }
+
+    private func sidebarRow(_ title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).foregroundStyle(selected ? Color.accentColor : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(selected ? Color.accentColor.opacity(0.15) : nil)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
-enum SidebarItem: String, CaseIterable, Identifiable { case home, tasks, progress, settings; var id: String { rawValue }; var title: String { switch self { case .home: "学习首页"; case .tasks: "我的作业"; case .progress: "我的进步"; case .settings: "家长设置" } }; var icon: String { switch self { case .home: "house"; case .tasks: "checklist"; case .progress: "chart.bar"; case .settings: "lock" } } }
-
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
+    @Binding var selection: SidebarItem?
     var body: some View {
-        ScrollView { VStack(alignment: .leading, spacing: 20) {
-            Text("\(model.selectedChild?.name ?? "同学")，准备好一起探索了吗？").font(.largeTitle.bold())
-            Text("今天也按自己的节奏，一件一件来。").foregroundStyle(.secondary)
-            if let child = model.selectedChild { ForEach(model.family.tasks(for: child.id).prefix(3)) { task in TaskRow(task: task) } }
-        }.padding(32) }.navigationTitle("学习首页")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if model.family.demo { Text("示例家庭 · 可体验本地练习与学习流程 · 仅在本机保存").font(.footnote).foregroundStyle(.orange) }
+                Text("\(model.selectedChild?.name ?? "同学")，准备好一起探索了吗？").font(.largeTitle.bold())
+                Text("今天也按自己的节奏，一件一件来。").foregroundStyle(.secondary)
+                if let child = model.selectedChild {
+                    let open = model.family.homework(for: child.id).filter { $0.status != .done }
+                    if open.isEmpty { Text("作业都完成啦！").font(.title3) }
+                    ForEach(open.prefix(3)) { task in
+                        NavigationLink(value: task.id) { TaskRow(task: task) }.buttonStyle(.plain)
+                    }
+                    let due = model.family.reviews(for: child.id).filter { $0.dueAt <= Date() }
+                    if !due.isEmpty {
+                        Label("有 \(due.count) 个知识点可以复习了", systemImage: "arrow.clockwise").foregroundStyle(.orange)
+                    }
+                }
+                Button("还有精力？来做一个小练习") { selection = .practice }.buttonStyle(.bordered)
+            }
+            .padding(32)
+        }
+        .navigationTitle("学习首页")
     }
 }
 
@@ -75,75 +134,181 @@ struct TasksView: View {
     @State private var showingAdd = false
     var body: some View {
         List {
-            if let child = model.selectedChild { ForEach(model.family.tasks(for: child.id)) { task in NavigationLink { StudyView(task: task) } label: { TaskRow(task: task) }.swipeActions { Button("删除", role: .destructive) { model.deleteTask(task.id) } } } }
+            if let child = model.selectedChild {
+                let tasks = model.family.homework(for: child.id)
+                if tasks.isEmpty { Text("还没有作业，点击“添加作业”补充。").foregroundStyle(.secondary) }
+                ForEach(tasks) { task in
+                    NavigationLink(value: task.id) { TaskRow(task: task) }
+                        .swipeActions { Button("删除", role: .destructive) { model.deleteTask(task.id) } }
+                }
+            }
             Button("添加作业") { showingAdd = true }
-        }.navigationTitle("我的作业").sheet(isPresented: $showingAdd) { AddTaskView() }
+        }
+        .navigationTitle("我的作业")
+        .sheet(isPresented: $showingAdd) { AddTaskView() }
     }
 }
 
 struct TaskRow: View {
     let task: Homework
-    var body: some View { HStack { Text(task.subject.rawValue).font(.headline).frame(width: 54); VStack(alignment: .leading) { Text(task.title).font(.headline); Text(task.instructions).lineLimit(2).foregroundStyle(.secondary) }; Spacer(); Text(task.status.rawValue).font(.caption).foregroundStyle(task.status == .correction ? .orange : .green) } }
-}
-
-struct StudyView: View {
-    @EnvironmentObject private var model: AppModel
-    let task: Homework
-    @State private var answer = ""
-    @State private var question = ""
-    @State private var includePhoto = false
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var showingCamera = false
-    @StateObject private var speech = SpeechInput()
-    @StateObject private var speaker = SpeechOutput()
-    var current: Homework { model.family.task(task.id) ?? task }
     var body: some View {
-        ScrollView { VStack(alignment: .leading, spacing: 20) {
-            Text(current.title).font(.largeTitle.bold())
-            StudyTimerView()
-            Text(current.instructions).font(.title3)
-            if let path = current.photoPath, let image = UIImage(contentsOfFile: path) {
-                Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 360).clipShape(RoundedRectangle(cornerRadius: 12))
+        HStack {
+            Text(task.subject.label).font(.headline).frame(width: 54)
+            VStack(alignment: .leading) {
+                Text(task.title).font(.headline)
+                Text(task.exercise?.prompt ?? task.instructions).lineLimit(2).foregroundStyle(.secondary)
             }
-            TextField("记录你的答案或想法", text: $answer, axis: .vertical).textFieldStyle(.roundedBorder).onChange(of: answer) { _, value in model.updateDraft(value) }
-            HStack { Button("我写好了") { model.submitTask() }.buttonStyle(.borderedProminent); PhotosPicker(selection: $selectedPhoto, matching: .images) { Label("选择题目图片", systemImage: "photo") }; if UIImagePickerController.isSourceTypeAvailable(.camera) { Button { showingCamera = true } label: { Label("拍摄题目", systemImage: "camera") } } }
-            Divider()
-            Text("问问小熊").font(.title2.bold())
-            ForEach(current.conversation) { turn in VStack(alignment: .leading, spacing: 6) { Text("我：\(turn.question)").foregroundStyle(.secondary); Text("小熊：\(turn.reply)"); Button(speaker.speaking ? "停止朗读" : "朗读这条提示") { if speaker.speaking { speaker.stop() } else { speaker.speak(turn.reply) } }.buttonStyle(.borderless) } }
-            TextField("说说你卡在哪里", text: $question, axis: .vertical).textFieldStyle(.roundedBorder)
-            HStack { Button(speech.listening ? "停止听取" : "说出问题") { if speech.listening { speech.stop() } else { speech.start() } }.buttonStyle(.bordered); if speech.listening { ProgressView() }; if !speech.transcript.isEmpty { Text("已识别：\(speech.transcript)").foregroundStyle(.secondary) } }
-                .onChange(of: speech.transcript) { _, value in if !value.isEmpty { question = value } }
-            Toggle("发送当前作业图片", isOn: $includePhoto)
-            Button(model.tutorBusy ? "正在思考…" : "发送问题") { model.askTutor(message: question, includePhoto: includePhoto) }.disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.tutorBusy).buttonStyle(.borderedProminent)
-            Text("AI 建议仅供参考；作业完成和知识掌握由家长核对。").font(.footnote).foregroundStyle(.secondary)
-        }.padding(32) }
-        .navigationTitle("学习空间")
-        .onAppear { model.selectedTaskID = task.id; answer = current.draft }
-        .onDisappear { speech.stop(); speaker.stop() }
-        .task(id: selectedPhoto?.itemIdentifier) {
-            guard let selectedPhoto, let data = try? await selectedPhoto.loadTransferable(type: Data.self) else { return }
-            model.attachPhoto(data)
+            Spacer()
+            Text(task.status.rawValue).font(.caption).foregroundStyle(task.status == .correction ? .orange : .green)
         }
-        .sheet(isPresented: $showingCamera) { CameraPicker { data in model.attachPhoto(data); showingCamera = false } }
+        .contentShape(Rectangle())
     }
 }
 
-struct ProgressViewPage: View { @EnvironmentObject private var model: AppModel; var body: some View { List { if let child = model.selectedChild { Section("学习证据") { let records = model.family.evidence.filter { $0.childID == child.id }.sorted { $0.time > $1.time }; if records.isEmpty { Text("完成作业并由家长记录知识点后，这里会显示具体依据。") } else { ForEach(records) { record in VStack(alignment: .leading) { Text("\(record.subject.rawValue) · \(record.concept)").font(.headline); Text("\(record.correct ? "通过" : "需要订正") · \(record.independent ? "独立完成" : "获得帮助或待核验")").foregroundStyle(.secondary); if !record.note.isEmpty { Text(record.note) }; Text(record.time, style: .date).font(.caption).foregroundStyle(.secondary) } } } } } }.navigationTitle("我的进步") } }
-struct SettingsView: View { @EnvironmentObject private var model: AppModel; let onLock: () -> Void; @State private var url = ""; @State private var token = ""; @State private var consent = false; @State private var showingAddChild = false; @State private var confirmingClear = false; @State private var deletingChild: Child?; var body: some View { Form { Section("孩子档案") { ForEach(model.family.children) { child in HStack { Text("\(child.name) · \(child.grade) 年级"); Spacer(); Text(child.textbook).foregroundStyle(.secondary).lineLimit(1) }.swipeActions { Button("删除", role: .destructive) { deletingChild = child } } }; Button("添加孩子") { showingAddChild = true } }; Section("待检查作业") { let review = model.family.tasks.filter { $0.status == .review }; if review.isEmpty { Text("没有待检查作业") } else { ForEach(review) { task in ReviewRow(task: task) } } }; Section("辅导服务") { TextField("HTTPS 服务地址", text: $url); SecureField("设备访问凭证", text: $token); Toggle("允许发送当前题目与可选图片", isOn: $consent); Button("保存") { model.saveService(url: url, token: token, consent: consent) }; Text("模型供应商密钥只保存在服务端。学习记录与设备凭证不会上传到模型供应商之外的地方。").font(.footnote).foregroundStyle(.secondary) }; Section("本地数据") { Button("清空家庭数据", role: .destructive) { confirmingClear = true }; Button("退出家长设置", role: .cancel) { onLock() } } }.navigationTitle("家长设置").onAppear { url = model.serviceURL; consent = model.serviceConfigured }.sheet(isPresented: $showingAddChild) { AddChildView() }.confirmationDialog("清空全部家庭数据？", isPresented: $confirmingClear, titleVisibility: .visible) { Button("清空", role: .destructive) { model.clearLocalFamily() }; Button("取消", role: .cancel) {} } message: { Text("会删除孩子、作业、图片、对话和学习证据，且不可撤销。") }.alert("删除孩子档案？", isPresented: Binding(get: { deletingChild != nil }, set: { if !$0 { deletingChild = nil } })) { Button("删除", role: .destructive) { if let deletingChild { model.deleteChild(deletingChild); self.deletingChild = nil } }; Button("取消", role: .cancel) {} } message: { Text("会删除该孩子的作业、图片和学习证据，其他孩子不受影响。") } } }
+struct AddChildView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppModel
+    @State private var name = ""
+    @State private var grade = 2
+    @State private var textbook = ""
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("昵称", text: $name)
+                Picker("年级", selection: $grade) { Text("二年级").tag(2); Text("三年级").tag(3) }
+                TextField("教材版本（可留空）", text: $textbook)
+            }
+            .navigationTitle("添加孩子")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { model.addChild(name: name, grade: grade, textbook: textbook); dismiss() }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
 
-struct ReviewRow: View { @EnvironmentObject private var model: AppModel; let task: Homework; @State private var note = ""; @State private var concept = ""; @State private var independent = false; var body: some View { VStack(alignment: .leading, spacing: 8) { Text(task.title).font(.headline); if !task.draft.isEmpty { Text("孩子的记录：\(task.draft)").foregroundStyle(.secondary) }; TextField("检查依据 / 订正建议", text: $note, axis: .vertical).textFieldStyle(.roundedBorder); TextField("知识点（可选）", text: $concept).textFieldStyle(.roundedBorder); Toggle("独立完成并能解释思路", isOn: $independent); HStack { Button("确认完成") { model.markTask(task.id, passed: true, note: note, concept: concept, independent: independent) }.buttonStyle(.borderedProminent); Button("需要订正") { model.markTask(task.id, passed: false, note: note, concept: concept, independent: false) }.buttonStyle(.bordered) } }.padding(.vertical, 6) } }
-struct AddChildView: View { @Environment(\.dismiss) private var dismiss; @EnvironmentObject private var model: AppModel; @State private var name = ""; @State private var grade = 2; @State private var textbook = ""; var body: some View { NavigationStack { Form { TextField("昵称", text: $name); Picker("年级", selection: $grade) { Text("二年级").tag(2); Text("三年级").tag(3) }; TextField("教材版本（可留空）", text: $textbook) }.navigationTitle("添加孩子").toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("保存") { model.addChild(name: name, grade: grade, textbook: textbook); dismiss() }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } } } } }
+/// Manual entry plus optional photo recognition. Recognized text is a draft until the parent confirms it.
+struct AddTaskView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppModel
+    @State private var title = ""
+    @State private var instructions = ""
+    @State private var subject = Subject.math
+    @State private var photo: String?
+    @State private var pickerItem: PhotosPickerItem?
+    @State private var showingCamera = false
+    @State private var recognitionNote = ""
+    @State private var recognized = false
+    @State private var confirmed = false
+    @State private var saved = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("作业内容") {
+                    Picker("学科", selection: $subject) { ForEach(Subject.allCases) { Text($0.label).tag($0) } }
+                    TextField("作业名称", text: $title)
+                    TextField("页码、题号与完成要求", text: $instructions, axis: .vertical).lineLimit(2...6)
+                }
+                Section {
+                    if let url = model.photoURL(photo), let image = UIImage(contentsOfFile: url.path) {
+                        Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 260)
+                        Text("核对原图与作业要求，再确认加入作业。").font(.footnote).foregroundStyle(.orange)
+                    }
+                    HStack {
+                        PhotosPicker(selection: $pickerItem, matching: .images) { Label("从相册选图", systemImage: "photo") }
+                            .buttonStyle(.bordered)
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button { showingCamera = true } label: { Label("拍照", systemImage: "camera") }.buttonStyle(.bordered)
+                        }
+                    }
+                    if let photo {
+                        if model.serviceConfigured {
+                            HStack {
+                                Button(model.tutorBusy ? "正在识别…" : "识别作业要求（发送这张图片）") { recognize(photo) }
+                                    .buttonStyle(.bordered).disabled(model.tutorBusy)
+                                if model.tutorBusy { ProgressView(); Button("停止") { model.cancelTutor() }.buttonStyle(.borderless) }
+                            }
+                        } else {
+                            Text("家长开启辅导服务后，可以自动识别图片中的作业要求。").font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if !recognitionNote.isEmpty { Text(recognitionNote).foregroundStyle(.green) }
+                        if recognized { Toggle("我已核对图片，并修正了不清楚的内容", isOn: $confirmed) }
+                        Button("移除图片", role: .destructive) { replacePhoto(with: nil) }.buttonStyle(.borderless)
+                    }
+                } header: { Text("作业图片（可选）") } footer: {
+                    Text("确认后才加入作业列表。识别需要发送本次图片，学习记录仍只保存在本机。")
+                }
+            }
+            .navigationTitle("为\(model.selectedChild?.name ?? "孩子")添加作业")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("确认添加") {
+                        model.addTask(subject: subject, title: title, instructions: instructions, photoPath: photo)
+                        saved = true
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.tutorBusy || (recognized && !confirmed))
+                }
+            }
+            .task(id: pickerItem) {
+                guard let pickerItem, let data = try? await pickerItem.loadTransferable(type: Data.self) else { return }
+                replacePhoto(with: model.storePhoto(data))
+            }
+            .sheet(isPresented: $showingCamera) {
+                CameraPicker { data in replacePhoto(with: model.storePhoto(data)) }.ignoresSafeArea()
+            }
+            .onDisappear {
+                guard !saved else { return }
+                model.cancelTutor()
+                model.discardPhoto(photo)
+            }
+        }
+    }
+
+    private func replacePhoto(with name: String?) {
+        model.cancelTutor()
+        model.discardPhoto(photo)
+        photo = name
+        recognized = false
+        confirmed = false
+        recognitionNote = ""
+    }
+
+    private func recognize(_ photo: String) {
+        model.recognize(photo: photo, subject: subject) { reply in
+            guard self.photo == photo else { return }
+            if let value = reply.title, !value.isEmpty { title = String(value.prefix(100)) }
+            if let value = reply.instructions, !value.isEmpty { instructions = String(value.prefix(2000)) }
+            if let value = reply.subject.flatMap(Subject.init(apiName:)) { subject = value }
+            recognitionNote = reply.message
+            recognized = true
+            confirmed = false
+        }
+    }
+}
 
 struct CameraPicker: UIViewControllerRepresentable {
     let onImage: (Data) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(onImage: onImage) }
-    func makeUIViewController(context: Context) -> UIImagePickerController { let picker = UIImagePickerController(); picker.sourceType = .camera; picker.delegate = context.coordinator; picker.allowsEditing = false; return picker }
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
     func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
     final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let onImage: (Data) -> Void
         init(onImage: @escaping (Data) -> Void) { self.onImage = onImage }
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) { if let image = info[.originalImage] as? UIImage, let data = image.jpegData(compressionQuality: 0.88) { onImage(data) }; picker.dismiss(animated: true) }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage, let data = image.jpegData(compressionQuality: 0.9) { onImage(data) }
+            picker.dismiss(animated: true)
+        }
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { picker.dismiss(animated: true) }
     }
 }
-struct AddTaskView: View { @Environment(\.dismiss) private var dismiss; @EnvironmentObject private var model: AppModel; @State private var title = ""; @State private var instructions = ""; @State private var subject = Subject.math; var body: some View { NavigationStack { Form { Picker("学科", selection: $subject) { ForEach(Subject.allCases) { Text($0.rawValue).tag($0) } }; TextField("作业名称", text: $title); TextField("题目与完成要求", text: $instructions, axis: .vertical) }.navigationTitle("添加作业").toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("保存") { model.addTask(subject: subject, title: title, instructions: instructions); dismiss() }.disabled(title.isEmpty) } } } } }
