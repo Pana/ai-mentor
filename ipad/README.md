@@ -2,13 +2,18 @@
 
 小熊伴学的**首发客户端**（SwiftUI，iPadOS 17+）。已在 Xcode 27.2 编译通过（0 错误 0 警告）并在 iPad 模拟器启动；尚未安装到真实 iPad。
 
-## Mac 上开始
+## 装到 iPhone / iPad
 
-1. 安装 XcodeGen：`brew install xcodegen`。
-2. 在本目录执行 `xcodegen generate`，然后 `open LittleBearTutor.xcodeproj`。生成的工程不提交到仓库；工程设置（权限说明、版本号、方向）统一改 `project.yml` 后重新生成。
-3. 先选择任一 iPad 模拟器 Run，确认能启动。
-4. 在项目的 **Signing & Capabilities** 选择个人 Team，修改 Bundle Identifier（例如 `cn.littlebear.tutor.ipad`）。个人 Apple ID 可以先做自己的 Debug 安装；TestFlight 和发布需要相应开发者账号。
-5. 用数据线连接 iPad，在 iPad 上信任 Mac、按系统要求开启开发者模式，在 Xcode 运行目标中选择自己的 iPad 并点击 Run。
+1. **登录 Apple ID**：Xcode → Settings（⌘,）→ Accounts → 左下角 “+” → Apple Account，用你的 Apple ID 登录。免费账号即可，会显示为 “(Personal Team)”。
+2. **生成并打开工程**：`cd ipad && xcodegen generate && open LittleBearTutor.xcodeproj`。
+3. **选择 Team**：左侧点项目 → TARGETS 选 LittleBearTutor → Signing & Capabilities → Team 选你的 Personal Team。
+   - 想要重新生成工程后仍然保留，就把 Team ID 写进 `Config/Local.xcconfig`（不提交到仓库）：`DEVELOPMENT_TEAM = 你的TeamID`。Team ID 在 Signing 页选中 Team 后，可在 Build Settings 搜索 “Development Team” 看到。
+   - 如果提示 Bundle Identifier 不可用，在同一文件加一行 `PRODUCT_BUNDLE_IDENTIFIER = cn.littlebear.tutor.你的名字`。
+4. **连接设备**：数据线连接 iPhone，解锁并点“信任此电脑”。在 iPhone 打开 设置 → 隐私与安全性 → 开发者模式，开启后按提示重启（第一次连接 Xcode 后才会出现这个开关）。
+5. **运行**：Xcode 顶部运行目标选你的 iPhone，点 ▶︎（⌘R）。首次会安装开发证书，可能需要输入 Mac 登录密码并点“始终允许”。
+6. **信任开发者**：如果 iPhone 提示“不受信任的开发者”，到 设置 → 通用 → VPN 与设备管理 → 开发者 App，点你的 Apple ID → 信任，再回到 Xcode 点 ▶︎。
+
+免费账号安装的 App 7 天后过期，再从 Xcode 运行一次即可；同一时间最多 3 个自签 App。之后可以在 Xcode → Window → Devices and Simulators 勾选 “Connect via network”，以后不插线也能安装。
 
 当前代码依赖系统 SwiftUI、PhotosUI、Speech、AVFoundation、LocalAuthentication 和 Security，不需要第三方 Swift 包。首次使用语音输入会申请麦克风与语音识别权限；连接局域网服务时系统可能申请本地网络权限。
 

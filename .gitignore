@@ -17,3 +17,4 @@ DerivedData/
 xcuserdata/
 ipad/.build/
 ipad/*.xcodeproj/
+ipad/Config/Local.xcconfig

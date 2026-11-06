@@ -5,7 +5,6 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    PRODUCT_BUNDLE_IDENTIFIER: cn.littlebear.tutor.ipad
     SWIFT_VERSION: 5.0
     TARGETED_DEVICE_FAMILY: "1,2"
     GENERATE_INFOPLIST_FILE: YES
@@ -31,9 +30,10 @@ targets:
         Debug:
           INFOPLIST_FILE: Config/Debug-Info.plist
       base:
-        CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
         PRODUCT_NAME: LittleBearTutor
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     scheme:
       testTargets:
         - LittleBearTutorTests
