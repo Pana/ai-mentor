@@ -14,6 +14,13 @@ struct StudyView: View {
             else { ContentUnavailableView("这项作业已删除", systemImage: "trash", description: Text("请返回作业列表。")) }
         }
         .navigationTitle("学习空间")
+        .toolbar {
+            // On iPhone the keyboard covers the tab bar; give children an obvious way to put it away.
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            }
+        }
         .onAppear {
             model.openTask(taskID)
             answer = model.family.task(taskID)?.draft ?? ""

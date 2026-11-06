@@ -5,11 +5,20 @@ import XCTest
 final class GatewayE2EUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    /// Opens a page via the tab bar (iPhone, narrow windows) or the sidebar (full-screen iPad).
     private func openSidebar(_ app: XCUIApplication, _ title: String) {
-        let cell = app.cells.containing(.staticText, identifier: title).firstMatch
-        XCTAssertTrue(cell.waitForExistence(timeout: 5), "sidebar item \(title)")
-        cell.tap()
-        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+        if app.keyboards.element.exists, app.buttons["完成"].exists { app.buttons["完成"].tap() }
+        let tab = app.tabBars.buttons[title]
+        if tab.waitForExistence(timeout: 1) {
+            tab.tap()
+            let back = app.navigationBars.buttons["BackButton"]   // return to the tab's root page
+            while back.exists && !app.navigationBars[title].exists { back.tap() }
+        } else {
+            let cell = app.cells.containing(.staticText, identifier: title).firstMatch
+            XCTAssertTrue(cell.waitForExistence(timeout: 5), "sidebar item \(title)")
+            cell.tap()
+        }
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "page \(title) opened")
     }
 
     func testHelpCheckAndGeneratedPractice() throws {
@@ -20,7 +29,7 @@ final class GatewayE2EUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing-reset", "-ui-testing-sample-photo", "-e2e-service", url, token]
         app.launch()
-        XCUIDevice.shared.orientation = .landscapeLeft
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
         app.buttons["先体验示例家庭"].tap()
 
         // Homework: ask for a hint, then a provisional check.

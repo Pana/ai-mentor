@@ -44,7 +44,70 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     }
 }
 
+/// Chooses the layout by width: sidebar on a full-screen iPad, tab bar on iPhone and narrow iPad windows
+/// (a collapsed split view would hide the sidebar buttons' destinations).
 struct MainSplitView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    var body: some View {
+        if sizeClass == .compact { TabShell() } else { SidebarShell() }
+    }
+}
+
+/// One page of the app plus the study-page destination, shared by both layouts.
+struct PageView: View {
+    let item: SidebarItem
+    @Binding var selection: SidebarItem?
+    let open: (UUID) -> Void
+    var body: some View {
+        Group {
+            switch item {
+            case .home: HomeView(selection: $selection)
+            case .tasks: TasksView()
+            case .practice: PracticeView(open: open)
+            case .progress: ProgressPage(open: open)
+            case .settings: ParentSettingsGate()
+            }
+        }
+        .navigationDestination(for: UUID.self) { StudyView(taskID: $0) }
+    }
+}
+
+/// Compact width (iPhone, iPad split screen): bottom tabs, child switcher in the top-left menu.
+struct TabShell: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var selection: SidebarItem? = .home
+    @State private var paths: [SidebarItem: [UUID]] = [:]
+
+    var body: some View {
+        TabView(selection: Binding(get: { selection ?? .home }, set: { selection = $0 })) {
+            ForEach(SidebarItem.allCases) { item in
+                NavigationStack(path: Binding(get: { paths[item] ?? [] }, set: { paths[item] = $0 })) {
+                    PageView(item: item, selection: $selection) { paths[item, default: []].append($0) }
+                        .toolbar { ToolbarItem(placement: .topBarLeading) { childMenu } }
+                }
+                .tabItem { Label(item.title, systemImage: item.icon) }
+                .tag(item)
+            }
+        }
+        .id(model.selectedChildID)
+    }
+
+    private var childMenu: some View {
+        Menu {
+            ForEach(model.family.children) { child in
+                Button { model.selectChild(child.id); paths = [:] } label: {
+                    Label("\(child.name) · \(child.grade) 年级", systemImage: child.id == model.selectedChildID ? "checkmark" : "person")
+                }
+            }
+        } label: {
+            Label(model.selectedChild?.name ?? "孩子", systemImage: "person.crop.circle").labelStyle(.titleAndIcon)
+        }
+        .accessibilityIdentifier("child-menu")
+    }
+}
+
+/// Regular width (iPad full screen): sidebar + detail.
+struct SidebarShell: View {
     @EnvironmentObject private var model: AppModel
     @State private var selection: SidebarItem? = .home
     /// One path for the detail column; cleared on every page or child change so a study page never lingers.
@@ -72,16 +135,7 @@ struct MainSplitView: View {
         } detail: {
             // A fresh stack per page and per child so navigation never shows another child's task.
             NavigationStack(path: $path) {
-                Group {
-                    switch selection ?? .home {
-                    case .home: HomeView(selection: $selection)
-                    case .tasks: TasksView()
-                    case .practice: PracticeView { path.append($0) }
-                    case .progress: ProgressPage { path.append($0) }
-                    case .settings: ParentSettingsGate()
-                    }
-                }
-                .navigationDestination(for: UUID.self) { StudyView(taskID: $0) }
+                PageView(item: selection ?? .home, selection: $selection) { path.append($0) }
             }
             .id("\(selection?.rawValue ?? "home")-\(model.selectedChildID?.uuidString ?? "")")
             .onChange(of: selection) { path = [] }

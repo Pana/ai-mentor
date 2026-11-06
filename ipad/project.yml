@@ -7,12 +7,13 @@ settings:
   base:
     PRODUCT_BUNDLE_IDENTIFIER: cn.littlebear.tutor.ipad
     SWIFT_VERSION: 5.0
-    TARGETED_DEVICE_FAMILY: "2"
+    TARGETED_DEVICE_FAMILY: "1,2"
     GENERATE_INFOPLIST_FILE: YES
     MARKETING_VERSION: 1.0.0
     CURRENT_PROJECT_VERSION: 1
     INFOPLIST_KEY_UILaunchScreen_Generation: YES
     INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
     INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
     INFOPLIST_KEY_NSMicrophoneUsageDescription: "用于将你说的问题识别成文字，确认后才发送给辅导服务。"
     INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "用于把你说的问题识别成文字，识别结果会先显示供你修改。"

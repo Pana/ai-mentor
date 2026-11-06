@@ -12,6 +12,10 @@
 
 当前代码依赖系统 SwiftUI、PhotosUI、Speech、AVFoundation、LocalAuthentication 和 Security，不需要第三方 Swift 包。首次使用语音输入会申请麦克风与语音识别权限；连接局域网服务时系统可能申请本地网络权限。
 
+## 在 iPhone 上测试
+
+同一个工程也能装到 iPhone（首发仍以 iPad 为准）：连接 iPhone，在 Xcode 运行目标里选它即可。iPhone 上是底部标签栏布局。示例家庭、练习、拍题目与框选、语音、Face ID 家长验证都可以在 iPhone 上验证；AI 辅导需要 HTTPS 网关（见 `server/README.md`）。
+
 ## 测试
 
 ```sh

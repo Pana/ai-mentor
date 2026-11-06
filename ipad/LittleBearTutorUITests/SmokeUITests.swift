@@ -11,13 +11,19 @@ final class SmokeUITests: XCTestCase {
         add(attachment)
     }
 
+    /// Opens a page via the tab bar (iPhone, narrow windows) or the sidebar (full-screen iPad).
     private func openSidebar(_ app: XCUIApplication, _ title: String) {
-        let cell = app.cells.containing(.staticText, identifier: title).firstMatch
-        if !cell.waitForExistence(timeout: 2) {
-            app.navigationBars.buttons.element(boundBy: 0).tap()   // reveal the sidebar in portrait
+        if app.keyboards.element.exists, app.buttons["完成"].exists { app.buttons["完成"].tap() }
+        let tab = app.tabBars.buttons[title]
+        if tab.waitForExistence(timeout: 1) {
+            tab.tap()
+            let back = app.navigationBars.buttons["BackButton"]   // return to the tab's root page
+            while back.exists && !app.navigationBars[title].exists { back.tap() }
+        } else {
+            let cell = app.cells.containing(.staticText, identifier: title).firstMatch
+            XCTAssertTrue(cell.waitForExistence(timeout: 5), "sidebar item \(title)")
+            cell.tap()
         }
-        XCTAssertTrue(cell.waitForExistence(timeout: 5), "sidebar item \(title)")
-        cell.tap()
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5), "page \(title) opened")
     }
 
@@ -25,7 +31,7 @@ final class SmokeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing-reset"]
         app.launch()
-        XCUIDevice.shared.orientation = .landscapeLeft
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
 
         let demo = app.buttons["先体验示例家庭"]
         if demo.waitForExistence(timeout: 5) { demo.tap() }
@@ -62,7 +68,7 @@ final class SmokeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing-reset", "-ui-testing-sample-photo"]
         app.launch()
-        XCUIDevice.shared.orientation = .landscapeLeft
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
         app.buttons["先体验示例家庭"].tap()
         openSidebar(app, "我的作业")
         app.buttons["添加作业"].tap()
@@ -75,8 +81,8 @@ final class SmokeUITests: XCTestCase {
         shot(app, "5-crop")
         app.buttons["使用选中区域"].tap()
 
-        XCTAssertTrue(app.staticTexts["核对原图与作业要求，再确认加入作业。"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["重新拍题目"].exists || app.buttons["从相册选图"].exists)
+        XCTAssertTrue(app.staticTexts["家长开启辅导服务后，可以自动识别图片中的作业要求。"].waitForExistence(timeout: 5), "photo attached")
+        XCTAssertTrue(app.buttons["移除图片"].exists || app.buttons["从相册选图"].exists)
         let title = app.textFields["作业名称"]
         title.tap(); title.typeText("口算第 12 页")
         app.buttons["确认添加"].tap()

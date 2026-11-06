@@ -53,6 +53,12 @@
 - 网关遇到模型返回空内容（DeepSeek JSON 模式已知现象）自动重试一次。
 - `scripts/provider-check.mjs`：读取 `server/.env`，用示例题和 `scripts/fixtures/homework.jpg` 检查真实服务商的求助、对错判断、识题和出题。
 
+### iPhone 测试支持（2026-11-06）
+
+- 同一个 App 可安装到 iPhone，用于真机测试（首发目标仍是 iPad）。窄屏（iPhone、iPad 分屏）使用底部标签栏，左上角切换孩子；全屏 iPad 仍是侧边栏。
+- 学习页键盘上方加“完成”按钮，避免键盘挡住标签栏。
+- 全部单元、UI 和端到端测试在 iPhone 18 Pro 与 iPad Air 11-inch (M4) 模拟器上通过。
+
 ### iPad 仍未做
 
 - 实时语音对话、外接摄像头、三科专项流程（朗读评分、听写、看图写话）。
