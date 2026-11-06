@@ -232,6 +232,7 @@ struct AddChildView: View {
                 TextField("教材版本（可留空）", text: $textbook)
             }
             .navigationTitle("添加孩子")
+            .keyboardDoneButton()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -289,6 +290,7 @@ struct AddTaskView: View {
                 }
             }
             .navigationTitle("为\(model.selectedChild?.name ?? "孩子")添加作业")
+            .keyboardDoneButton()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

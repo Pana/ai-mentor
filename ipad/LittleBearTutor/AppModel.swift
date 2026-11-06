@@ -158,19 +158,22 @@ import SwiftUI
 
     // MARK: Service settings
 
-    func saveService(url: String, token: String, consent: Bool) {
+    @discardableResult
+    func saveService(url: String, token: String, consent: Bool) -> Bool {
         cancelTutor()
         // Turning consent off removes the stored token; nothing is sent until a parent configures it again.
         if !consent {
-            credentials.clear(); serviceURL = ""; serviceConfigured = false; return
+            credentials.clear(); serviceURL = ""; serviceConfigured = false; return true
         }
         do {
             let parsed = try TutorClient.validate(url: url, token: token)
             try credentials.save(url: parsed.absoluteString, token: token, consent: consent)
             serviceURL = parsed.absoluteString
             serviceConfigured = consent
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 

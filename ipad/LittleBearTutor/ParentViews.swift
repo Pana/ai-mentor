@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var deletingChild: Child?
     @State private var editingChild: Child?
     @State private var editingTask: Homework?
+    @State private var savedNotice = false
 
     var body: some View {
         Form {
@@ -49,8 +50,20 @@ struct SettingsView: View {
                 TextField(debugBuild ? "服务地址（HTTPS，或调试用 http://192.168.x.x:8787）" : "HTTPS 服务地址", text: $url).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                 SecureField(model.serviceConfigured ? "设备访问凭证（已保存，修改时重新填写）" : "设备访问凭证", text: $token)
                 Toggle("允许发送当前题目与可选图片", isOn: $consent)
-                Button("保存") { model.saveService(url: url, token: token, consent: consent); token = "" }
+                HStack {
+                    Button("保存") {
+                        Keyboard.dismiss()
+                        if model.saveService(url: url, token: token, consent: consent) {
+                            token = ""
+                            savedNotice = true
+                        }
+                    }
                     .disabled(consent && token.isEmpty)
+                    if savedNotice {
+                        Label("已保存", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                            .task { try? await Task.sleep(for: .seconds(3)); savedNotice = false }
+                    }
+                }
                 LabeledContent("状态", value: model.serviceConfigured ? "已开启" : "未开启")
             } header: { Text("辅导服务") } footer: {
                 Text("模型供应商密钥只保存在服务端。设备凭证保存在本机钥匙串；学习记录不会上传，只有求助时发送当前题目和可选图片。")
@@ -61,6 +74,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("家长设置")
+        .keyboardDoneButton()
         .onAppear { url = model.serviceURL; consent = model.serviceConfigured }
         .sheet(isPresented: $showingAddChild) { AddChildView() }
         .sheet(item: $editingChild) { EditChildView(child: $0) }
@@ -130,6 +144,7 @@ struct EditChildView: View {
                 Stepper("每学习 \(minutes) 分钟提醒休息", value: $minutes, in: 5...60, step: 5)
             }
             .navigationTitle("编辑孩子档案")
+            .keyboardDoneButton()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -163,6 +178,7 @@ struct EditTaskView: View {
                 TextField("页码、题号与完成要求", text: $instructions, axis: .vertical).lineLimit(2...6)
             }
             .navigationTitle("修改作业")
+            .keyboardDoneButton()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
