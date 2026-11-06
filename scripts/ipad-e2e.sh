@@ -23,13 +23,15 @@ command -v xcodegen >/dev/null && xcodegen generate >/dev/null
 TEST_RUNNER_E2E_GATEWAY_URL="http://127.0.0.1:18787" TEST_RUNNER_E2E_TOKEN="$token" \
   xcodebuild -project LittleBearTutor.xcodeproj -scheme LittleBearTutor \
   -destination "platform=iOS Simulator,name=$device" \
-  -only-testing:LittleBearTutorUITests/GatewayE2EUITests test 2>&1 | tee "$logs/xcodebuild.log" | grep -E "error:|skipped|Executed|TEST " || true
+  -only-testing:LittleBearTutorUITests/GatewayE2EUITests test 2>&1 | tee "$logs/xcodebuild.log" | grep -E "error:|Test skipped|Executed|TEST " || true
 grep -q "TEST SUCCEEDED" "$logs/xcodebuild.log" || { echo "e2e failed, logs in $logs"; exit 1; }
-grep -q "skipped" "$logs/xcodebuild.log" && { echo "e2e test was skipped"; exit 1; }
+grep -Eq "Test skipped|tests? skipped" "$logs/xcodebuild.log" && { echo "e2e test was skipped"; exit 1; }
 
-echo "--- requests the mock model received (expect help, check, practice):"
+echo "--- requests the mock model received (expect help, check, practice, recognize):"
 node -e "fetch('http://127.0.0.1:18788/seen').then(r => r.json()).then(seen => {
   console.log(JSON.stringify(seen));
   const modes = seen.map(s => s.mode).join(',');
-  if (modes !== 'help,check,practice') { console.error('unexpected requests: ' + modes); process.exit(1); }
+  const photo = seen.find(s => s.mode === 'recognize');
+  if (!photo || !photo.image || photo.model !== 'mock-vision') { console.error('photo request did not reach the vision model'); process.exit(1); }
+  if (modes !== 'help,check,practice,recognize') { console.error('unexpected requests: ' + modes); process.exit(1); }
 })"

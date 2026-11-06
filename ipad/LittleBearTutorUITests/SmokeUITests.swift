@@ -57,4 +57,29 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["已经记下啦，等待家长检查。"].waitForExistence(timeout: 3))
         shot(app, "4-homework")
     }
+
+    func testAddHomeworkWithCroppedPhoto() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing-reset", "-ui-testing-sample-photo"]
+        app.launch()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.buttons["先体验示例家庭"].tap()
+        openSidebar(app, "我的作业")
+        app.buttons["添加作业"].tap()
+
+        app.buttons["使用示例图片"].tap()
+        XCTAssertTrue(app.navigationBars["框选要问的题"].waitForExistence(timeout: 5))
+        let corner = app.otherElements["crop-bottomRight"]
+        XCTAssertTrue(corner.exists)
+        corner.press(forDuration: 0.1, thenDragTo: app.otherElements["crop-box"])
+        shot(app, "5-crop")
+        app.buttons["使用选中区域"].tap()
+
+        XCTAssertTrue(app.staticTexts["核对原图与作业要求，再确认加入作业。"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["重新拍题目"].exists || app.buttons["从相册选图"].exists)
+        let title = app.textFields["作业名称"]
+        title.tap(); title.typeText("口算第 12 页")
+        app.buttons["确认添加"].tap()
+        XCTAssertTrue(app.staticTexts["口算第 12 页"].waitForExistence(timeout: 5))
+    }
 }

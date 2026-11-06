@@ -1,5 +1,4 @@
 import PencilKit
-import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -7,8 +6,6 @@ struct StudyView: View {
     @EnvironmentObject private var model: AppModel
     let taskID: UUID
     @State private var answer = ""
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var showingCamera = false
     @StateObject private var speaker = SpeechOutput()
 
     var body: some View {
@@ -67,20 +64,8 @@ struct StudyView: View {
             Button("我写好了，请家长检查") { speaker.stop(); model.submitTask(task.id) }
                 .buttonStyle(.borderedProminent).disabled(!task.status.editable)
             if task.status != .done {
-                PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                    Label(task.photoPath == nil ? "添加题目图片" : "换一张图片", systemImage: "photo")
-                }.buttonStyle(.bordered)
-                if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                    Button { showingCamera = true } label: { Label("拍摄题目", systemImage: "camera") }.buttonStyle(.bordered)
-                }
+                PhotoSourceButtons(replacing: task.photoPath != nil) { data in model.attachPhoto(data, to: task.id) }
             }
-        }
-        .task(id: selectedPhoto) {
-            guard let selectedPhoto, let data = try? await selectedPhoto.loadTransferable(type: Data.self) else { return }
-            model.attachPhoto(data, to: task.id)
-        }
-        .sheet(isPresented: $showingCamera) {
-            CameraPicker { data in model.attachPhoto(data, to: task.id) }.ignoresSafeArea()
         }
         if task.status == .review { Text("已经记下啦，等待家长检查。").foregroundStyle(.secondary) }
         if !task.reviewNote.isEmpty { Text("家长的建议：\(task.reviewNote)").foregroundStyle(.green) }

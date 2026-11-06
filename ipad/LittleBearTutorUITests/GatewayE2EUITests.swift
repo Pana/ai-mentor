@@ -18,7 +18,7 @@ final class GatewayE2EUITests: XCTestCase {
             throw XCTSkip("Run scripts/ipad-e2e.sh to provide a local gateway.")
         }
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing-reset", "-e2e-service", url, token]
+        app.launchArguments = ["-ui-testing-reset", "-ui-testing-sample-photo", "-e2e-service", url, token]
         app.launch()
         XCUIDevice.shared.orientation = .landscapeLeft
         app.buttons["先体验示例家庭"].tap()
@@ -50,5 +50,21 @@ final class GatewayE2EUITests: XCTestCase {
         // Progress: the generated exercise is recorded but not counted as mastery.
         openSidebar(app, "我的进步")
         XCTAssertTrue(app.staticTexts["待核验"].waitForExistence(timeout: 5))
+
+        // Photo recognition: crop a sample worksheet, send it, confirm the draft before saving.
+        openSidebar(app, "我的作业")
+        app.buttons["添加作业"].tap()
+        app.buttons["使用示例图片"].tap()
+        XCTAssertTrue(app.buttons["使用选中区域"].waitForExistence(timeout: 5))
+        app.buttons["使用选中区域"].tap()
+        app.buttons["识别作业要求（发送这张图片）"].tap()
+        XCTAssertTrue(app.staticTexts["已识别，请家长核对。"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["确认添加"].isEnabled, "recognized drafts need parent confirmation")
+        let confirm = app.switches["我已核对图片，并修正了不清楚的内容"]
+        if !confirm.isHittable { app.swipeUp() }
+        confirm.switches.firstMatch.tap()
+        XCTAssertTrue(app.buttons["确认添加"].isEnabled)
+        app.buttons["确认添加"].tap()
+        XCTAssertTrue(app.staticTexts["口算练习"].waitForExistence(timeout: 5))
     }
 }

@@ -1,4 +1,3 @@
-import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -198,8 +197,6 @@ struct AddTaskView: View {
     @State private var instructions = ""
     @State private var subject = Subject.math
     @State private var photo: String?
-    @State private var pickerItem: PhotosPickerItem?
-    @State private var showingCamera = false
     @State private var recognitionNote = ""
     @State private var recognized = false
     @State private var confirmed = false
@@ -214,28 +211,22 @@ struct AddTaskView: View {
                     TextField("页码、题号与完成要求", text: $instructions, axis: .vertical).lineLimit(2...6)
                 }
                 Section {
-                    if let url = model.photoURL(photo), let image = UIImage(contentsOfFile: url.path) {
-                        Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 260)
-                        Text("核对原图与作业要求，再确认加入作业。").font(.footnote).foregroundStyle(.orange)
-                    }
-                    HStack {
-                        PhotosPicker(selection: $pickerItem, matching: .images) { Label("从相册选图", systemImage: "photo") }
-                            .buttonStyle(.bordered)
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            Button { showingCamera = true } label: { Label("拍照", systemImage: "camera") }.buttonStyle(.bordered)
-                        }
-                    }
+                    PhotoSourceButtons(replacing: photo != nil) { data in replacePhoto(with: model.storePhoto(data)) }
                     if let photo {
                         if model.serviceConfigured {
                             HStack {
                                 Button(model.tutorBusy ? "正在识别…" : "识别作业要求（发送这张图片）") { recognize(photo) }
-                                    .buttonStyle(.bordered).disabled(model.tutorBusy)
+                                    .buttonStyle(.borderedProminent).disabled(model.tutorBusy)
                                 if model.tutorBusy { ProgressView(); Button("停止") { model.cancelTutor() }.buttonStyle(.borderless) }
                             }
                         } else {
                             Text("家长开启辅导服务后，可以自动识别图片中的作业要求。").font(.footnote).foregroundStyle(.secondary)
                         }
                         if !recognitionNote.isEmpty { Text(recognitionNote).foregroundStyle(.green) }
+                        if let url = model.photoURL(photo), let image = UIImage(contentsOfFile: url.path) {
+                            Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 200)
+                            Text("核对原图与作业要求，再确认加入作业。").font(.footnote).foregroundStyle(.orange)
+                        }
                         if recognized { Toggle("我已核对图片，并修正了不清楚的内容", isOn: $confirmed) }
                         Button("移除图片", role: .destructive) { replacePhoto(with: nil) }.buttonStyle(.borderless)
                     }
@@ -254,13 +245,6 @@ struct AddTaskView: View {
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.tutorBusy || (recognized && !confirmed))
                 }
-            }
-            .task(id: pickerItem) {
-                guard let pickerItem, let data = try? await pickerItem.loadTransferable(type: Data.self) else { return }
-                replacePhoto(with: model.storePhoto(data))
-            }
-            .sheet(isPresented: $showingCamera) {
-                CameraPicker { data in replacePhoto(with: model.storePhoto(data)) }.ignoresSafeArea()
             }
             .onDisappear {
                 guard !saved else { return }
@@ -289,26 +273,5 @@ struct AddTaskView: View {
             recognized = true
             confirmed = false
         }
-    }
-}
-
-struct CameraPicker: UIViewControllerRepresentable {
-    let onImage: (Data) -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(onImage: onImage) }
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-    func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
-    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let onImage: (Data) -> Void
-        init(onImage: @escaping (Data) -> Void) { self.onImage = onImage }
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage, let data = image.jpegData(compressionQuality: 0.9) { onImage(data) }
-            picker.dismiss(animated: true)
-        }
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { picker.dismiss(animated: true) }
     }
 }

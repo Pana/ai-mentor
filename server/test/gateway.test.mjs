@@ -142,3 +142,20 @@ test('text-only configuration refuses photos clearly without calling the model',
   assert.equal((await post()).status, 200);
   assert.equal(calls, 1);
 });
+
+test('retries once when the model returns whitespace-only content', async t => {
+  const contents = ['   ', JSON.stringify({ message: '先想一想个位。' })];
+  let calls = 0;
+  const post = await withServer(t, {}, { fetchImpl: async () => new Response(JSON.stringify({ choices: [{ message: { content: contents[calls++] } }] }), { status: 200 }) });
+  const response = await post();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).message, '先想一想个位。');
+  assert.equal(calls, 2);
+});
+
+test('gives up after a second blank reply', async t => {
+  let calls = 0;
+  const post = await withServer(t, {}, { fetchImpl: async () => { calls++; return new Response(JSON.stringify({ choices: [{ message: { content: ' ' } }] }), { status: 200 }); } });
+  assert.equal((await post()).status, 502);
+  assert.equal(calls, 2);
+});

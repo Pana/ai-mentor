@@ -120,11 +120,17 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
       try { parsed = JSON.parse(await readLimited(req, limit)); } catch (e) { if (e instanceof Problem) throw e; throw new Problem(400, 'invalid_json'); }
       const input = validateRequest(parsed);
       if (!modelFor(input, config)) throw new Problem(422, 'images_not_supported');
-      const upstream = await fetchImpl(config.apiUrl, { method: 'POST', redirect: 'error', signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify(providerBody(input, config)) });
-      if (!upstream.ok) throw new Problem(502, 'model_unavailable');
-      const data = JSON.parse(await readLimited(upstream.body, 65_536));
-      send(200, validateReply(data.choices?.[0]?.message?.content, input));
+      // Some vendors (e.g. DeepSeek JSON mode) occasionally return whitespace-only content; retry that once.
+      for (let attempt = 0; ; attempt++) {
+        const upstream = await fetchImpl(config.apiUrl, { method: 'POST', redirect: 'error', signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify(providerBody(input, config)) });
+        if (!upstream.ok) throw new Problem(502, 'model_unavailable');
+        const data = JSON.parse(await readLimited(upstream.body, 65_536));
+        const content = data.choices?.[0]?.message?.content;
+        if (attempt === 0 && typeof content === 'string' && !content.trim()) continue;
+        send(200, validateReply(content, input));
+        break;
+      }
     } catch (error) { send(error instanceof Problem ? error.status : 502, { error: error instanceof Problem ? error.message : 'model_unavailable' }); }
     finally { clearTimeout(timer); active--; }
   });

@@ -32,6 +32,18 @@ npm start
 
 一个兼容 OpenAI 接口、支持图片输入的模型即可覆盖全部功能。只有纯文本模型时，文字求助、帮我检查（不带图）和生成练习可用，拍照识题与带图请求不可用（按上表设置 `MODEL_SUPPORTS_IMAGES=false`）。语音输入和朗读使用设备系统能力，不经过网关。
 
+## 真实服务商检查
+
+填好 `server/.env` 后在仓库根目录运行 `node scripts/provider-check.mjs`。脚本在本机临时启动网关，发送求助、两次检查（对/错各一）、拍照识题（`scripts/fixtures/homework.jpg`）和生成练习，输出每项耗时与结果；格式失败、判题错误或提示里直接给出答案都会标出。不会打印供应商密钥。
+
+DeepSeek 示例配置（模型 ID 以控制台当前名称为准）：
+
+```sh
+MODEL_API_URL=https://api.deepseek.com/chat/completions
+MODEL_NAME=deepseek-flash
+MODEL_JSON_MODE=true
+```
+
 ## iPad 联调
 
 - **模拟器**：Debug 版允许 `http://127.0.0.1:8787`。`scripts/ipad-e2e.sh` 会启动网关和模拟模型（`scripts/mock-model.mjs`），在模拟器里跑一遍求助、检查和生成练习。

@@ -33,6 +33,8 @@ import SwiftUI
         try session.setActive(true, options: .notifyOthersOnDeactivation)
         let request = SFSpeechAudioBufferRecognitionRequest(); self.request = request
         request.shouldReportPartialResults = true
+        // Keep the child's voice on the iPad whenever the device supports offline Chinese recognition.
+        if recognizer?.supportsOnDeviceRecognition == true { request.requiresOnDeviceRecognition = true }
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in request?.append(buffer) }
