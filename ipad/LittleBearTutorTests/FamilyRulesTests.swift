@@ -152,4 +152,43 @@ final class FamilyRulesTests: XCTestCase {
         XCTAssertEqual(loaded.evidence.first?.exerciseID, task.uuidString)
         XCTAssertEqual(PhotoStore().url(for: loaded.tasks.first?.photoPath)?.lastPathComponent, "photo-x.jpg")
     }
+
+    func testStudySessionsAreIdempotentAndIsolated() throws {
+        let id = try homework(lin)
+        let session = StudySession(id: UUID(), childID: lin, taskID: id, seconds: 90, startedAt: Date())
+        try family.recordStudy(session)
+        var later = session; later.seconds = 120
+        try family.recordStudy(later)
+        try family.recordStudy(session)   // a stale save must not lower the time
+        XCTAssertEqual(family.studySeconds(for: lin, since: .distantPast), 120)
+        XCTAssertEqual(family.studySeconds(for: qi, since: .distantPast), 0)
+        var wrongChild = session; wrongChild.childID = qi
+        XCTAssertThrowsError(try family.recordStudy(wrongChild))
+        _ = family.deleteTask(id)
+        XCTAssertTrue(family.sessions.isEmpty)
+    }
+
+    func testEditTaskRestartsAndRejectsExercisesAndDoneWork() throws {
+        let id = try homework(lin)
+        try family.applyTutor(id, revision: 0, turn: TutorTurn(question: "q", reply: "r", mode: "check", assessment: "CORRECT"))
+        try family.submit(id)
+        try family.editTask(id, subject: .chinese, title: " 生字 ", instructions: "抄写")
+        let task = try XCTUnwrap(family.task(id))
+        XCTAssertEqual(task.status, .ready)
+        XCTAssertEqual(task.title, "生字")
+        XCTAssertTrue(task.conversation.isEmpty)
+        XCTAssertEqual(task.aiAssessment, "UNKNOWN")
+
+        let practice = try family.localPractice(child: lin, subject: .math)
+        XCTAssertThrowsError(try family.editTask(practice, subject: .math, title: "x", instructions: ""))
+        try family.submit(id); try family.parentReview(id, passed: true, note: "")
+        XCTAssertThrowsError(try family.editTask(id, subject: .math, title: "x", instructions: ""))
+    }
+
+    func testEditChildValidatesStudyMinutes() throws {
+        XCTAssertThrowsError(try family.editChild(lin, name: "林林", grade: 2, textbook: "", studyMinutes: 3))
+        try family.editChild(lin, name: "林林", grade: 3, textbook: "人教版", studyMinutes: 25)
+        XCTAssertEqual(family.child(lin)?.studyMinutes, 25)
+        XCTAssertEqual(family.child(lin)?.grade, 3)
+    }
 }

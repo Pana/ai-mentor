@@ -39,7 +39,7 @@ xcodebuild -project ipad/LittleBearTutor.xcodeproj -scheme LittleBearTutor \
   -destination 'platform=iOS Simulator,name=iPad Air 11-inch (M4)' build
 ```
 
-运行测试（17 项单元测试 + UI 冒烟测试）：把上面命令的 `build` 换成 `test`。
+运行测试（20 项单元测试 + UI 冒烟测试；端到端联调用 `scripts/ipad-e2e.sh`）：把上面命令的 `build` 换成 `test`。
 
 真机运行：在 Xcode 的 Signing & Capabilities 中选择个人 Team，连接 iPad 后 Run。详见 [iPad 客户端说明](ipad/README.md)。
 

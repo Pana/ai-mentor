@@ -34,7 +34,7 @@ struct StudyView: View {
                         .background(.green.opacity(0.15), in: Capsule())
                     Text(task.status.rawValue).font(.caption).foregroundStyle(task.status == .correction ? .orange : .green)
                 }
-                StudyTimerView()
+                StudyTimerView(task: task).id(task.id)
                 if let exercise = task.exercise {
                     ExercisePanel(task: task, exercise: exercise, answer: $answer, speaker: speaker)
                 } else {

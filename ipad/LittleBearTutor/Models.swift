@@ -32,6 +32,17 @@ struct Child: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var grade: Int = 2
     var textbook: String = "教材版本待确认"
+    /// Minutes of focused study before a break reminder (5–60).
+    var studyMinutes = 20
+}
+
+/// One continuous visit to a study page. Re-saving the same id only ever grows `seconds`.
+struct StudySession: Codable, Identifiable, Sendable {
+    var id: UUID
+    var childID: UUID
+    var taskID: UUID
+    var seconds: Int
+    var startedAt: Date
 }
 
 struct TutorTurn: Codable, Identifiable, Sendable {
@@ -128,6 +139,7 @@ struct Family: Codable {
     var children: [Child] = []
     var tasks: [Homework] = []
     var evidence: [Evidence] = []
+    var sessions: [StudySession] = []
 
     func tasks(for child: UUID) -> [Homework] { tasks.filter { $0.childID == child } }
     func homework(for child: UUID) -> [Homework] { tasks(for: child).filter { !$0.practice } }
@@ -148,6 +160,51 @@ struct Family: Codable {
         let child = Child(name: name, grade: grade, textbook: book.isEmpty ? "教材版本待确认" : String(book.prefix(300)))
         children.append(child)
         return child.id
+    }
+
+    mutating func editChild(_ id: UUID, name: String, grade: Int, textbook: String, studyMinutes: Int) throws {
+        guard let i = children.firstIndex(where: { $0.id == id }) else { throw FamilyError("孩子档案不存在") }
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...20).contains(name.count), [2, 3].contains(grade) else { throw FamilyError("请填写 1–20 字的昵称，年级为二或三年级") }
+        guard (5...60).contains(studyMinutes) else { throw FamilyError("休息提醒时长为 5–60 分钟") }
+        let book = textbook.trimmingCharacters(in: .whitespacesAndNewlines)
+        children[i].name = name
+        children[i].grade = grade
+        children[i].textbook = book.isEmpty ? "教材版本待确认" : String(book.prefix(300))
+        children[i].studyMinutes = studyMinutes
+    }
+
+    /// Changing what the homework asks invalidates earlier tutor feedback, so the task restarts.
+    mutating func editTask(_ taskID: UUID, subject: Subject, title: String, instructions: String) throws {
+        let i = try index(of: taskID)
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...100).contains(title.count), instructions.count <= 2000 else { throw FamilyError("请填写 1–100 字的作业名称") }
+        guard tasks[i].exercise == nil else { throw FamilyError("练习题不支持修改题意") }
+        guard tasks[i].status != .done else { throw FamilyError("已完成作业不能修改题意") }
+        tasks[i].subject = subject
+        tasks[i].title = title
+        tasks[i].instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        tasks[i].revision += 1
+        tasks[i].status = .ready
+        tasks[i].aiAssessment = "UNKNOWN"
+        tasks[i].reviewNote = ""
+        tasks[i].conversation = []
+    }
+
+    /// Idempotent: a repeated or older save of the same session never lowers the recorded time.
+    mutating func recordStudy(_ session: StudySession) throws {
+        guard let work = task(session.taskID), work.childID == session.childID else { throw FamilyError("找不到这个孩子的作业") }
+        guard (0...86_400).contains(session.seconds) else { throw FamilyError("学习时长无效") }
+        if let i = sessions.firstIndex(where: { $0.id == session.id }) {
+            guard sessions[i].childID == session.childID, sessions[i].taskID == session.taskID else { throw FamilyError("学习记录不匹配") }
+            if sessions[i].seconds < session.seconds { sessions[i].seconds = session.seconds }
+        } else {
+            sessions.append(session)
+        }
+    }
+
+    func studySeconds(for childID: UUID, since start: Date) -> Int {
+        sessions.filter { $0.childID == childID && $0.startedAt >= start }.reduce(0) { $0 + $1.seconds }
     }
 
     mutating func addTask(_ task: Homework) throws {
@@ -254,6 +311,7 @@ struct Family: Codable {
         let photo = task(taskID)?.photoPath
         tasks.removeAll { $0.id == taskID }
         evidence.removeAll { $0.taskID == taskID }
+        sessions.removeAll { $0.taskID == taskID }
         return photo
     }
 
@@ -263,6 +321,7 @@ struct Family: Codable {
         children.removeAll { $0.id == childID }
         tasks.removeAll { $0.childID == childID }
         evidence.removeAll { $0.childID == childID }
+        sessions.removeAll { $0.childID == childID }
         return photos
     }
 
@@ -353,13 +412,14 @@ private extension KeyedDecodingContainer {
 }
 
 extension Child {
-    enum CodingKeys: String, CodingKey { case id, name, grade, textbook }
+    enum CodingKeys: String, CodingKey { case id, name, grade, textbook, studyMinutes }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         grade = try c.value(.grade, or: 2)
         textbook = try c.value(.textbook, or: "教材版本待确认")
+        studyMinutes = try c.value(.studyMinutes, or: 20)
     }
 }
 
@@ -433,7 +493,7 @@ extension Evidence {
 }
 
 extension Family {
-    enum CodingKeys: String, CodingKey { case schemaVersion, demo, children, tasks, evidence }
+    enum CodingKeys: String, CodingKey { case schemaVersion, demo, children, tasks, evidence, sessions }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = 2
@@ -441,5 +501,6 @@ extension Family {
         children = try c.value(.children, or: [])
         tasks = try c.value(.tasks, or: [])
         evidence = try c.value(.evidence, or: [])
+        sessions = try c.value(.sessions, or: [])
     }
 }

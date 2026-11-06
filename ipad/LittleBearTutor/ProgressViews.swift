@@ -67,7 +67,8 @@ struct ProgressPage: View {
                 let today = Calendar.current.startOfDay(for: Date())
                 let todays = model.family.evidence.filter { $0.childID == child.id && $0.time >= today }
                 Section("今天的学习回顾") {
-                    Text("\(todays.count) 次作答 · \(todays.filter(\.independent).count) 次独立答对")
+                    let minutes = model.family.studySeconds(for: child.id, since: today) / 60
+                    Text("学习 \(minutes) 分钟 · \(todays.count) 次作答 · \(todays.filter(\.independent).count) 次独立答对")
                     Text("需要帮助和订正也是学习的一部分。完成作业后，可以向家长说说今天学到了什么。").foregroundStyle(.secondary)
                 }
                 let knowledge = model.family.knowledge(for: child.id)

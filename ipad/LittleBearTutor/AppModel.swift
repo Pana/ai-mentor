@@ -69,6 +69,10 @@ import SwiftUI
         selectedChildID = id
     }
 
+    func editChild(_ id: UUID, name: String, grade: Int, textbook: String, studyMinutes: Int) -> Bool {
+        mutate { try $0.editChild(id, name: name, grade: grade, textbook: textbook, studyMinutes: studyMinutes) } != nil
+    }
+
     func addChild(name: String, grade: Int, textbook: String) {
         if let id = mutate({ try $0.addChild(name: name, grade: grade, textbook: textbook) }) { selectedChildID = id }
     }
@@ -102,6 +106,16 @@ import SwiftUI
     }
 
     func openTask(_ id: UUID) { mutate { try $0.open(id) } }
+    func editTask(_ id: UUID, subject: Subject, title: String, instructions: String) -> Bool {
+        cancelTutor()
+        return mutate { try $0.editTask(id, subject: subject, title: title, instructions: instructions) } != nil
+    }
+
+    /// Saves elapsed study time. Silently skipped if the task was deleted meanwhile.
+    func recordStudy(_ session: StudySession) {
+        guard session.seconds > 0, family.task(session.taskID) != nil else { return }
+        mutate { try $0.recordStudy(session) }
+    }
     func saveDraft(_ id: UUID, _ text: String) { mutate { try $0.saveDraft(id, text) } }
     func submitTask(_ id: UUID) { mutate { try $0.submit(id) } }
     func hint(_ id: UUID) { mutate { try $0.hint(id) } }

@@ -22,6 +22,7 @@ xcodebuild -project LittleBearTutor.xcodeproj -scheme LittleBearTutor \
 - `LittleBearTutorTests/FamilyRulesTests.swift`：家庭规则、证据、知识点状态、复习安排、孩子隔离、旧数据兼容。
 - `LittleBearTutorTests/GatewayContractTests.swift`：请求字段与网关校验规则一致、回复校验、状态码、图片压缩。
 - `LittleBearTutorUITests/SmokeUITests.swift`：示例家庭下的练习、进步和作业提交流程（不联网）。
+- `LittleBearTutorUITests/GatewayE2EUITests.swift`：经本机真实网关和模拟模型的求助、检查、生成练习。平时自动跳过，用仓库根目录的 `scripts/ipad-e2e.sh` 运行。
 
 ## 代码结构
 

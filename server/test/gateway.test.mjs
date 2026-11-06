@@ -122,3 +122,23 @@ test('disconnecting the client aborts the upstream operation', async t => {
   try { await Promise.race([abort, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('upstream not cancelled')), 2000); })]); }
   finally { clearTimeout(timer); }
 });
+
+test('routes photo requests to the vision model and text requests to the main model', async t => {
+  const models = [];
+  const post = await withServer(t, { visionModel: 'vision-model' }, { fetchImpl: async (url, options) => { models.push(JSON.parse(options.body).model); return reply({ message: '好的' }); } });
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).toString('base64');
+  assert.equal((await post({ ...input, image: jpeg })).status, 200);
+  assert.equal((await post()).status, 200);
+  assert.deepEqual(models, ['vision-model', 'configured-model']);
+});
+
+test('text-only configuration refuses photos clearly without calling the model', async t => {
+  let calls = 0;
+  const post = await withServer(t, { imagesSupported: false }, { fetchImpl: async () => { calls++; return reply({ message: '好的' }); } });
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).toString('base64');
+  const response = await post({ ...input, mode: 'recognize', image: jpeg });
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: 'images_not_supported' });
+  assert.equal((await post()).status, 200);
+  assert.equal(calls, 1);
+});

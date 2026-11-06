@@ -57,25 +57,57 @@ import SwiftUI
     func stop() { synthesizer.stopSpeaking(at: .immediate); speaking = false }
 }
 
+/// Counts focused time on one study page, saves it every 30 s and on leave, and suggests a break
+/// after the child's configured minutes. Backgrounding the app pauses it.
 struct StudyTimerView: View {
+    @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
-    @State private var started = Date()
+    let task: Homework
+    @State private var sessionID = UUID()
+    @State private var startedAt = Date()
+    @State private var seconds = 0
     @State private var paused = false
-    @State private var accumulated: TimeInterval = 0
-    @State private var lastResume = Date()
+    @State private var breakAt = 0
+    @State private var showingBreak = false
+
+    private var finished: Bool { task.status == .done }
+    private var running: Bool { !paused && !finished && scenePhase == .active }
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let current = accumulated + (paused ? 0 : context.date.timeIntervalSince(lastResume))
-            HStack(spacing: 8) {
-                Image(systemName: paused ? "pause.circle" : "timer")
-                Text("学习 \(Int(current) / 60) 分 \(Int(current) % 60) 秒")
-                Button(paused ? "继续" : "休息一下") {
-                    let now = Date()
-                    if paused { lastResume = now; paused = false } else { accumulated += now.timeIntervalSince(lastResume); paused = true }
-                }.buttonStyle(.borderless)
-            }.font(.subheadline).foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            Image(systemName: running ? "timer" : "pause.circle")
+            Text("本次学习 \(seconds / 60) 分 \(seconds % 60) 秒")
+            if !finished {
+                Button(paused ? "继续学习" : "休息一下") { paused.toggle(); save() }.buttonStyle(.borderless)
+            }
         }
-        .onChange(of: scenePhase) { _, phase in if phase != .active && !paused { accumulated += Date().timeIntervalSince(lastResume); paused = true } }
-        .onAppear { started = Date(); lastResume = started }
+        .font(.subheadline).foregroundStyle(.secondary)
+        .task(id: running) {
+            guard running else { return }
+            var last = Date()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+                let now = Date()
+                seconds += max(0, Int(now.timeIntervalSince(last).rounded()))
+                last = now
+                if seconds % 30 == 0 { save() }
+                if seconds >= breakAt { paused = true; showingBreak = true; save() }
+            }
+        }
+        .onAppear {
+            if breakAt == 0 { breakAt = (model.family.child(task.childID)?.studyMinutes ?? 20) * 60 }
+        }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { save() } }
+        .onDisappear { save() }
+        .alert("伸个懒腰，休息一下吧", isPresented: $showingBreak) {
+            Button("好，休息一下") { breakAt = seconds + (model.family.child(task.childID)?.studyMinutes ?? 20) * 60 }
+        } message: {
+            Text("已经专心学习了一会儿，可以看看远处、喝口水。回来后点击“继续学习”。")
+        }
+    }
+
+    private func save() {
+        model.recordStudy(StudySession(id: sessionID, childID: task.childID, taskID: task.id, seconds: seconds, startedAt: startedAt))
     }
 }

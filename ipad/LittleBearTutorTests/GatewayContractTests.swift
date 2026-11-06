@@ -54,6 +54,7 @@ final class GatewayContractTests: XCTestCase {
 
     func testHTTPStatusMapping() {
         XCTAssertEqual(TutorError(status: 401), .unauthorized)
+        XCTAssertEqual(TutorError(status: 422), .imagesNotSupported)
         XCTAssertEqual(TutorError(status: 429), .rateLimited)
         XCTAssertEqual(TutorError(status: 503), .modelNotConfigured)
         XCTAssertEqual(TutorError(status: 502), .serviceUnavailable)

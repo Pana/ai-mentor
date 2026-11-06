@@ -11,6 +11,11 @@ import SwiftUI
             PhotoStore().deleteAll()
             CredentialStore().clear()
         }
+        // End-to-end tests preconfigure the gateway, since the simulator cannot pass the parent lock.
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-e2e-service"), i + 2 < args.count {
+            try? CredentialStore().save(url: args[i + 1], token: args[i + 2], consent: true)
+        }
         #endif
         _model = StateObject(wrappedValue: AppModel())
     }

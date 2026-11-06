@@ -39,12 +39,19 @@ practice: 返回{message,assessment:"UNKNOWN",exercise:{concept,prompt,answer,hi
 生成一道与要求知识点相关但不同的新题；答案必须是一个整数或单个中英文词，题目明确指定填写格式。
 不要生成朗读评分、主观问答或多答案题。提示逐级展开，第三条可完整解释。核算答案与解释一致。`;
 
+/** Model for this request: images go to the vision model when one is configured. Null means images are not supported. */
+export function modelFor(input, config) {
+  if (!input.image) return config.model;
+  if (config.visionModel) return config.visionModel;
+  return config.imagesSupported === false ? null : config.model;
+}
+
 export function providerBody(input, config) {
   const { image, history, ...task } = input;
   const content = [{ type: 'text', text: JSON.stringify(task) }];
   if (image) content.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}` } });
   return {
-    model: config.model, messages: [{ role: 'system', content: teaching },
+    model: modelFor(input, config), messages: [{ role: 'system', content: teaching },
       ...history.flatMap(turn => [{ role: 'user', content: turn.question }, { role: 'assistant', content: turn.reply }]),
       { role: 'user', content }], max_tokens: 1800,
     ...(config.jsonMode ? { response_format: { type: 'json_object' } } : {})
@@ -112,6 +119,7 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
       let parsed;
       try { parsed = JSON.parse(await readLimited(req, limit)); } catch (e) { if (e instanceof Problem) throw e; throw new Problem(400, 'invalid_json'); }
       const input = validateRequest(parsed);
+      if (!modelFor(input, config)) throw new Problem(422, 'images_not_supported');
       const upstream = await fetchImpl(config.apiUrl, { method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify(providerBody(input, config)) });
       if (!upstream.ok) throw new Problem(502, 'model_unavailable');

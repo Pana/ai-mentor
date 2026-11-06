@@ -179,10 +179,20 @@ struct TutorClient: Sendable {
     static func validate(url: String, token: String) throws -> URL {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let parsed = URL(string: trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed),
-              parsed.scheme == "https", parsed.host != nil, parsed.user == nil, parsed.query == nil, parsed.fragment == nil
+              parsed.scheme == "https" || isDebugLoopback(parsed), parsed.host != nil,
+              parsed.user == nil, parsed.query == nil, parsed.fragment == nil
         else { throw TutorError.invalidConfiguration }
         guard (24...512).contains(token.count), !token.contains(where: \.isWhitespace) else { throw TutorError.invalidConfiguration }
         return parsed
+    }
+
+    /// Debug builds may talk to a gateway on this Mac over plain HTTP (simulator only). Release requires HTTPS.
+    private static func isDebugLoopback(_ url: URL) -> Bool {
+        #if DEBUG
+        return url.scheme == "http" && ["localhost", "127.0.0.1"].contains(url.host ?? "")
+        #else
+        return false
+        #endif
     }
 
     func makeRequest(config: ServiceConfig, body: TutorRequest) throws -> URLRequest {
@@ -220,11 +230,12 @@ struct TutorClient: Sendable {
 }
 
 enum TutorError: LocalizedError, Equatable {
-    case notEnabled, invalidConfiguration, network, unauthorized, rateLimited, modelNotConfigured, serviceUnavailable, invalidReply
+    case notEnabled, invalidConfiguration, network, unauthorized, rateLimited, modelNotConfigured, imagesNotSupported, serviceUnavailable, invalidReply
 
     init(status: Int) {
         switch status {
         case 401, 403: self = .unauthorized
+        case 422: self = .imagesNotSupported
         case 429: self = .rateLimited
         case 503: self = .modelNotConfigured
         default: self = .serviceUnavailable
@@ -239,6 +250,7 @@ enum TutorError: LocalizedError, Equatable {
         case .unauthorized: "访问凭证无效，请家长检查服务设置。"
         case .rateLimited: "请求较多，请稍后再试。"
         case .modelNotConfigured: "模型服务尚未配置或暂不可用。"
+        case .imagesNotSupported: "当前辅导服务不能看图。请不勾选图片、用文字描述题目，或请家长配置支持图片的模型。"
         case .serviceUnavailable: "辅导服务暂时无法处理，请稍后重试。"
         case .invalidReply: "辅导回复格式无法识别，请重试或请家长检查服务设置。"
         }

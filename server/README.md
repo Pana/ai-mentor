@@ -17,16 +17,27 @@ npm start
 
 | 变量 | 含义 |
 | --- | --- |
-| `TUTOR_DEVICE_TOKEN` | 随机生成的设备访问凭证，至少 24 字符；填写到平板“家长空间 → 辅导服务设置” |
+| `TUTOR_DEVICE_TOKEN` | 随机生成的设备访问凭证，至少 24 字符；填写到 iPad“家长设置 → 辅导服务” |
 | `MODEL_API_URL` | 供应商的完整 HTTPS `/chat/completions` 地址，不会自动补路径 |
 | `MODEL_API_KEY` | 供应商密钥；不能填写到 App |
-| `MODEL_NAME` | 供应商实际可用的模型 ID；需要支持图片输入才能识题或看图检查 |
+| `MODEL_NAME` | 供应商实际可用的模型 ID，用于所有文字请求；如果它也能看图，带图请求同样用它 |
+| `MODEL_VISION_NAME` | 可选。同一供应商下支持图片输入的模型 ID，只用于带照片的请求（拍照识题、带图求助/检查） |
+| `MODEL_SUPPORTS_IMAGES` | 默认 `true`。`MODEL_NAME` 不能看图且未配置 `MODEL_VISION_NAME` 时设为 `false`：带图请求直接返回 422 `images_not_supported`，App 提示改用文字，不再请求上游 |
 | `MODEL_JSON_MODE` | 默认为 `true`，发送 `response_format: {type: "json_object"}`；供应商不支持时设 `false`，仍严格校验返回 JSON |
 | `HOST` / `PORT` | 默认 `127.0.0.1:8787`，不自动暴露公网 |
 
 供应商还需支持 `messages`、`max_tokens`、文本内容块与 `image_url` 内容块。模型可能对参数、图片或结构化输出有不同限制，接入时按下面的清单逐项验证。
 
-## 小米平板本机联调
+## 需要几种模型
+
+一个兼容 OpenAI 接口、支持图片输入的模型即可覆盖全部功能。只有纯文本模型时，文字求助、帮我检查（不带图）和生成练习可用，拍照识题与带图请求不可用（按上表设置 `MODEL_SUPPORTS_IMAGES=false`）。语音输入和朗读使用设备系统能力，不经过网关。
+
+## iPad 联调
+
+- **模拟器**：Debug 版允许 `http://127.0.0.1:8787`。`scripts/ipad-e2e.sh` 会启动网关和模拟模型（`scripts/mock-model.mjs`），在模拟器里跑一遍求助、检查和生成练习。
+- **真实 iPad**：App 只接受 HTTPS。需要把网关放在 HTTPS 后面，例如云服务器 + 反向代理（Caddy/Nginx 自动证书），或用隧道服务为本机网关提供 HTTPS 地址。家长设置里填写该 HTTPS 根地址和设备凭证。
+
+## 小米平板本机联调（Android，保留）
 
 开发机器连接平板并开启 USB 调试，先确认 `adb devices` 能列出并授权设备：
 
@@ -64,7 +75,7 @@ adb install -r ../app/build/outputs/apk/debug/app-debug.apk
 - `recognize`：必须提供 `image`（最多 2MB JPEG 的 Base64，不带 data URL 前缀），返回待确认的 `title`、`instructions` 和 `subject`；App 要求核对后才能保存。
 - `practice`：返回一道整数或单词答案的短题、3 级提示和讲解；由网关分配题目 ID，学科取自请求，App 把结果标为待核验。
 
-响应统一含 `message` 和 `assessment`。网关拒绝未知学科、年级、模式、超长字段及格式错误，不返回供应商错误原文。
+响应统一含 `message` 和 `assessment`。带图请求在仅文本配置下返回 422 `images_not_supported`。网关拒绝未知学科、年级、模式、超长字段及格式错误，不返回供应商错误原文。
 
 ## 数据与边界
 

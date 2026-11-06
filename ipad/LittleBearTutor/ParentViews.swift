@@ -9,15 +9,19 @@ struct SettingsView: View {
     @State private var showingAddChild = false
     @State private var confirmingClear = false
     @State private var deletingChild: Child?
+    @State private var editingChild: Child?
+    @State private var editingTask: Homework?
 
     var body: some View {
         Form {
             Section("孩子档案") {
                 ForEach(model.family.children) { child in
-                    HStack {
-                        Text("\(child.name) · \(child.grade) 年级")
-                        Spacer()
-                        Text(child.textbook).foregroundStyle(.secondary).lineLimit(1)
+                    Button { editingChild = child } label: {
+                        HStack {
+                            Text("\(child.name) · \(child.grade) 年级").foregroundStyle(.primary)
+                            Spacer()
+                            Text("\(child.textbook) · 每 \(child.studyMinutes) 分钟休息").foregroundStyle(.secondary).lineLimit(1)
+                        }
                     }
                     .swipeActions { Button("删除", role: .destructive) { deletingChild = child } }
                 }
@@ -28,6 +32,19 @@ struct SettingsView: View {
                 if review.isEmpty { Text("没有待检查作业").foregroundStyle(.secondary) }
                 ForEach(review) { task in ReviewRow(task: task, childName: model.family.child(task.childID)?.name ?? "") }
             }
+            Section {
+                let editable = model.family.tasks.filter { !$0.practice && $0.status != .done }
+                if editable.isEmpty { Text("没有可修改的作业").foregroundStyle(.secondary) }
+                ForEach(editable) { task in
+                    Button { editingTask = task } label: {
+                        HStack {
+                            Text("\(model.family.child(task.childID)?.name ?? "") · \(task.subject.label) · \(task.title)").foregroundStyle(.primary)
+                            Spacer()
+                            Text(task.status.rawValue).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: { Text("作业管理") } footer: { Text("修改题意后，作业会回到“待开始”，之前的小熊对话和检查意见会清除。") }
             Section {
                 TextField("HTTPS 服务地址", text: $url).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                 SecureField(model.serviceConfigured ? "设备访问凭证（已保存，修改时重新填写）" : "设备访问凭证", text: $token)
@@ -46,6 +63,8 @@ struct SettingsView: View {
         .navigationTitle("家长设置")
         .onAppear { url = model.serviceURL; consent = model.serviceConfigured }
         .sheet(isPresented: $showingAddChild) { AddChildView() }
+        .sheet(item: $editingChild) { EditChildView(child: $0) }
+        .sheet(item: $editingTask) { EditTaskView(task: $0) }
         .confirmationDialog("清空全部家庭数据？", isPresented: $confirmingClear, titleVisibility: .visible) {
             Button("清空", role: .destructive) { model.clearLocalFamily() }
             Button("取消", role: .cancel) {}
@@ -90,5 +109,70 @@ struct ReviewRow: View {
 
     private func review(passed: Bool) {
         _ = model.parentReview(task.id, passed: passed, note: note, concept: concept, independent: passed && independent)
+    }
+}
+
+struct EditChildView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppModel
+    let child: Child
+    @State private var name = ""
+    @State private var grade = 2
+    @State private var textbook = ""
+    @State private var minutes = 20
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("昵称", text: $name)
+                Picker("年级", selection: $grade) { Text("二年级").tag(2); Text("三年级").tag(3) }
+                TextField("教材版本（例如：人教版）", text: $textbook)
+                Stepper("每学习 \(minutes) 分钟提醒休息", value: $minutes, in: 5...60, step: 5)
+            }
+            .navigationTitle("编辑孩子档案")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        if model.editChild(child.id, name: name, grade: grade, textbook: textbook, studyMinutes: minutes) { dismiss() }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear {
+                name = child.name; grade = child.grade; minutes = child.studyMinutes
+                textbook = child.textbook == "教材版本待确认" ? "" : child.textbook
+            }
+        }
+    }
+}
+
+struct EditTaskView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppModel
+    let task: Homework
+    @State private var subject = Subject.math
+    @State private var title = ""
+    @State private var instructions = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("学科", selection: $subject) { ForEach(Subject.allCases) { Text($0.label).tag($0) } }
+                TextField("作业名称", text: $title)
+                TextField("页码、题号与完成要求", text: $instructions, axis: .vertical).lineLimit(2...6)
+            }
+            .navigationTitle("修改作业")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        if model.editTask(task.id, subject: subject, title: title, instructions: instructions) { dismiss() }
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear { subject = task.subject; title = task.title; instructions = task.instructions }
+        }
     }
 }
