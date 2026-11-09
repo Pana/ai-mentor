@@ -69,6 +69,24 @@ adb install -r ../app/build/outputs/apk/debug/app-debug.apk
 
 `POST /v1/tutor` 使用 `Authorization: Bearer <设备凭证>` 和 `Content-Type: application/json`。
 
+## 实时语音会话
+
+客户端还可以连接 `wss://<网关地址>/v1/voice`（调试版局域网地址可使用 `ws://`），通过同一个设备凭证建立实时会话。协议使用 WebSocket：
+
+```json
+{"type":"session.start","wake_word":"小熊","context":{"grade":2,"subject":"MATH","title":"加法练习"}}
+{"type":"input.text","text":"小熊，个位应该怎么算？"}
+```
+
+网关返回 `session.ready`、`input.transcript.final`、`assistant.text.delta`、`assistant.text.done` 和 `assistant.response.done` 等事件；`response.cancel` 可打断当前回答。配置好现有 `MODEL_API_*` 后，文字语音回合会复用辅导模型；`VOICE_MOCK=true` 可用于客户端协议和界面联调，返回“我听到了：……”；它不是模型服务。二进制帧和真正的实时 ASR/TTS 供应商适配层已预留在 `server/src/voice.mjs`，供应商密钥仍只放在服务端。
+
+没有 Mac/Xcode 时，可以先用 Node 22 验证网关会话：
+
+```sh
+VOICE_MOCK=true TUTOR_DEVICE_TOKEN="一串至少24字符的测试凭证" npm start
+node scripts/voice-demo.mjs http://127.0.0.1:8787 "一串至少24字符的测试凭证" "小熊，24加18怎么算？"
+```
+
 ```json
 {
   "mode": "help",

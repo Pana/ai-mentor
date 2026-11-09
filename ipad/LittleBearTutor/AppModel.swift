@@ -199,6 +199,16 @@ import SwiftUI
         }
     }
 
+    /// Stores a voice turn using the task revision captured when the voice
+    /// session started. A task edited while the model was speaking rejects the
+    /// late reply instead of attaching it to the new assignment.
+    func applyVoiceTurn(taskID: UUID, revision: Int, question: String, reply: String) {
+        guard let task = family.task(taskID) else { return }
+        let turn = TutorTurn(question: question, reply: reply, mode: "help", assessment: "UNKNOWN")
+        _ = mutate { try $0.applyTutor(taskID, revision: revision, turn: turn) }
+        if task.revision != revision { errorMessage = "作业已改变，这次语音回复没有写入历史。" }
+    }
+
     /// Reads homework requirements from a photo. The result is a draft the parent must confirm.
     func recognize(photo: String, subject: Subject, onResult: @escaping (TutorResponse) -> Void) {
         guard let child = selectedChild else { return }

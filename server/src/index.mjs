@@ -1,7 +1,8 @@
 import { createGateway } from './gateway.mjs';
 const server = createGateway({ token: process.env.TUTOR_DEVICE_TOKEN, apiUrl: process.env.MODEL_API_URL,
   apiKey: process.env.MODEL_API_KEY, model: process.env.MODEL_NAME, jsonMode: process.env.MODEL_JSON_MODE !== 'false',
-  visionModel: process.env.MODEL_VISION_NAME || '', imagesSupported: process.env.MODEL_SUPPORTS_IMAGES !== 'false' });
+  visionModel: process.env.MODEL_VISION_NAME || '', imagesSupported: process.env.MODEL_SUPPORTS_IMAGES !== 'false',
+  voice: { token: process.env.TUTOR_DEVICE_TOKEN, mock: process.env.VOICE_MOCK === 'true' } });
 const host = process.env.HOST || '127.0.0.1';
 const port = Number(process.env.PORT || 8787);
 server.listen(port, host, () => console.log(`LittleBear gateway listening on ${host}:${port}`));

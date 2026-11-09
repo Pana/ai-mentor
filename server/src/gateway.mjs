@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { attachVoice } from './voice.mjs';
 
 const subjects = ['MATH', 'CHINESE', 'ENGLISH'];
 const modes = ['help', 'check', 'recognize', 'practice'];
@@ -95,6 +96,22 @@ async function readLimited(stream, max) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+function voiceResponder(config, fetchImpl) {
+  if (!config.apiUrl || !config.apiKey || !config.model) return null;
+  return async ({ text, context, signal }) => {
+    const input = validateRequest({ mode: 'help', grade: context?.grade, subject: context?.subject,
+      textbook: context?.textbook, title: context?.title, instructions: context?.instructions,
+      answer: context?.answer, message: text, history: context?.history });
+    const upstream = await fetchImpl(config.apiUrl, { method: 'POST', redirect: 'error', signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
+      body: JSON.stringify(providerBody(input, config)) });
+    if (!upstream.ok) throw new Problem(502, 'model_unavailable');
+    const data = JSON.parse(await readLimited(upstream.body, 65_536));
+    const content = data.choices?.[0]?.message?.content;
+    return validateReply(content, input).message;
+  };
+}
+
 export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}) {
   if (typeof config.token !== 'string' || config.token.length < 24 || /\s/.test(config.token)) throw new Error('TUTOR_DEVICE_TOKEN must contain at least 24 non-space characters');
   if (config.apiUrl) {
@@ -139,5 +156,6 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
   });
   server.requestTimeout = 20_000;
   server.headersTimeout = 10_000;
-  return server;
+  return attachVoice(server, { ...config.voice, token: config.token,
+    respondText: config.voice?.respondText ?? voiceResponder(config, fetchImpl) });
 }

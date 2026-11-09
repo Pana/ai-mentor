@@ -8,7 +8,7 @@
 | `server/` | AI 网关（Node 22，兼容 OpenAI API） | 模拟上游测试通过；待接入真实供应商 |
 | `app/` | Android 客户端（Kotlin + Jetpack Compose） | 1.0.0-beta.1 候选，保留但暂停新功能 |
 
-AI 网关需要一个兼容 OpenAI 接口、**支持图片输入**的模型（拍照识题和带图求助需要看图；语音输入和朗读使用 iPad 系统能力，不需要云端模型）。真实模型供应商信息尚未提供，云端能力已用模拟服务验证；实时全双工语音、外接摄像头和完整学科专项流程仍未完成，详见状态文档。
+AI 网关需要一个兼容 OpenAI 接口、**支持图片输入**的模型（拍照识题和带图求助需要看图）。iPad 已加入前台实时语音会话切片：本机中文识别、唤醒词和 WebSocket 对话协议；当前语音网关仍使用 `VOICE_MOCK=true` 联调，真实实时语音供应商尚未接入。外接摄像头和完整学科专项流程仍未完成，详见状态文档。
 
 ## 文档
 
@@ -60,5 +60,7 @@ Windows 使用 `gradlew.bat`。项目通过 Wrapper 固定 Gradle 8.9，不需�
 ## 服务端与交付
 
 网关需要 Node.js 22+，无 npm 第三方依赖。在 `server/` 中执行 `npm test`；复制 `.env.example` 到 `.env` 并填写实际供应商配置后执行 `npm start`。模型密钥只保存在服务端。
+
+实时语音 Demo：启动网关后，在仓库根目录运行 `node scripts/voice-demo.mjs http://127.0.0.1:8787 <设备凭证> "小熊，帮我看看这道题"`。iPad/iPhone 使用同一个 `/v1/voice` 会话协议。
 
 完成构建后运行 `python3 scripts/package-release.py`，生成带版本号的 Debug APK、源码迁移包与校验值，输出到 `artifacts/`。迁移包包含 App、网关、测试、文档及 Wrapper，不包含密钥或本地数据。

@@ -7,6 +7,7 @@ struct StudyView: View {
     let taskID: UUID
     @State private var answer = ""
     @StateObject private var speaker = SpeechOutput()
+    @StateObject private var voice = VoiceConversation()
 
     var body: some View {
         Group {
@@ -20,7 +21,7 @@ struct StudyView: View {
             model.openTask(taskID)
             answer = model.family.task(taskID)?.draft ?? ""
         }
-        .onDisappear { model.cancelTutor(); speaker.stop() }
+        .onDisappear { model.cancelTutor(); speaker.stop(); voice.stop() }
     }
 
     @ViewBuilder private func content(_ task: Homework) -> some View {
@@ -34,6 +35,13 @@ struct StudyView: View {
                     Text(task.status.rawValue).font(.caption).foregroundStyle(task.status == .correction ? .orange : .green)
                 }
                 StudyTimerView(task: task).id(task.id)
+                VoiceConversationBar(conversation: voice, enabled: model.serviceConfigured) {
+                    guard let child = model.selectedChild else { return }
+                    voice.onTurn = { question, reply, revision in
+                        model.applyVoiceTurn(taskID: task.id, revision: revision, question: question, reply: reply)
+                    }
+                    voice.start(config: CredentialStore().load(), context: VoiceContext(child: child, task: task))
+                }
                 if let exercise = task.exercise {
                     ExercisePanel(task: task, exercise: exercise, answer: $answer, speaker: speaker)
                 } else {
@@ -41,7 +49,7 @@ struct StudyView: View {
                     TutorPanel(task: task, speaker: speaker)
                 }
                 Whiteboard(enabled: task.status != .done).id(task.id)
-                Text("相机仅在拍照时使用 · 语音输入可随时停止 · 离开页面会暂停学习计时").font(.footnote).foregroundStyle(.secondary)
+                Text("相机仅在拍照时使用 · 语音对话可随时停止 · 离开页面会暂停学习计时").font(.footnote).foregroundStyle(.secondary)
             }
             .padding(32)
         }
