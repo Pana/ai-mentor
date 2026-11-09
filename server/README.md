@@ -1,4 +1,59 @@
-# 小熊伴学辅导网关
+# 小熊伴学服务端
+
+包含两部分：
+
+- **一期作业管理 API**（`src/api.mjs`）：保存作业、提交、批改和奖励，家长 iPhone 与孩子 iPad 通过它同步。设计见 [一期技术方案](../docs/tech-plan-phase1.md)。
+- **辅导网关**（`src/gateway.mjs`）：下文“辅导网关”各节描述的无状态 `/v1/tutor` 与 `/v1/voice`。
+
+## 作业管理 API
+
+需要 Node.js 22.13 或更新版本（使用内置 `node:sqlite`，启动时可能打印实验特性警告）。数据库和上传的文件保存在 `DATA_DIR`（默认 `server/data/`，已在 `.gitignore` 中），请定期备份。
+
+| 变量 | 含义 |
+| --- | --- |
+| `PARENT_BOOTSTRAP_TOKEN` | 至少 24 字符的随机串。家长 iPhone 首次使用时用它换取自己的设备凭证；留空则作业 API 不可用 |
+| `DATA_DIR` | 数据库与文件目录，默认 `./data` |
+| `MODEL_*` | 与辅导网关共用，用于“AI 整理作业” |
+
+### 设备与鉴权
+
+1. 家长 iPhone：`POST /v1/devices/bootstrap {token, deviceId, name}`，`token` 为 `PARENT_BOOTSTRAP_TOKEN`，返回家长设备凭证。第一次调用时自动创建家庭。
+2. 家长生成配对码：`POST /v1/devices/pairing-codes`，返回 6 位数字，10 分钟内有效，只能用一次。
+3. 孩子 iPad：`POST /v1/devices/pair {code, deviceId, name}`，返回孩子设备凭证。
+4. 之后所有请求带 `Authorization: Bearer <设备凭证>`。服务端只保存凭证的哈希；家长可以 `DELETE /v1/devices/:id` 撤销设备。
+
+未登录的 bootstrap / pair 每分钟最多 10 次，每台设备每分钟最多 300 次请求。
+
+### 接口
+
+| 方法与路径 | 角色 | 说明 |
+| --- | --- | --- |
+| `GET /v1/me` | 全部 | 当前设备、家庭、孩子列表、奖励规则、家庭时区的“今天” |
+| `GET /v1/children`、`PUT/DELETE /v1/children/:id` | 读：全部；写：家长 | 孩子档案；删除会一并删除作业、每天坚持、奖励和文件 |
+| `POST /v1/homework/parse` | 家长 | `{text, date?}` → `{items:[{subject, content, mode, dueText, dueDate, parentTodo}], message}`，只整理不保存 |
+| `POST /v1/homework` | 家长 | `{items:[…]}` 批量新建，按 `id` 幂等 |
+| `GET /v1/homework?childId&from&to` | 全部 | 按日期查询（最多 62 天），含每次提交与批改；范围包含今天时先生成今天的每天坚持 |
+| `GET/PATCH/DELETE /v1/homework/:id` | 读：全部；写：家长 | 单项作业；删除会删掉相关文件 |
+| `GET /v1/routines?childId`、`PUT/DELETE /v1/routines/:id` | 读：全部；写：家长 | 每天坚持，每个孩子启用中的最多 5 项（超出返回 409 `routine_limit`） |
+| `PUT /v1/files/:id`、`GET /v1/files/:id` | 全部 | 原始字节上传下载：`image/jpeg` ≤2MB、`image/png` ≤4MB（批注图）、`audio/mp4` ≤10MB、`application/octet-stream` ≤1MB（批注笔迹） |
+| `POST /v1/homework/:id/submissions` | 全部 | `{id, fileIds, submittedAt, durationSeconds?}`：线下作业需要照片，录音作业需要一个音频，计时作业需要计满时长 |
+| `POST /v1/submissions/:id/review` | 家长 | `{grade: EXCELLENT/GOOD/FAIR/TRY_AGAIN, comment, requireCorrection, annotationFileIds}` |
+| `GET/PUT /v1/reward-rules` | 读：全部；写：家长 | 奖励规则，含每天完成时间 `finishTime` |
+| `GET /v1/rewards?childId` | 全部 | 余额、今天获得和使用的分钟数、最近 50 条明细 |
+| `POST /v1/rewards/sessions` | 全部 | `{id, childId, minutes}` 使用奖励时间；按时段、当天作业是否交完、每日上限、余额检查 |
+| `GET /v1/changes?since=<seq>` | 全部 | 增量同步：返回需要重新拉取的实体和 `next` |
+
+作业状态：`NOT_STARTED` → `SUBMITTED` → `REVIEWED` 或 `NEEDS_CORRECTION`（订正后再提交）。计时类作业提交即 `REVIEWED`。
+
+奖励由服务端记账，同一事件只入账一次：按时提交（第一次提交、在 `finishTime` 前，按设备时间判断）、评分（订正后评分提高时补差额）、每天坚持打卡、连续 7 天。
+
+### 数据边界
+
+- 作业文字、照片、录音、批改和奖励记录保存在服务端，用于两台设备同步。
+- 只有“AI 整理作业”会把家长粘贴的文字发给模型供应商；孩子提交的内容不发给模型。
+- 服务端不记录请求体、凭证或文件内容；错误日志只记录错误类型。
+
+## 辅导网关
 
 面向单个试用家庭的无状态网关。接收当前任务的文字、可选 JPEG 图片及最近 8 轮对话，转发给配置的兼容 Chat Completions 服务。供应商密钥仅存在于服务端环境变量。
 

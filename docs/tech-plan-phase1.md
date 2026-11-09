@@ -2,7 +2,7 @@
 
 日期：2026-11-09
 对应需求：[一期需求：作业管理](./prd-phase1.md)
-状态：方案草稿，尚未实现。
+状态：M1（服务端）已实现，见 `server/src/api.mjs`；M2 起尚未开始。
 
 ## 1. 总体结构
 
@@ -46,14 +46,14 @@ iPad（孩子）────┘    （数据 + 文件）    └── APNs（推
 
 | 表 | 主要字段 |
 | --- | --- |
-| `families` | id, name, finishTime（默认 19:30）, timezone（Asia/Shanghai） |
+| `families` | id, name, timezone（Asia/Shanghai） |
 | `children` | id, familyId, name, grade, avatar |
 | `devices` | id, familyId, role, childId?, tokenHash, apnsToken?, lastSeenAt, revokedAt? |
-| `homework` | id, childId, subject（CHINESE / MATH / ENGLISH / OTHER）, date（显示在哪一天）, dueAt?（老师的截止时间）, content, rawText?, mode（OFFLINE / ONLINE）, onlineKind?（TIMER / RECORDING）, durationMinutes?, parentTodo?, status, source（PASTE / MANUAL / ROUTINE）, routineId?, attachmentIds[] |
+| `homework` | id, childId, subject（CHINESE / MATH / ENGLISH / OTHER）, date（显示在哪一天）, dueDate?（老师的截止日期）, content, rawText?, mode（OFFLINE / ONLINE）, onlineKind?（TIMER / RECORDING）, durationMinutes?, parentTodo?, status, source（PASTE / MANUAL / ROUTINE）, routineId?, attachmentIds[] |
 | `routines` | id, childId, title, subject, mode, onlineKind?, durationMinutes?, quantity?, weekdays[], active, sortOrder |
 | `submissions` | id, homeworkId, attempt（第几次提交）, fileIds[], submittedAt（设备时间）, receivedAt（服务端时间）, onTime |
 | `reviews` | id, submissionId, grade（EXCELLENT / GOOD / FAIR / TRY_AGAIN）, comment, requireCorrection, annotations（每页一层）, reviewedAt |
-| `reward_rules` | familyId, onTime, gradeExcellent, gradeGood, gradeFair, checkin, streak7, dailyCap, windowStart, windowEnd, requireAllSubmitted |
+| `reward_rules` | familyId, finishTime（每天完成时间，默认 19:30）, onTime, gradeExcellent, gradeGood, gradeFair, checkin, streak7, dailyCap, windowStart, windowEnd, requireAllSubmitted |
 | `reward_ledger` | id, childId, minutes（正为获得，负为使用）, reason, refId, createdAt；`(reason, refId)` 唯一，保证不重复入账 |
 | `files` | id, familyId, kind（IMAGE / AUDIO / ANNOTATION）, mime, bytes, sha256, createdAt |
 | `changes` | seq（自增）, familyId, entity, entityId, op（UPSERT / DELETE） |
@@ -125,7 +125,7 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
       "subject": "MATH",
       "content": "口算本第 12 页，第 1–20 题，竖式写在本子上。",
       "dueText": "明早交",
-      "dueAt": "2026-11-10T08:00:00+08:00",
+      "dueDate": "2026-11-10",
       "mode": "OFFLINE",
       "parentTodo": null
     }
