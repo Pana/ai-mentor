@@ -248,7 +248,9 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
 
   route('GET', '/v1/me', ANY, ({ familyId, device }) => {
     const f = family(familyId);
-    return { device: { id: device.id, role: device.role, name: device.name },
+    // `cursor` is the latest change seq: a client doing a full refresh starts its change feed here.
+    const cursor = q('SELECT COALESCE(MAX(seq), 0) AS n FROM changes WHERE family_id = ?').get(familyId).n;
+    return { cursor, device: { id: device.id, role: device.role, name: device.name },
       family: { id: f.id, name: f.name, timezone: f.timezone, today: today(familyId).date },
       children: q('SELECT * FROM children WHERE family_id = ? ORDER BY created_at').all(familyId).map(serializeChild),
       rules: rulesFor(familyId) };

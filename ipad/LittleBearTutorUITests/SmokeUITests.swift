@@ -29,7 +29,7 @@ final class SmokeUITests: XCTestCase {
 
     func testDemoPracticeAndHomeworkFlow() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing-reset"]
+        app.launchArguments = ["-legacy-ui", "-ui-testing-reset"]
         app.launch()
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
 
@@ -66,7 +66,7 @@ final class SmokeUITests: XCTestCase {
 
     func testAddHomeworkWithCroppedPhoto() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing-reset", "-ui-testing-sample-photo"]
+        app.launchArguments = ["-legacy-ui", "-ui-testing-reset", "-ui-testing-sample-photo"]
         app.launch()
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
         app.buttons["先体验示例家庭"].tap()

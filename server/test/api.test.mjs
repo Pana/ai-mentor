@@ -222,7 +222,8 @@ test('files: type checks, downloads, and deletion with their homework', async t 
 
 test('change feed lists what to re-fetch, in order', async t => {
   const { call, child, addHomework, submit } = await setup(t);
-  const start = (await call('GET', '/v1/changes?since=0', { token: child })).body.next;
+  const start = (await call('GET', '/v1/me', { token: child })).body.cursor;
+  assert.equal(start, (await call('GET', '/v1/changes?since=0', { token: child })).body.next, 'me.cursor is the latest change');
   const hw = await addHomework();
   await submit(hw);
   const feed = (await call('GET', `/v1/changes?since=${start}`, { token: child })).body;
