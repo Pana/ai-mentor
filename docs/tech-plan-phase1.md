@@ -189,9 +189,7 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 
 使用 FamilyControls、ManagedSettings、DeviceActivity 三个框架，只在孩子的 iPad 上运行：
 
-1. **授权**：`AuthorizationCenter.requestAuthorization(for:)`。
-   - 如果 iPad 登录的是孩子的 Apple ID 并在家庭共享里，用 `.child`，由家长批准，孩子无法自行关闭。
-   - 如果 iPad 登录的是家长的 Apple ID，只能用 `.individual`。这种方式孩子可以在系统设置里关掉，需要家长另外设置“屏幕使用时间”密码。
+1. **授权**：孩子的 iPad 登录的是孩子自己的 Apple ID（2026-11-09 确认），使用 `AuthorizationCenter.requestAuthorization(for: .child)`。授权时需要家长在 iPad 上用家长的 Apple ID 批准；之后孩子不能自行撤销授权，也不能自行删除 App。前提是孩子的账号在家长的家庭共享里，首次授权前要确认这一点。
 2. **选择 App**：在 iPad 上家长验证后，用 `FamilyActivityPicker` 选择允许的动画和游戏 App。选择结果是设备本地的不透明 token，不能在 iPhone 上选好再传过来，所以这一步留在 iPad 上做。
 3. **平时锁住**：`ManagedSettingsStore` 对选中的 App 设置 shield。
 4. **使用奖励时间**：孩子选 5 / 10 / 15 分钟 → 调用 `POST /rewards/sessions` 由服务端检查规则并扣减 → 本机解除 shield，并用 `DeviceActivityCenter` 启动一个对应时长的监控。
@@ -218,7 +216,7 @@ M1 和 M2 是其他阶段的基础；M3、M4 可以并行；M5 依赖孩子端�
 | --- | --- | --- |
 | 没有付费 Apple Developer 账号 | 无法推送、无法 TestFlight，屏幕使用时间无法正式分发 | 先用个人账号做开发与真机调试；推送前用前台轮询顶替 |
 | Family Controls 分发权限审批 | 审批时间不确定 | 开发开始时就提交申请 |
-| iPad 用家长的 Apple ID | 孩子能关闭屏幕使用时间授权 | 设置屏幕使用时间密码；或给孩子建 Apple ID 加入家庭共享 |
+| 孩子的 Apple ID 不在家庭共享里 | `.child` 授权会失败 | 首次授权前确认孩子账号已加入家长的家庭共享 |
 | AI 整理改动了作业量 | 孩子少做或多做作业 | 提示词明确保留页码和题号；家长逐项核对后才保存；保留原文对照 |
 | 服务端开始保存孩子的作业照片和录音 | 隐私要求提高 | 仅 HTTPS；文件按家庭隔离；日志不含内容；提供删除；明确保留期限 |
 | `node:sqlite` 仍标记为实验特性 | API 可能变动 | 固定 Node 版本；数据访问集中在一个模块里，必要时可替换 |
