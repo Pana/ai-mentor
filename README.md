@@ -10,11 +10,15 @@
 
 AI 网关需要一个兼容 OpenAI 接口、**支持图片输入**的模型（拍照识题和带图求助需要看图）。iPad 已加入前台实时语音会话切片：本机中文识别、唤醒词和 WebSocket 对话协议；当前语音网关仍使用 `VOICE_MOCK=true` 联调，真实实时语音供应商尚未接入。外接摄像头和完整学科专项流程仍未完成，详见状态文档。
 
+> **2026-11-09 方向调整**：一期聚焦**作业管理**。家长用 iPhone 录入和批改，孩子用 iPad 查看、完成和提交作业，并用完成情况换取奖励时间；两端数据通过服务端同步。见 [一期需求](docs/prd-phase1.md) 和 [一期技术方案](docs/tech-plan-phase1.md)。下表和下文描述的是调整前的实现状态。
+
 ## 文档
 
+- [一期需求：作业管理](docs/prd-phase1.md)（当前）
+- [一期技术方案](docs/tech-plan-phase1.md)（当前）
 - [iPad 客户端开发计划](docs/ipad-plan.md)
 - [iPad 实机验收清单](docs/ipad-validation.md)
-- [需求与产品边界](docs/prd-v0.1.md)
+- [需求与产品边界 v0.3](docs/prd-v0.1.md)（平台与数据边界已被一期需求取代）
 - [家长端与孩子端流程](docs/user-flows-v0.1.md)
 - [首版候选实现与验证状态](docs/first-version-status.md)
 - [原型阶段记录](docs/prototype-status.md)
