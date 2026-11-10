@@ -27,7 +27,7 @@ scripts/lan-gateway.sh             # 同一 Wi-Fi 的 iPad：http://<Mac 的 IP>
 | 笔顺数据 | [hanzi-writer-data](https://github.com/chanind/hanzi-writer-data) 2.0.1（来自 Make Me a Hanzi，约 9000 字）。服务端第一次用到某个字时从 jsDelivr 下载，失败再试 unpkg，存到 `DATA_DIR/hanzi-strokes/`，以后从本地读 |
 | 书写动画、描写判定 | [Hanzi Writer](https://hanziwriter.org) 3.7.3（MIT），在 `vendor/` 里 |
 | 理解孩子说的话，以及拼音、部首、意思、组词 | `POST /v1/hanzi/lookup`，调用服务端配置的模型（见 `server/src/hanzi.mjs`）。笔顺和笔画数只用笔顺数据，不用模型的回答 |
-| 语音输入 | 已配置火山引擎 ASR 时，浏览器录制 16 kHz 单声道 PCM 后由服务端调用豆包流式语音识别模型 2.0 的一句话模式；未配置或不可用时回退到浏览器 Web Speech API（`zh-CN`） |
+| 语音输入 | 浏览器录制 16 kHz 单声道 PCM，由服务端调用豆包流式语音识别模型 2.0 的一句话模式；未配置或不可用时明确提示，不调用浏览器 Web Speech API |
 | 朗读 | 浏览器的 `speechSynthesis`（中文语音） |
 
 功能：整字连续书写、“下一笔”逐笔演示、三档速度、部首笔画变色、笔顺分解图（点一格会在大格子里亮出那一笔）、“我来写”（用手指或笔按笔顺描，写错会提示）、最近查过的字（存在本机浏览器）。
