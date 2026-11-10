@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | `ipad/` | iOS 客户端（SwiftUI，iOS/iPadOS 17+）：iPhone 上是家长端，iPad 上是孩子端 | 一期作业管理已实现；模拟器双端联调通过（`scripts/phase1-e2e.sh`）；待真机验收 |
 | `server/` | 作业管理 API + AI 网关（Node 22，兼容 OpenAI API） | 一期接口已实现并测试；AI 整理作业已用 DeepSeek 实测 |
+| `web/hanzi/` | 小熊写字：语音查字的汉字笔顺字典（网页版，服务端 `/hanzi/` 提供） | 支线任务；网页版可用，待集成到 iPad 端 |
 | `app/` | Android 客户端（Kotlin + Jetpack Compose） | 1.0.0-beta.1 候选，保留但暂停新功能 |
 
 AI 网关需要一个兼容 OpenAI 接口、**支持图片输入**的模型（拍照识题和带图求助需要看图）。iPad 已加入前台实时语音会话切片：本机中文识别、唤醒词和 WebSocket 对话协议；当前语音网关仍使用 `VOICE_MOCK=true` 联调，真实实时语音供应商尚未接入。外接摄像头和完整学科专项流程仍未完成，详见状态文档。

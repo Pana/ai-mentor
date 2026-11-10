@@ -53,6 +53,18 @@
 - 只有“AI 整理作业”会把家长粘贴的文字发给模型供应商；孩子提交的内容不发给模型。
 - 服务端不记录请求体、凭证或文件内容；错误日志只记录错误类型。
 
+## 汉字笔顺字典（小熊写字）
+
+网页在 `/hanzi/`，源码在 `web/hanzi/`，说明见 [web/hanzi/README.md](../web/hanzi/README.md)。
+
+| 方法与路径 | 鉴权 | 说明 |
+| --- | --- | --- |
+| `GET /hanzi/` | 无 | 网页 |
+| `GET /hanzi/strokes/<汉字>.json` | 无 | 笔顺数据 `{strokes, medians, radStrokes}`；第一次请求时从 jsDelivr/unpkg 下载 hanzi-writer-data 并存到 `DATA_DIR/hanzi-strokes/`。没有这个字返回 404 `no_stroke_data` |
+| `POST /v1/hanzi/lookup` | 同源打开 `/hanzi/` 自动建立会话；跨地址访问可用 `TUTOR_DEVICE_TOKEN` | `{text}`（≤60 字，语音识别出的原话）→ `{word, chars:[{char, pinyin, radical, radicalName, radicalMeaning, structure, meaning, words, tip}], alternatives:[{char, pinyin, hint}], message}`。每分钟最多 30 次，相同问题的回答在内存里缓存 |
+
+`HANZI_MODEL_NAME` 可单独指定字典用的模型，默认用 `MODEL_NAME`。只有孩子说的这句话会发给模型供应商。
+
 ## 辅导网关
 
 面向单个试用家庭的无状态网关。接收当前任务的文字、可选 JPEG 图片及最近 8 轮对话，转发给配置的兼容 Chat Completions 服务。供应商密钥仅存在于服务端环境变量。
