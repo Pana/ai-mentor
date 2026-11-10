@@ -74,44 +74,107 @@ function speak(text) {
 
 // ---------- 语音输入 ----------
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const AudioContextImpl = window.AudioContext || window.webkitAudioContext;
 let recognizer = null;
+let capture = null;
 const hint = $('#ask-hint');
 function setHint(text, error = false) { hint.textContent = text; hint.classList.toggle('error', error); }
 
-function startListening() {
-  if (recognizer) { recognizer.stop(); return; }
+function pcm16(chunks, inputRate, outputRate = 16_000) {
+  const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const samples = new Float32Array(length);
+  let offset = 0;
+  for (const chunk of chunks) { samples.set(chunk, offset); offset += chunk.length; }
+  const ratio = inputRate / outputRate;
+  const output = new Int16Array(Math.max(0, Math.floor(samples.length / ratio)));
+  for (let i = 0; i < output.length; i++) {
+    const sample = Math.max(-1, Math.min(1, samples[Math.min(samples.length - 1, Math.floor(i * ratio))]));
+    output[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+  return output.buffer;
+}
+
+function releaseCapture(active) {
+  active.processor.disconnect(); active.source.disconnect();
+  active.stream.getTracks().forEach(track => track.stop());
+  active.context.close().catch(() => {});
+}
+
+async function stopServerListening() {
+  const active = capture;
+  if (!active) return;
+  capture = null; recognizer = null;
+  $('#mic').classList.remove('listening');
+  active.processor.onaudioprocess = null;
+  const sampleRate = active.context.sampleRate;
+  releaseCapture(active);
+  const body = pcm16(active.chunks, sampleRate);
+  if (!body.byteLength) { setHint('没听到声音，再点一下话筒试试。', true); return; }
+  setHint('正在确认你说的内容……');
+  const fallback = () => {
+    if (!Recognition) return false;
+    setHint('火山语音暂时不可用，切换浏览器语音识别。'); startBrowserListening(); return true;
+  };
+  let status = 0;
+  try {
+    const response = await fetch('/v1/hanzi/asr', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/octet-stream', ...(token() ? { Authorization: `Bearer ${token()}` } : {}) }, body });
+    status = response.status;
+    if (!response.ok) {
+      if (response.status !== 400 && response.status !== 413 && fallback()) return;
+      throw new Error(`asr_${response.status}`);
+    }
+    const result = await response.json();
+    if (result.text?.trim()) search(result.text);
+    else setHint('没听清楚，再试一次吧。', true);
+  } catch {
+    if (status !== 400 && status !== 413 && fallback()) return;
+    setHint('火山语音识别暂时没回应，可以直接打字。', true);
+  }
+}
+
+async function startServerListening() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  const context = new AudioContextImpl();
+  await context.resume();
+  const source = context.createMediaStreamSource(stream);
+  const processor = context.createScriptProcessor(4096, 1, 1);
+  const silent = context.createGain(); silent.gain.value = 0;
+  const chunks = [];
+  processor.onaudioprocess = event => chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+  source.connect(processor); processor.connect(silent); silent.connect(context.destination);
+  capture = { stream, context, source, processor, chunks };
+  recognizer = { stop: stopServerListening };
+  $('#mic').classList.add('listening'); setHint('我在听，请说“春天的春”这样的说法……');
+}
+
+function startBrowserListening() {
   if (!Recognition) {
     setHint('这个浏览器不能直接听。点下面的输入框，用键盘上的 🎤 说话也可以。', true);
-    $('#query').focus();
-    return;
+    $('#query').focus(); return;
   }
   const rec = new Recognition();
   rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
   let heard = '', failed = false;
   rec.onstart = () => { $('#mic').classList.add('listening'); setHint('我在听，请说……'); };
-  rec.onresult = event => {
-    heard = Array.from(event.results, r => r[0].transcript).join('');
-    $('#query').value = heard;
-  };
+  rec.onresult = event => { heard = Array.from(event.results, r => r[0].transcript).join(''); $('#query').value = heard; };
   rec.onerror = event => {
     failed = true;
-    const messages = {
-      'not-allowed': '需要允许使用麦克风。如果是用局域网地址打开的，浏览器可能不让用，可以点输入框用键盘上的 🎤。',
-      'service-not-allowed': '语音识别没有打开。可以点输入框，用键盘上的 🎤 说话。',
-      network: '语音识别服务连不上（Chrome 需要连 Google）。请用 Safari，或点输入框用键盘上的 🎤。',
-      'no-speech': '没听到声音，再点一下话筒试试。',
-      'audio-capture': '没有找到麦克风。'
-    };
+    const messages = { 'not-allowed': '需要允许使用麦克风，可以点输入框用键盘上的 🎤。', 'service-not-allowed': '系统语音识别没有打开，可以点输入框用键盘上的 🎤。', network: '浏览器语音服务连不上，可以点输入框用键盘上的 🎤。', 'no-speech': '没听到声音，再点一下话筒试试。', 'audio-capture': '没有找到麦克风。' };
     if (event.error !== 'aborted') setHint(messages[event.error] || '没听清楚，再试一次吧。', true);
   };
-  rec.onend = () => {
-    recognizer = null;
-    $('#mic').classList.remove('listening');
-    if (heard.trim()) search(heard);
-    else if (!failed) setHint('没听到声音，再点一下话筒试试。', true);
-  };
+  rec.onend = () => { recognizer = null; $('#mic').classList.remove('listening'); if (heard.trim()) search(heard); else if (!failed) setHint('没听到声音，再点一下话筒试试。', true); };
   recognizer = rec;
   try { rec.start(); } catch { recognizer = null; setHint('语音识别没能启动，可以直接打字。', true); }
+}
+
+async function startListening() {
+  if (recognizer) { recognizer.stop(); return; }
+  if (navigator.mediaDevices?.getUserMedia && AudioContextImpl) {
+    try { await startServerListening(); return; }
+    catch { capture && releaseCapture(capture); capture = null; if (Recognition) startBrowserListening(); else setHint('无法启动麦克风，请检查权限。', true); return; }
+  }
+  startBrowserListening();
 }
 
 // ---------- 查询 ----------

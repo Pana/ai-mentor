@@ -97,12 +97,22 @@ async function readJson(stream, max) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
+async function readBytes(stream, max) {
+  const chunks = []; let size = 0;
+  for await (const chunk of stream) {
+    size += chunk.length;
+    if (size > max) throw Object.assign(new Error('too_large'), { status: 413 });
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 /**
  * Returns handle(req, res) → true when the request belonged to the dictionary.
  * POST /v1/hanzi/lookup accepts the tutor device token or the HttpOnly session issued to the same-origin page;
  * the page and stroke data are public.
  */
-export function createHanzi({ token, model = {}, dataDir, webDir = defaultWebDir, fetchImpl = fetch, now = Date.now }) {
+export function createHanzi({ token, model = {}, asr = null, dataDir, webDir = defaultWebDir, fetchImpl = fetch, now = Date.now }) {
   const strokeDir = join(dataDir, 'hanzi-strokes');
   mkdirSync(strokeDir, { recursive: true });
   const pending = new Map();
@@ -202,6 +212,26 @@ export function createHanzi({ token, model = {}, dataDir, webDir = defaultWebDir
     finally { active--; }
   }
 
+  async function transcribe(req, res) {
+    const received = Buffer.from(req.headers.authorization ?? '');
+    const expected = Buffer.from(`Bearer ${token}`);
+    const bearerOk = received.length === expected.length && timingSafeEqual(received, expected);
+    if (!bearerOk && !sessionFor(req)) return send(res, 401, { error: 'unauthorized' });
+    if (!asr) return send(res, 503, { error: 'asr_not_configured' });
+    if (!req.headers['content-type']?.startsWith('application/octet-stream')) return send(res, 415, { error: 'pcm_required' });
+    try {
+      const pcm = await readBytes(req, 1_600_000);
+      const controller = new AbortController();
+      res.on('close', () => { if (!res.writableFinished) controller.abort(); });
+      const result = await asr.transcribe(pcm, { signal: controller.signal });
+      return send(res, 200, { text: short(result.text, 2_000) });
+    } catch (error) {
+      if (error?.status === 413) return send(res, 413, { error: 'audio_too_large' });
+      if (error?.message === 'audio_too_short') return send(res, 400, { error: 'audio_too_short' });
+      return send(res, 502, { error: 'asr_unavailable' });
+    }
+  }
+
   async function page(req, res, path) {
     let relative;
     try { relative = normalize(decodeURIComponent(path.slice('/hanzi/'.length) || 'index.html')); } catch { return send(res, 404, { error: 'not_found' }); }
@@ -218,6 +248,11 @@ export function createHanzi({ token, model = {}, dataDir, webDir = defaultWebDir
 
   return async function handle(req, res) {
     const path = req.url.split('?')[0];
+    if (path === '/v1/hanzi/asr') {
+      if (req.method !== 'POST') send(res, 405, { error: 'method_not_allowed' });
+      else await transcribe(req, res);
+      return true;
+    }
     if (path === '/v1/hanzi/lookup') {
       if (req.method !== 'POST') send(res, 405, { error: 'method_not_allowed' });
       else await lookup(req, res);

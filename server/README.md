@@ -61,15 +61,18 @@
 | --- | --- | --- |
 | `GET /hanzi/` | 无 | 网页 |
 | `GET /hanzi/strokes/<汉字>.json` | 无 | 笔顺数据 `{strokes, medians, radStrokes}`；第一次请求时从 jsDelivr/unpkg 下载 hanzi-writer-data 并存到 `DATA_DIR/hanzi-strokes/`。没有这个字返回 404 `no_stroke_data` |
+| `POST /v1/hanzi/asr` | 同源会话或 `TUTOR_DEVICE_TOKEN` | 16 kHz、单声道、16-bit PCM 短句 → `{text}`；配置 `VOLC_ASR_API_KEY` 后调用火山引擎豆包流式语音识别模型 2.0 的一句话模式 |
 | `POST /v1/hanzi/lookup` | 同源打开 `/hanzi/` 自动建立会话；跨地址访问可用 `TUTOR_DEVICE_TOKEN` | `{text}`（≤60 字，语音识别出的原话）→ `{word, chars:[{char, pinyin, radical, radicalName, radicalMeaning, structure, meaning, words, tip}], alternatives:[{char, pinyin, hint}], message}`。每分钟最多 30 次，相同问题的回答在内存里缓存 |
 
 `HANZI_MODEL_NAME` 可单独指定字典用的模型，默认用 `MODEL_NAME`。只有孩子说的这句话会发给模型供应商。
+
+汉字语音识别配置：`VOLC_ASR_API_KEY` 使用火山引擎新版控制台 API Key；`VOLC_ASR_RESOURCE_ID` 推荐从 `volc.seedasr.sauc.duration` 开始。网页会把短句录成 PCM 发给服务端，调用流式语音识别模型 2.0 的 `bigmodel_nostream` 一句话模式并等待最终结果；未配置 ASR 或服务端暂不可用时使用浏览器自带的语音识别作为备用。
 
 ## 辅导网关
 
 面向单个试用家庭的无状态网关。接收当前任务的文字、可选 JPEG 图片及最近 8 轮对话，转发给配置的兼容 Chat Completions 服务。供应商密钥仅存在于服务端环境变量。
 
-需要 Node.js 22 或更新版本，无第三方 npm 依赖。当前测试使用模拟上游，不代表真实模型的质量或供应商兼容性已经验收。
+需要 Node.js 22 或更新版本；实时 ASR 使用 `ws` 连接火山引擎。当前测试使用模拟上游，不代表真实模型的质量或供应商兼容性已经验收。
 
 ## 配置与启动
 
@@ -88,6 +91,9 @@ npm start
 | `MODEL_API_URL` | 供应商的完整 HTTPS `/chat/completions` 地址，不会自动补路径 |
 | `MODEL_API_KEY` | 供应商密钥；不能填写到 App |
 | `MODEL_NAME` | 供应商实际可用的模型 ID，用于所有文字请求；如果它也能看图，带图请求同样用它 |
+| `VOLC_ASR_API_KEY` | 火山引擎豆包语音 API Key，仅服务端使用 |
+| `VOLC_ASR_RESOURCE_ID` | 火山引擎 ASR 资源 ID，默认 `volc.seedasr.sauc.duration` |
+| `VOLC_ASR_URL` | 火山引擎 ASR WebSocket 地址，默认 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream` |
 | `MODEL_VISION_NAME` | 可选。同一供应商下支持图片输入的模型 ID，只用于带照片的请求（拍照识题、带图求助/检查） |
 | `MODEL_SUPPORTS_IMAGES` | 默认 `true`。`MODEL_NAME` 不能看图且未配置 `MODEL_VISION_NAME` 时设为 `false`：带图请求直接返回 422 `images_not_supported`，App 提示改用文字，不再请求上游 |
 | `MODEL_JSON_MODE` | 默认为 `true`，发送 `response_format: {type: "json_object"}`；供应商不支持时设 `false`，仍严格校验返回 JSON |
