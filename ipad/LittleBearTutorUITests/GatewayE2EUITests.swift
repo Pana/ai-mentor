@@ -27,7 +27,7 @@ final class GatewayE2EUITests: XCTestCase {
             throw XCTSkip("Run scripts/ipad-e2e.sh to provide a local gateway.")
         }
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing-reset", "-ui-testing-sample-photo", "-e2e-service", url, token]
+        app.launchArguments = ["-legacy-ui", "-ui-testing-reset", "-ui-testing-sample-photo", "-e2e-service", url, token]
         app.launch()
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
         app.buttons["先体验示例家庭"].tap()

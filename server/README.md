@@ -1,8 +1,78 @@
-# 小熊伴学辅导网关
+# 小熊伴学服务端
+
+包含两部分：
+
+- **一期作业管理 API**（`src/api.mjs`）：保存作业、提交、批改和奖励，家长 iPhone 与孩子 iPad 通过它同步。设计见 [一期技术方案](../docs/tech-plan-phase1.md)。
+- **辅导网关**（`src/gateway.mjs`）：下文“辅导网关”各节描述的无状态 `/v1/tutor` 与 `/v1/voice`。
+
+## 作业管理 API
+
+需要 Node.js 22.13 或更新版本（使用内置 `node:sqlite`，启动时可能打印实验特性警告）。数据库和上传的文件保存在 `DATA_DIR`（默认 `server/data/`，已在 `.gitignore` 中），请定期备份。
+
+| 变量 | 含义 |
+| --- | --- |
+| `PARENT_BOOTSTRAP_TOKEN` | 至少 24 字符的随机串。家长 iPhone 首次使用时用它换取自己的设备凭证；留空则作业 API 不可用 |
+| `DATA_DIR` | 数据库与文件目录，默认 `./data` |
+| `MODEL_*` | 与辅导网关共用，用于“AI 整理作业” |
+
+### 设备与鉴权
+
+1. 家长 iPhone：`POST /v1/devices/bootstrap {token, deviceId, name}`，`token` 为 `PARENT_BOOTSTRAP_TOKEN`，返回家长设备凭证。第一次调用时自动创建家庭。
+2. 家长生成配对码：`POST /v1/devices/pairing-codes`，返回 6 位数字，10 分钟内有效，只能用一次。
+3. 孩子 iPad：`POST /v1/devices/pair {code, deviceId, name}`，返回孩子设备凭证。
+4. 之后所有请求带 `Authorization: Bearer <设备凭证>`。服务端只保存凭证的哈希；家长可以 `DELETE /v1/devices/:id` 撤销设备。
+
+未登录的 bootstrap / pair 每分钟最多 10 次，每台设备每分钟最多 300 次请求。
+
+### 接口
+
+| 方法与路径 | 角色 | 说明 |
+| --- | --- | --- |
+| `GET /v1/me` | 全部 | 当前设备、家庭、孩子列表、奖励规则、家庭时区的“今天” |
+| `GET /v1/children`、`PUT/DELETE /v1/children/:id` | 读：全部；写：家长 | 孩子档案；删除会一并删除作业、每天坚持、奖励和文件 |
+| `POST /v1/homework/parse` | 家长 | `{text, date?}` → `{items:[{subject, content, mode, dueText, dueDate, parentTodo}], message}`，只整理不保存 |
+| `POST /v1/homework` | 家长 | `{items:[…]}` 批量新建，按 `id` 幂等 |
+| `GET /v1/homework?childId&from&to` | 全部 | 按日期查询（最多 62 天），含每次提交与批改；范围包含今天时先生成今天的每天坚持 |
+| `GET/PATCH/DELETE /v1/homework/:id` | 读：全部；写：家长 | 单项作业；删除会删掉相关文件 |
+| `GET /v1/routines?childId`、`PUT/DELETE /v1/routines/:id` | 读：全部；写：家长 | 每天坚持，每个孩子启用中的最多 5 项（超出返回 409 `routine_limit`） |
+| `PUT /v1/files/:id`、`GET /v1/files/:id` | 全部 | 原始字节上传下载：`image/jpeg` ≤2MB、`image/png` ≤4MB（批注图）、`audio/mp4` ≤10MB、`application/octet-stream` ≤1MB（批注笔迹） |
+| `POST /v1/homework/:id/submissions` | 全部 | `{id, fileIds, submittedAt, durationSeconds?}`：线下作业需要照片，录音作业需要一个音频，计时作业需要计满时长 |
+| `POST /v1/submissions/:id/review` | 家长 | `{grade: EXCELLENT/GOOD/FAIR/TRY_AGAIN, comment, requireCorrection, annotationFileIds}` |
+| `GET/PUT /v1/reward-rules` | 读：全部；写：家长 | 奖励规则，含每天完成时间 `finishTime` |
+| `GET /v1/rewards?childId` | 全部 | 余额、今天获得和使用的分钟数、最近 50 条明细 |
+| `POST /v1/rewards/sessions` | 全部 | `{id, childId, minutes}` 使用奖励时间；按时段、当天作业是否交完、每日上限、余额检查 |
+| `GET /v1/changes?since=<seq>` | 全部 | 增量同步：返回需要重新拉取的实体和 `next` |
+
+作业状态：`NOT_STARTED` → `SUBMITTED` → `REVIEWED` 或 `NEEDS_CORRECTION`（订正后再提交）。计时类作业提交即 `REVIEWED`。
+
+奖励由服务端记账，同一事件只入账一次：按时提交（第一次提交、在 `finishTime` 前，按设备时间判断）、评分（订正后评分提高时补差额）、每天坚持打卡、连续 7 天。
+
+### 数据边界
+
+- 作业文字、照片、录音、批改和奖励记录保存在服务端，用于两台设备同步。
+- 只有“AI 整理作业”会把家长粘贴的文字发给模型供应商；孩子提交的内容不发给模型。
+- 服务端不记录请求体、凭证或文件内容；错误日志只记录错误类型。
+
+## 汉字笔顺字典（小熊写字）
+
+网页在 `/hanzi/`，源码在 `web/hanzi/`，说明见 [web/hanzi/README.md](../web/hanzi/README.md)。
+
+| 方法与路径 | 鉴权 | 说明 |
+| --- | --- | --- |
+| `GET /hanzi/` | 无 | 网页 |
+| `GET /hanzi/strokes/<汉字>.json` | 无 | 笔顺数据 `{strokes, medians, radStrokes}`；第一次请求时从 jsDelivr/unpkg 下载 hanzi-writer-data 并存到 `DATA_DIR/hanzi-strokes/`。没有这个字返回 404 `no_stroke_data` |
+| `POST /v1/hanzi/asr` | 同源会话或 `TUTOR_DEVICE_TOKEN` | 16 kHz、单声道、16-bit PCM 短句 → `{text}`；配置 `VOLC_ASR_API_KEY` 后调用火山引擎豆包流式语音识别模型 2.0 的一句话模式 |
+| `POST /v1/hanzi/lookup` | 同源打开 `/hanzi/` 自动建立会话；跨地址访问可用 `TUTOR_DEVICE_TOKEN` | `{text}`（≤60 字，语音识别出的原话）→ `{word, chars:[{char, pinyin, radical, radicalName, radicalMeaning, structure, meaning, words, tip}], alternatives:[{char, pinyin, hint}], message}`。每分钟最多 30 次，相同问题的回答在内存里缓存 |
+
+`HANZI_MODEL_NAME` 可单独指定字典用的模型，默认用 `MODEL_NAME`。只有孩子说的这句话会发给模型供应商。
+
+汉字语音识别配置：`VOLC_ASR_API_KEY` 使用火山引擎新版控制台 API Key；`VOLC_ASR_RESOURCE_ID` 推荐从 `volc.seedasr.sauc.duration` 开始。网页会把短句录成 PCM 发给服务端，调用流式语音识别模型 2.0 的 `bigmodel_nostream` 一句话模式并等待最终结果；未配置 ASR 或服务端暂不可用时明确提示，不调用浏览器自带的语音识别。
+
+## 辅导网关
 
 面向单个试用家庭的无状态网关。接收当前任务的文字、可选 JPEG 图片及最近 8 轮对话，转发给配置的兼容 Chat Completions 服务。供应商密钥仅存在于服务端环境变量。
 
-需要 Node.js 22 或更新版本，无第三方 npm 依赖。当前测试使用模拟上游，不代表真实模型的质量或供应商兼容性已经验收。
+需要 Node.js 22 或更新版本；实时 ASR 使用 `ws` 连接火山引擎。当前测试使用模拟上游，不代表真实模型的质量或供应商兼容性已经验收。
 
 ## 配置与启动
 
@@ -21,6 +91,9 @@ npm start
 | `MODEL_API_URL` | 供应商的完整 HTTPS `/chat/completions` 地址，不会自动补路径 |
 | `MODEL_API_KEY` | 供应商密钥；不能填写到 App |
 | `MODEL_NAME` | 供应商实际可用的模型 ID，用于所有文字请求；如果它也能看图，带图请求同样用它 |
+| `VOLC_ASR_API_KEY` | 火山引擎豆包语音 API Key，仅服务端使用 |
+| `VOLC_ASR_RESOURCE_ID` | 火山引擎 ASR 资源 ID，默认 `volc.seedasr.sauc.duration` |
+| `VOLC_ASR_URL` | 火山引擎 ASR WebSocket 地址，默认 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream` |
 | `MODEL_VISION_NAME` | 可选。同一供应商下支持图片输入的模型 ID，只用于带照片的请求（拍照识题、带图求助/检查） |
 | `MODEL_SUPPORTS_IMAGES` | 默认 `true`。`MODEL_NAME` 不能看图且未配置 `MODEL_VISION_NAME` 时设为 `false`：带图请求直接返回 422 `images_not_supported`，App 提示改用文字，不再请求上游 |
 | `MODEL_JSON_MODE` | 默认为 `true`，发送 `response_format: {type: "json_object"}`；供应商不支持时设 `false`，仍严格校验返回 JSON |

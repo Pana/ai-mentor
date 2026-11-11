@@ -11,6 +11,7 @@ artifacts/
 .env.*
 !.env.example
 node_modules/
+server/data/
 *.keystore
 DerivedData/
 *.xcuserstate
@@ -18,3 +19,4 @@ xcuserdata/
 ipad/.build/
 ipad/*.xcodeproj/
 ipad/Config/Local.xcconfig
+.claude/

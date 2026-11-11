@@ -299,6 +299,8 @@ struct CropView: View {
 
 struct PhotoSourceButtons: View {
     var replacing = false
+    var cameraTitle: String?
+    var showsLibrary = true
     let onPhoto: (Data) -> Void
     @State private var pickerItem: PhotosPickerItem?
     @State private var flow: PhotoFlowItem?
@@ -307,11 +309,13 @@ struct PhotoSourceButtons: View {
         HStack {
             if CameraController.hasCamera {
                 Button { flow = PhotoFlowItem(image: nil) } label: {
-                    Label(replacing ? "重新拍题目" : "拍题目", systemImage: "camera")
+                    Label(cameraTitle ?? (replacing ? "重新拍题目" : "拍题目"), systemImage: "camera")
                 }.buttonStyle(.bordered)
             }
-            PhotosPicker(selection: $pickerItem, matching: .images) { Label("从相册选图", systemImage: "photo") }
-                .buttonStyle(.bordered)
+            if showsLibrary {
+                PhotosPicker(selection: $pickerItem, matching: .images) { Label("从相册选图", systemImage: "photo") }
+                    .buttonStyle(.bordered)
+            }
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-ui-testing-sample-photo") {
                 Button("使用示例图片") { flow = PhotoFlowItem(image: ImageCropper.sampleHomework()) }.buttonStyle(.bordered)
