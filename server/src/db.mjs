@@ -46,6 +46,9 @@ const migrations = [`
     seq INTEGER PRIMARY KEY AUTOINCREMENT, family_id TEXT NOT NULL, entity TEXT NOT NULL, entity_id TEXT NOT NULL,
     op TEXT NOT NULL, at TEXT NOT NULL);
   CREATE INDEX changes_family ON changes (family_id, seq);
+`, `
+  CREATE TABLE hanzi_answers (
+    query TEXT PRIMARY KEY, answer TEXT NOT NULL, created_at TEXT NOT NULL);
 `];
 
 export function openDatabase(path) {

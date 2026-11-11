@@ -50,6 +50,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px calc(32px + env(safe
   flex: none; width: 96px; height: 96px; border-radius: 50%; border: 0;
   background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
   box-shadow: 0 8px 20px rgba(240, 138, 36, .35); transition: transform .15s;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
 .mic svg { width: 46px; height: 46px; fill: currentColor; }
 .mic:active { transform: scale(.95); }

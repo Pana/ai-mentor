@@ -1,5 +1,6 @@
 /* 小熊写字：说出想写的字 → 笔顺动画 + 拼音、部首、意思、组词。
-   笔顺数据来自 hanzi-writer-data（服务端缓存在 /hanzi/strokes/），“想写哪个字”和释义来自 /v1/hanzi/lookup。 */
+   笔顺数据来自 hanzi-writer-data（服务端缓存在 /hanzi/strokes/），“想写哪个字”和释义来自 /v1/hanzi/lookup；
+   字已经确定时（如直接输入单个字）详情走 /v1/hanzi/detail，不做语义解读。 */
 'use strict';
 
 const $ = sel => document.querySelector(sel);
@@ -107,8 +108,9 @@ async function stopServerListening() {
   active.processor.onaudioprocess = null;
   const sampleRate = active.context.sampleRate;
   releaseCapture(active);
+  if (Date.now() - active.startedAt < 300) { setHint('按住话筒说话，说完再松手。', true); return; }
   const body = pcm16(active.chunks, sampleRate);
-  if (!body.byteLength) { setHint('没听到声音，再点一下话筒试试。', true); return; }
+  if (!body.byteLength) { setHint('没听到声音，再按住话筒试试。', true); return; }
   setHint('正在确认你说的内容……');
   let status = 0;
   try {
@@ -128,6 +130,7 @@ async function stopServerListening() {
 
 async function startServerListening() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  state.run++; stopQuiz();                          // 孩子开口说新字了：旧字的动画和描写立刻停
   const context = new AudioContextImpl();
   await context.resume();
   const source = context.createMediaStreamSource(stream);
@@ -136,13 +139,13 @@ async function startServerListening() {
   const chunks = [];
   processor.onaudioprocess = event => chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
   source.connect(processor); processor.connect(silent); silent.connect(context.destination);
-  capture = { stream, context, source, processor, chunks };
+  capture = { stream, context, source, processor, chunks, startedAt: Date.now() };
   recognizer = { stop: stopServerListening };
   $('#mic').classList.add('listening'); setHint('我在听，请说“春天的春”这样的说法……');
 }
 
 async function startListening() {
-  if (recognizer) { recognizer.stop(); return; }
+  if (recognizer) return;                              // 已经按住录音中，不重复启动
   if (navigator.mediaDevices?.getUserMedia && AudioContextImpl) {
     try { await startServerListening(); return; }
     catch { capture && releaseCapture(capture); capture = null; setHint('无法启动麦克风。Chrome 请使用 HTTPS 或 127.0.0.1，并允许麦克风权限。', true); return; }
@@ -152,6 +155,13 @@ async function startListening() {
 
 // ---------- 查询 ----------
 const FILLER = /(我想写|我要写|我想知道|帮我查一下|帮我查|查一下|请问|怎么写|怎样写|如何写|的写法|这个字|这个词|呀|啊|呢|吧|吗[？?]?$)/g;
+const OFFLINE_NOTICES = {
+  no_token: '还没连接字典服务，现在只显示笔顺（家长可以在右上角 ⚙︎ 里设置）。',
+  bad_token: '字典服务的凭证不对，现在只显示笔顺（家长可以在右上角 ⚙︎ 里改）。',
+  busy: '查得太快啦，字典服务要歇一会儿，现在只显示笔顺。',
+  server: '字典服务暂时没回应，现在只显示笔顺。',
+  network: '连不上字典服务，现在只显示笔顺。'
+};
 
 function showStatus(content, kind = '') {
   const box = $('#status');
@@ -161,46 +171,74 @@ function showStatus(content, kind = '') {
 }
 
 let searchSeq = 0;
-async function search(raw) {
+/**
+ * 尽量不等模型，先把要写的字猜出来显示，详情回来再由 enrich 补全：
+ * - 单个汉字，或键盘输入/历史记录里的纯汉字词：字面就是目标，详情走 /v1/hanzi/detail；
+ * - “妈妈的妈”“天空的空”这类说法：结尾“的”后的字几乎总是目标，先显示，再由 lookup 校正
+ *   （识别错了模型会换字，enrich 发现字变了会整体重画）。
+ * 猜不出（拼音、拆字等）才显示“正在找”等模型。语音来的多字词不能当字面目标（“木子李”是拆字说法）。
+ */
+function quickGuess(text, typed) {
+  if (isHan(text)) return { word: text, useDetail: true };
+  if (typed && /^\p{Script=Han}{1,8}$/u.test(text)) return { word: text, useDetail: true };
+  const tail = /\p{Script=Han}的(\p{Script=Han})$/u.exec(text.replace(FILLER, '').replace(/\s+/g, ''))?.[1];
+  return tail ? { word: tail, useDetail: false } : null;
+}
+
+async function search(raw, { typed = false } = {}) {
   const text = raw.replace(/\s+/g, ' ').trim().slice(0, 60);
   if (!text) return;
   $('#query').value = text;
-  setHint('点一下话筒，说出想写的字');
+  setHint('按住话筒说话，说完松手');
   const seq = ++searchSeq;
   $('#mic').classList.add('busy');
-  showStatus([`正在找「${text}」`, el('span', { class: 'dots' })]);
+  const guess = quickGuess(text, typed);
+  const instant = guess ? { word: guess.word, chars: [...new Set([...guess.word])].map(char => ({ char })), alternatives: [], message: '' } : null;
+  if (instant) await show(instant);
+  else showStatus([`正在找「${text}」`, el('span', { class: 'dots' })]);
   let reason = '';
   try {
     const savedToken = token();
-    const response = await fetch('/v1/hanzi/lookup', {
+    const response = await fetch(guess?.useDetail ? '/v1/hanzi/detail' : '/v1/hanzi/lookup', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', ...(savedToken ? { Authorization: `Bearer ${savedToken}` } : {}) },
-      body: JSON.stringify({ text })
+      body: JSON.stringify(guess?.useDetail ? { word: guess.word } : { text })
     });
     if (seq !== searchSeq) return;
     if (response.ok) {
       const result = await response.json();
-      if (!result.chars.length) { $('#result').hidden = true; showStatus(result.message || '没听出要写哪个字，换个说法试试？'); return; }
-      await show(result);
+      if (!result.chars.length) {
+        if (!instant) { $('#result').hidden = true; showStatus(result.message || '没听出要写哪个字，换个说法试试？'); }
+        return;
+      }
+      if (instant) enrich(result);
+      else await show(result);
       return;
     }
     reason = response.status === 401 ? (savedToken ? 'bad_token' : 'no_token') : response.status === 429 ? 'busy' : 'server';
   } catch { reason = 'network'; }
   finally { if (seq === searchSeq) $('#mic').classList.remove('busy'); }
   if (seq !== searchSeq) return;
+  if (instant) { showStatus(OFFLINE_NOTICES[reason], 'notice'); return; }
   await showOffline(text, reason);
+}
+
+/** 字典详情回来了：补全已经显示的字，不重播笔顺动画；万一模型换字了才整体重画。 */
+function enrich(result) {
+  const sameWord = state.result && state.result.word === result.word && state.result.chars.length === result.chars.length;
+  state.result = result;
+  renderWord();
+  renderAlternatives();
+  remember(result.word);
+  $('#status').hidden = true;
+  if (sameWord && state.result.chars[state.index]) { renderInfo(state.result.chars[state.index], state.data); return; }
+  select(0);
 }
 
 /** 字典服务不可用时：把话里的汉字直接当作要写的字，只显示笔顺。 */
 async function showOffline(text, reason) {
   const chars = [...new Set([...text.replace(FILLER, '')].filter(isHan))].slice(0, 8);
-  const why = {
-    no_token: '还没连接字典服务，现在只显示笔顺（家长可以在右上角 ⚙︎ 里设置）。',
-    bad_token: '字典服务的凭证不对，现在只显示笔顺（家长可以在右上角 ⚙︎ 里改）。',
-    busy: '查得太快啦，字典服务要歇一会儿，现在只显示笔顺。',
-    server: '字典服务暂时没回应，现在只显示笔顺。',
-    network: '连不上字典服务，现在只显示笔顺。'
-  }[reason];
+  const why = OFFLINE_NOTICES[reason];
   if (!chars.length) { $('#result').hidden = true; showStatus(`${why.replace('现在只显示笔顺', '也没认出汉字')} 可以直接打出要写的字。`); return; }
   await show({ word: chars.join(''), chars: chars.map(char => ({ char })), alternatives: [], message: '' }, why);
 }
@@ -432,7 +470,7 @@ function renderHistory() {
   const box = $('#history');
   box.hidden = !list.length;
   box.replaceChildren(el('span', { class: 'chips-label' }, '最近查过'),
-    ...list.map(w => el('button', { type: 'button', class: 'chip', onclick: () => search(w) }, w)));
+    ...list.map(w => el('button', { type: 'button', class: 'chip', onclick: () => search(w, { typed: true }) }, w)));
 }
 
 // ---------- 设置 ----------
@@ -446,8 +484,39 @@ $('#settings').addEventListener('close', () => {
 });
 
 // ---------- 事件 ----------
-$('#mic').addEventListener('click', startListening);
-$('#search-form').addEventListener('submit', event => { event.preventDefault(); $('#query').blur(); search($('#query').value); });
+// 按住话筒录音，松手结束；指针和键盘（Enter/空格按住）都支持。
+const mic = $('#mic');
+let heldPointer = null, heldKey = false;
+mic.addEventListener('pointerdown', event => {
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  if (heldPointer !== null) return;                    // 已有手指按着，忽略第二根
+  heldPointer = event.pointerId;
+  try { mic.setPointerCapture(event.pointerId); } catch { /* 松手事件照样会冒泡 */ }
+  event.preventDefault();
+  startListening();
+});
+const releaseHold = event => {
+  if (event.pointerId !== heldPointer) return;
+  heldPointer = null;
+  recognizer?.stop();
+};
+mic.addEventListener('pointerup', releaseHold);
+mic.addEventListener('pointercancel', releaseHold);
+mic.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  if (event.repeat || heldKey) return;
+  heldKey = true;
+  startListening();
+});
+mic.addEventListener('keyup', event => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  if (!heldKey) return;
+  heldKey = false;
+  recognizer?.stop();
+});
+mic.addEventListener('contextmenu', event => event.preventDefault());   // 触屏长按别弹菜单
+$('#search-form').addEventListener('submit', event => { event.preventDefault(); $('#query').blur(); search($('#query').value, { typed: true }); });
 $('#examples').addEventListener('click', event => { if (event.target.matches('.chip')) search(event.target.textContent); });
 $('#settings-btn').addEventListener('click', () => openSettings());
 $('#play').addEventListener('click', play);
