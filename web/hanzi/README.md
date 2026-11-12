@@ -33,4 +33,19 @@ scripts/lan-gateway.sh             # 同一 Wi-Fi 的 iPad：http://<Mac 的 IP>
 
 功能：孩子开口的瞬间旧字的动画就停；能猜到目标字的输入（单个汉字、键盘输入的纯汉字词、“妈妈的妈”“天空的空”这类说法）先立刻显示笔顺，拼音释义由字典服务随后补全；整字连续书写、“下一笔”逐笔演示、三档速度、部首笔画变色、笔顺分解图（点一格会在大格子里亮出那一笔）、“我来写”（用手指或笔按笔顺描，写错会提示）、最近查过的字（存在本机浏览器）。
 
+## 手机和各浏览器
+
+页面按手机竖屏、手机横屏、iPad、桌面分别排版：手机上话筒和提示并排、示例词横向滑动；触屏设备查完字会把田字格滚进第一屏；田字格平时可以按住滚动页面，只有“我来写”时才拦住手势。
+
+改了样式后跑一遍布局检查（WebKit、Chromium、Firefox × iPhone/Android 竖横屏、iPad、桌面，部分加深色模式）：
+
+```sh
+scripts/hanzi-browsers.sh                  # 起一个临时服务端，字典离线（只显示笔顺）
+HANZI_AI=1 scripts/hanzi-browsers.sh       # 用 server/.env 里的模型，带拼音释义
+HANZI_URL=http://127.0.0.1:8787/hanzi/ scripts/hanzi-browsers.sh   # 检查已经在跑的服务
+scripts/hanzi-browsers.sh webkit           # 只跑一个内核
+```
+
+WebKit 对应 iOS/iPadOS 上的所有浏览器和 Mac Safari，Chromium 对应 Android Chrome、Edge、三星和多数国产浏览器，Firefox 只能按尺寸检查、模拟不了手机触屏。真机 Safari 的地址栏会占掉横屏高度，Playwright 测不出来，横屏和触摸手势另用 iOS 模拟器的 Safari 打开 `http://127.0.0.1:8787/hanzi/` 看一下。
+
 已知限制：笔顺数据和课本的规范笔顺基本一致，个别字可能不同；数据里没有笔画名称（横、竖、撇……），暂时不显示。
