@@ -25,6 +25,7 @@ scripts/lan-gateway.sh             # 同一 Wi-Fi 的 iPad：http://<Mac 的 IP>
 | 部分 | 来源 |
 | --- | --- |
 | 笔顺数据 | [hanzi-writer-data](https://github.com/chanind/hanzi-writer-data) 2.0.1（来自 Make Me a Hanzi，约 9000 字）。服务端第一次用到某个字时从 jsDelivr 下载，失败再试 unpkg，存到 `DATA_DIR/hanzi-strokes/`，以后从本地读 |
+| 字卡、大字、部首、组词里的楷书字形 | 同一份笔顺数据画成 SVG。安卓手机和国产浏览器没有可用的楷体（CSS 里的“楷体”会退成宋体），这样各设备显示一致，也和田字格里写的字一致；数据到之前先用系统字体 |
 | 书写动画、描写判定 | [Hanzi Writer](https://hanziwriter.org) 3.7.3（MIT），在 `vendor/` 里 |
 | 理解孩子说的话，定出要写哪个字 | `POST /v1/hanzi/lookup`，调用服务端配置的模型（见 `server/src/hanzi.mjs`） |
 | 拼音、部首、意思、组词 | 同一个模型。字已经确定时（如直接输入单个汉字）走 `POST /v1/hanzi/detail`，不做语义解读。两个接口的答案共用缓存：先查内存，再查 `littlebear.db` 的 `hanzi_answers` 表（重启不失效），最后才问模型。笔顺和笔画数只用笔顺数据，不用模型的回答 |

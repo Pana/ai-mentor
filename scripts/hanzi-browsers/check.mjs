@@ -1,6 +1,7 @@
 // 小熊写字：每个浏览器内核 × 设备尺寸打开页面、查“蝴蝶”，检查
 //   横向溢出和越界元素、查完后田字格在第一屏（触屏）、田字格大小、按钮高度、
-//   “我来写”时才锁住田字格手势、设置弹窗不出屏、控制台没有报错。
+//   “我来写”时才锁住田字格手势、设置弹窗不出屏、按钮文字不被截断、字卡和大字用笔顺数据画成楷书（安卓没有楷体）、控制台没有报错。
+// 另外模拟两种国产安卓上常见的放大：Chrome“网页缩放”（等于屏幕变窄）和微信等 App 内网页的“字体大小”（WebView textZoom，只放大字）。
 // 由 scripts/hanzi-browsers.sh 调用：node check.mjs <页面地址> <截图目录> [webkit|chromium|firefox]
 //
 // 内核和真实浏览器的对应：
@@ -22,6 +23,8 @@ const profiles = [
   ['Galaxy S8 (360)', devices['Galaxy S8']],
   ['Galaxy S9+ (320)', { ...devices['Galaxy S9+'], viewport: { width: 320, height: 658 } }],
   ['Pixel 7', devices['Pixel 7']],
+  ['Pixel 7 网页缩放 175%', { ...devices['Pixel 7'], viewport: { width: 235, height: 520 } }],
+  ['Galaxy S8 微信字体特大 1.6x', { ...devices['Galaxy S8'], textZoom: 1.6 }],
   ['iPad Mini', devices['iPad Mini']],
   ['iPad Pro 11 横屏', devices['iPad Pro 11 landscape']],
   ['桌面 1280', { viewport: { width: 1280, height: 800 } }]
@@ -35,7 +38,8 @@ for (const [engineName, engine] of engines) {
   const browser = await engine.launch();
   for (const [name, profile] of profiles) {
     for (const scheme of darkToo.has(name) ? ['light', 'dark'] : ['light']) {
-      const opts = { ...profile, colorScheme: scheme, locale: 'zh-CN' };
+      const { textZoom = 1, ...device } = profile;
+      const opts = { ...device, colorScheme: scheme, locale: 'zh-CN' };
       if (engineName === 'firefox') { delete opts.isMobile; delete opts.deviceScaleFactor; opts.hasTouch = false; }
       const context = await browser.newContext(opts);
       const page = await context.newPage();
@@ -50,8 +54,15 @@ for (const [engineName, engine] of engines) {
       const issues = [];
       const tag = `${engineName} · ${name}${scheme === 'dark' ? ' · 深色' : ''}`;
       const file = join(out, tag.replace(/[^\w一-龥]+/g, '_'));
+      // 模拟 WebView textZoom：先记下所有元素的字号再统一乘倍数（避免 em 叠加），新渲染的内容再做一次
+      const zoomText = () => textZoom === 1 ? null : page.evaluate(z => {
+        const els = [...document.querySelectorAll('body, body *')].filter(e => !e.dataset.zoomed);
+        const sizes = els.map(e => parseFloat(getComputedStyle(e).fontSize));
+        els.forEach((e, i) => { e.style.fontSize = `${sizes[i] * z}px`; e.dataset.zoomed = '1'; });
+      }, textZoom);
       try {
         await page.goto(base, { waitUntil: 'networkidle' });
+        await zoomText();
         const overflow = () => page.evaluate(() => {
           const vw = document.documentElement.clientWidth;
           const bad = [...document.querySelectorAll('body *')].filter(e => {
@@ -71,6 +82,7 @@ for (const [engineName, engine] of engines) {
         await page.press('#query', 'Enter');
         await page.waitForSelector('#writer svg', { timeout: 20000 });
         await page.waitForTimeout(1200);                // 等平滑滚动和详情回来
+        await zoomText();
         o = await overflow();
         if (o.sw > o.vw) issues.push(`结果页横向溢出 ${o.sw}>${o.vw}`);
         if (o.bad.length) issues.push(`结果页越界: ${o.bad.join(',')}`);
@@ -78,12 +90,17 @@ for (const [engineName, engine] of engines) {
           const pad = document.querySelector('#pad').getBoundingClientRect();
           const small = [...document.querySelectorAll('#result button, .ask button')]
             .filter(b => b.offsetParent && !b.closest('.steps') && b.getBoundingClientRect().height < 32).length;
-          return { top: Math.round(pad.top), bottom: Math.round(pad.bottom), width: Math.round(pad.width), vh: innerHeight, small,
+          const textGlyphs = [...document.querySelectorAll('#word .glyph, .big-ch .glyph')].filter(g => !g.querySelector('svg')).map(g => g.textContent);
+          const clipped = [...document.querySelectorAll('button')].filter(b => b.offsetParent && b.scrollWidth > b.clientWidth + 1).map(b => b.textContent.trim().slice(0, 6));
+          return { top: Math.round(pad.top), bottom: Math.round(pad.bottom), width: Math.round(pad.width), vh: innerHeight, vw: innerWidth, small, clipped, textGlyphs,
             touch: matchMedia('(pointer: coarse), (max-width: 860px)').matches };
         });
-        if (vis.touch && (vis.bottom > vis.vh || vis.top < 0)) issues.push(`查完后田字格不在第一屏 (top ${vis.top}, bottom ${vis.bottom}, 视口 ${vis.vh})`);
-        if (vis.width < Math.min(240, vis.vh * 0.55)) issues.push(`田字格太小 ${vis.width}px`);
+        // 模拟的 textZoom 在页面滚动之后才放大新内容，真 WebView 是先放大再测量，所以这一项只在不放大字时检查
+        if (textZoom === 1 && vis.touch && (vis.bottom > vis.vh || vis.top < 0)) issues.push(`查完后田字格不在第一屏 (top ${vis.top}, bottom ${vis.bottom}, 视口 ${vis.vh})`);
+        if (vis.width < Math.min(240, vis.vh * 0.55, vis.vw * 0.7))   // 网页放大后视口很窄，格子占满宽度就算合格 issues.push(`田字格太小 ${vis.width}px`);
         if (vis.small) issues.push(`${vis.small} 个按钮高度 <32px`);
+        if (vis.clipped.length) issues.push(`按钮文字被截断: ${vis.clipped.join(',')}`);
+        if (vis.textGlyphs.length) issues.push(`这些字没画成楷书字形: ${vis.textGlyphs.join('')}`);
         await page.screenshot({ path: `${file}_result.png` });
         await page.screenshot({ path: `${file}_full.png`, fullPage: true });
 

@@ -274,7 +274,7 @@ function renderWord() {
   $('#word').replaceChildren(...[...word].map(ch => {
     const i = byChar.get(ch);
     return el('button', { type: 'button', class: `tile${i === state.index ? ' on' : ''}`, 'data-index': i, onclick: () => select(i) },
-      el('span', { class: 'py' }, chars[i].pinyin || ''), el('span', { class: 'ch' }, ch));
+      el('span', { class: 'py' }, chars[i].pinyin || ''), el('span', { class: 'ch' }, glyph(ch)));
   }));
 }
 
@@ -284,7 +284,7 @@ function renderAlternatives() {
   box.hidden = !alts.length;
   box.replaceChildren(el('span', { class: 'chips-label' }, '是不是想写：'),
     ...alts.map(a => el('button', { type: 'button', class: 'chip', onclick: () => search(a.hint || a.char) },
-      el('b', {}, a.char), `${a.pinyin}${a.hint ? ` · ${a.hint}` : ''}`)));
+      el('b', {}, glyph(a.char)), `${a.pinyin}${a.hint ? ` · ${a.hint}` : ''}`)));
 }
 
 // ---------- 笔顺数据与书写 ----------
@@ -296,6 +296,24 @@ function loadStrokes(char) {
       .then(data => { if (!data) strokeCache.delete(char); return data; }));
   }
   return strokeCache.get(char);
+}
+
+/**
+ * 用笔顺数据画出楷书字形。安卓手机和大多数国产浏览器没有楷体，CSS 里的“楷体”会退成宋体；
+ * 笔顺数据本身就是楷书，画出来在所有设备上一样，也和田字格里写的字一致。
+ * 数据到之前先用系统字体顶着；没有数据的字（个别偏旁、生僻字）就一直用系统字体。
+ */
+function glyph(char) {
+  const span = el('span', { class: 'glyph', role: 'img', 'aria-label': char }, char);
+  if (isHan(char)) loadStrokes(char).then(data => { if (data) span.replaceChildren(glyphSvg(data)); });
+  return span;
+}
+function glyphSvg(data) {
+  const svg = svgEl('svg', { viewBox: '0 0 100 100', 'aria-hidden': 'true' });
+  const g = svgEl('g', { transform: HanziWriter.getScalingTransform(100, 100, 0).transform });
+  for (const d of data.strokes) g.append(svgEl('path', { d }));
+  svg.append(g);
+  return svg;
 }
 
 function padSize() { return Math.round($('#pad').getBoundingClientRect().width) || 300; }
@@ -456,11 +474,11 @@ function renderInfo(entry, data) {
   const fact = (k, v, sub) => el('div', { class: 'fact' }, el('div', { class: 'k' }, k), el('div', { class: 'v' }, v), sub ? el('div', { class: 'sub' }, sub) : null);
   const box = $('#info');
   const top = el('div', { class: 'info-top' },
-    el('span', { class: 'big-ch' }, entry.char),
+    el('span', { class: 'big-ch' }, glyph(entry.char)),
     el('div', {}, el('div', { class: 'pinyin' }, entry.pinyin || ''),
       el('button', { type: 'button', class: 'btn small', onclick: () => speak(entry.char) }, '🔊 读一读')));
   const facts = el('div', { class: 'facts' },
-    entry.radical ? fact('部首', [el('span', { class: 'rad' }, entry.radical), entry.radicalName || ''], entry.radicalMeaning) : null,
+    entry.radical ? fact('部首', [el('span', { class: 'rad' }, glyph(entry.radical)), entry.radicalName || ''], entry.radicalMeaning) : null,
     entry.structure ? fact('结构', entry.structure) : null,
     fact('笔画', data ? `${data.strokes.length} 画` : '…'));
   const parts = [top, facts];
@@ -468,7 +486,7 @@ function renderInfo(entry, data) {
   if (entry.words?.length) {
     parts.push(el('div', {}, el('p', { class: 'section-k' }, '组词（点一下听读音）'),
       el('div', { class: 'words' }, entry.words.map(w => el('button', { type: 'button', class: 'chip', onclick: () => speak(w) },
-        [...w].map(c => (c === entry.char ? el('mark', {}, c) : c)))))));
+        [...w].map(c => (c === entry.char ? el('mark', {}, glyph(c)) : glyph(c))))))));
   }
   if (entry.tip) parts.push(el('div', { class: 'tip' }, el('span', { 'aria-hidden': 'true' }, '🐻'), el('span', {}, entry.tip)));
   if (!entry.pinyin && !entry.meaning) parts.push(el('p', { class: 'muted' }, '连上字典服务后，这里会显示拼音、部首、意思和组词。'));
