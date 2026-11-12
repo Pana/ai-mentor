@@ -27,21 +27,24 @@ body {
   font: 17px/1.5 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
-button { font: inherit; color: inherit; cursor: pointer; }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }  /* 连点“下一笔”不触发双击缩放 */
 [hidden] { display: none !important; }
 
 .top {
   display: flex; align-items: center; justify-content: space-between;
-  max-width: 1100px; margin: 0 auto; padding: calc(12px + env(safe-area-inset-top)) 16px 4px;
+  max-width: 1100px; margin: 0 auto;
+  padding: calc(12px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 4px calc(16px + env(safe-area-inset-left));
 }
 .brand { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 700; }
 .bear { font-size: 30px; }
 .icon-btn {
   border: 0; background: transparent; font-size: 22px; width: 44px; height: 44px; border-radius: 12px;
 }
-.icon-btn:hover { background: var(--accent-soft); }
 
-main { max-width: 1100px; margin: 0 auto; padding: 8px 16px calc(32px + env(safe-area-inset-bottom)); display: grid; gap: 16px; }
+main {
+  max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;
+  padding: 8px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+}
 .card { background: var(--card); border-radius: 20px; box-shadow: var(--shadow); padding: 18px; }
 
 /* Ask */
@@ -65,8 +68,9 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px calc(32px + env(safe
 .ask-hint.error { color: #c2410c; font-weight: 500; font-size: 16px; }
 .search { display: flex; gap: 8px; }
 .search input {
-  flex: 1; min-width: 0; font: inherit; font-size: 20px; padding: 10px 14px; border-radius: 14px;
+  flex: 1; width: 0; min-width: 0; font: inherit; font-size: 20px; padding: 10px 14px; border-radius: 14px;
   border: 2px solid var(--line); background: var(--bg); color: var(--ink); outline: none;
+  -webkit-appearance: none; appearance: none;   /* 输入框宽度不再撑开窄屏；各浏览器外观一致 */
 }
 .search input:focus { border-color: var(--accent); }
 .go { border: 0; border-radius: 14px; padding: 0 22px; background: var(--ink); color: var(--card); font-size: 19px; font-weight: 600; }
@@ -75,16 +79,15 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px calc(32px + env(safe
 .chip {
   border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 5px 12px; font-size: 15px;
 }
-.chip:hover { border-color: var(--accent); }
 
 /* Status */
 .status { text-align: center; padding: 28px 16px; font-size: 19px; color: var(--muted); }
-.status.notice { padding: 10px 16px; font-size: 15px; background: var(--accent-soft); border-radius: 14px; color: var(--ink); text-align: left; }
+.status.notice { scroll-margin-top: 12px; padding: 10px 16px; font-size: 15px; background: var(--accent-soft); border-radius: 14px; color: var(--ink); text-align: left; }
 .dots::after { content: ""; animation: dots 1.2s steps(4) infinite; }
 @keyframes dots { 0% { content: ""; } 25% { content: "·"; } 50% { content: "··"; } 75% { content: "···"; } }
 
 /* Result */
-#result { display: grid; gap: 16px; }
+#result { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; scroll-margin-top: 12px; }
 .word-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .word { display: flex; gap: 10px; flex-wrap: wrap; }
 .tile {
@@ -107,8 +110,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px calc(32px + env(safe
 .toggle input { width: 18px; height: 18px; accent-color: var(--radical); }
 .pad {
   position: relative; width: min(100%, 380px); aspect-ratio: 1; background: #fffdf8; border-radius: 6px;
-  touch-action: none;
 }
+.pad.quiz { touch-action: none; }   /* 只在“我来写”时拦住手势；平时手指放在格子上也能滚动页面 */
 .grid-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .grid-bg line { stroke: #f2b8a8; stroke-width: .5; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
 .grid-bg .frame { fill: none; stroke: #e58e7a; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
@@ -132,7 +135,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px calc(32px + env(safe
 .info-top { display: flex; align-items: center; gap: 14px; }
 .big-ch { font-family: var(--kai); font-size: 76px; line-height: 1; }
 .pinyin { font-size: 30px; font-weight: 600; letter-spacing: .02em; }
-.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)); gap: 10px; }
 .fact { background: var(--bg); border-radius: 14px; padding: 10px 12px; }
 .fact .k { color: var(--muted); font-size: 13px; }
 .fact .v { font-size: 18px; font-weight: 600; }
@@ -159,12 +162,58 @@ dialog::backdrop { background: rgba(40, 25, 15, .35); }
 .settings { padding: 20px; display: grid; gap: 10px; }
 .settings h2 { margin: 0; font-size: 20px; }
 .settings p { margin: 0; font-size: 15px; }
-.settings input { font: inherit; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); }
+.settings input { font: inherit; font-size: max(16px, 1em); min-width: 0; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--ink); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* 只有真正能悬停的设备才有悬停效果，触屏点过之后不会一直亮着 */
+@media (hover: hover) {
+  .icon-btn:hover { background: var(--accent-soft); }
+  .chip:hover { border-color: var(--accent); }
+}
+
+/* 手机竖屏：话筒和提示并排，示例横向滑动，查完后田字格尽量落在第一屏 */
 @media (max-width: 560px) {
-  .ask { flex-direction: column; align-items: stretch; text-align: center; }
-  .mic { margin: 0 auto; width: 84px; height: 84px; }
-  .chips { justify-content: center; }
-  .tile { min-width: 70px; } .tile .ch { font-size: 44px; }
+  .top { padding-top: calc(8px + env(safe-area-inset-top)); }
+  .brand { font-size: 20px; } .bear { font-size: 26px; }
+  main { gap: 12px; padding-top: 4px; }
+  .card { padding: 14px; border-radius: 18px; }
+  .ask { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 12px; align-items: center; }
+  .ask-main { display: contents; }
+  .search, .chips { grid-column: 1 / -1; }
+  .mic { width: 64px; height: 64px; box-shadow: 0 6px 14px rgba(240, 138, 36, .3); }
+  .mic svg { width: 32px; height: 32px; }
+  .ask-hint { font-size: 17px; line-height: 1.35; text-wrap: balance; }
+  .ask-hint.error { font-size: 15px; }
+  .search input { font-size: 18px; padding: 9px 12px; }
+  .go { padding: 0 18px; font-size: 18px; }
+  .chips {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    margin: 0 -14px; padding: 0 14px; scroll-padding: 0 14px;
+  }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip, .chips-label { flex: none; white-space: nowrap; }
+  .tile { min-width: 64px; padding: 4px 10px 2px; } .tile .ch { font-size: 40px; } .tile .py { font-size: 15px; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .btn { padding: 10px 12px; }
+  .big-ch { font-size: 64px; }
+  .pinyin { font-size: 26px; }
+  .steps { gap: 8px; }
+  .steps svg { width: 52px; height: 52px; }
+}
+
+/* 横屏手机：查询区收紧，田字格别比屏幕还高 */
+@media (max-height: 520px) and (orientation: landscape) {
+  .top { padding-top: calc(6px + env(safe-area-inset-top)); }
+  .card { padding: 14px; }
+  .mic { width: 64px; height: 64px; }
+  .mic svg { width: 32px; height: 32px; }
+  main, #result { gap: 12px; }
+  .tile { min-width: 56px; padding: 2px 10px 0; } .tile .ch { font-size: 34px; } .tile .py { font-size: 14px; }
+  /* 字卡和田字格左右并排，按钮放在田字格旁边，一屏能看到字、格子和按钮 */
+  .grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; }
+  .pad-card { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px 12px; }
+  .pad-head { grid-column: 1 / -1; }
+  .pad { width: min(380px, calc(100vh - 156px)); width: min(380px, calc(100svh - 156px)); }  /* svh：扣掉 Safari 横屏时的地址栏 */
+  .controls { flex-direction: column; align-items: stretch; flex-wrap: nowrap; width: 100%; gap: 6px; }
+  .btn { min-height: 40px; padding: 6px 10px; white-space: nowrap; }
 }

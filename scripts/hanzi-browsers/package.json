@@ -1,0 +1,9 @@
+{
+  "name": "hanzi-browser-check",
+  "private": true,
+  "type": "module",
+  "description": "小熊写字网页在各浏览器内核和设备尺寸上的布局检查，由 scripts/hanzi-browsers.sh 调用",
+  "devDependencies": {
+    "playwright": "1.65.0"
+  }
+}

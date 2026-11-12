@@ -219,7 +219,7 @@ async function search(raw, { typed = false } = {}) {
   } catch { reason = 'network'; }
   finally { if (seq === searchSeq) $('#mic').classList.remove('busy'); }
   if (seq !== searchSeq) return;
-  if (instant) { showStatus(OFFLINE_NOTICES[reason], 'notice'); return; }
+  if (instant) { showStatus(OFFLINE_NOTICES[reason], 'notice'); revealResult(); return; }   // 提示插在字的上面，会把田字格挤下去
   await showOffline(text, reason);
 }
 
@@ -250,7 +250,22 @@ async function show(result, notice = '') {
   renderWord();
   renderAlternatives();
   remember(result.word);
+  revealResult();
   await select(0);
+}
+
+/** 触屏设备（手机、iPad，尤其横屏）上查询区会把田字格挤出第一屏：出结果时把字和田字格滚进视野，孩子不用自己往下翻。
+    桌面用鼠标键盘时不动，免得连续打字查词时输入框被滚走。 */
+function revealResult() {
+  if ($('#result').hidden || !matchMedia('(pointer: coarse), (max-width: 860px)').matches) return;
+  const top = $('#result').getBoundingClientRect().top;
+  const padBottom = $('#pad').getBoundingClientRect().bottom;
+  if (top >= 0 && padBottom <= innerHeight) return;
+  // 有“只显示笔顺”这类提示时，放得下就连提示一起露出来
+  const notice = $('#status');
+  const showNotice = !notice.hidden && padBottom - notice.getBoundingClientRect().top + 12 <= innerHeight;
+  const target = showNotice ? notice : $('#result');
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderWord() {
@@ -334,6 +349,7 @@ function setCounter(done, label = '') {
 }
 function setMode(mode) {
   state.mode = mode;
+  $('#pad').classList.toggle('quiz', mode === 'quiz');
   $('#trace').classList.toggle('active', mode === 'quiz');
   $('#next').classList.toggle('active', mode === 'step');
   $('#praise').hidden = true;
