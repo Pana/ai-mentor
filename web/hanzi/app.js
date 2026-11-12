@@ -128,8 +128,14 @@ async function stopServerListening() {
   }
 }
 
+const holding = () => heldPointer !== null || heldKey;
+let starting = false;
+
 async function startServerListening() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  // 第一次用时会弹麦克风权限框，孩子要松开话筒去点“允许”；设备慢时打开麦克风也要一会儿。
+  // 麦克风打开时手已经松开了，就别开始录（否则会一直录到下次按话筒），提示再按一次。
+  if (!holding()) { stream.getTracks().forEach(track => track.stop()); setHint('麦克风打开了，按住话筒说话吧'); return; }
   state.run++; stopQuiz();                          // 孩子开口说新字了：旧字的动画和描写立刻停
   const context = new AudioContextImpl();
   await context.resume();
@@ -142,13 +148,16 @@ async function startServerListening() {
   capture = { stream, context, source, processor, chunks, startedAt: Date.now() };
   recognizer = { stop: stopServerListening };
   $('#mic').classList.add('listening'); setHint('我在听，请说“春天的春”这样的说法……');
+  if (!holding()) stopServerListening();              // 在启动音频的那一下松开了
 }
 
 async function startListening() {
-  if (recognizer) return;                              // 已经按住录音中，不重复启动
+  if (recognizer || starting) return;                  // 已经在录或正在打开麦克风，不重复启动
   if (navigator.mediaDevices?.getUserMedia && AudioContextImpl) {
+    starting = true;
     try { await startServerListening(); return; }
     catch { capture && releaseCapture(capture); capture = null; setHint('无法启动麦克风。Chrome 请使用 HTTPS 或 127.0.0.1，并允许麦克风权限。', true); return; }
+    finally { starting = false; }
   }
   setHint('当前浏览器不支持录音，请使用最新版 Chrome、Safari 或其他支持麦克风的浏览器。', true);
 }
