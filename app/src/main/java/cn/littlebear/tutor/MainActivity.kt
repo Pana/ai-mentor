@@ -54,7 +54,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { BearTheme { TutorApp() } }
+        // Phase 1 is homework management (parent and child roles, synced through the server), as on iOS.
+        // The earlier tutoring app (`TutorApp`) stays in the codebase without an entry point.
+        val store = cn.littlebear.tutor.homework.StoreHolder.get(this)
+        setContent { cn.littlebear.tutor.homework.HomeworkApp(store) }
     }
 }
 
