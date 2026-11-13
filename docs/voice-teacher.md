@@ -34,6 +34,7 @@ iPad                                   服务端 /v1/teacher                    
 - **回声**：采音和播放在同一个 `AVAudioEngine` 上，开启系统 voice processing（回声消除）；小熊说话期间 VAD 的起始阈值再提高 8 dB，避免残余回声被当成插话。
 - **同步**：一段的白板变化在这段开始播放时执行，这段音频播完才开始下一段，所以画面跟着声音走。没有 TTS 时，每段按字数停留（每字 0.22 秒，至少 1.5 秒）。
 - **降级**：没配 ASR 只能打字；没配 TTS 只显示字幕；没配模型且 `VOICE_MOCK=true` 时回复固定的竖式演示。
+- **音频中断**：来电、Siri、插拔耳机或切到后台会让系统停掉音频引擎。回到前台或中断结束后自动重建；麦克风恢复不了时退到只播放，并提示孩子改用打字。
 
 ## 协议 `littlebear.teacher.v1`
 
@@ -45,19 +46,21 @@ WebSocket `/v1/teacher`，`Authorization: Bearer <一期设备凭证>`。
 | --- | --- |
 | `{"type":"session.start","childId":"…"}` | 必须先发；服务端加载该孩子的学情 |
 | 二进制帧 | 孩子说话时的 PCM16LE、16 kHz、单声道音频，第一帧开启一次识别 |
-| `{"type":"input.audio.end"}` / `input.audio.cancel` | 一句话说完 / 丢弃（误触发） |
-| `{"type":"input.text","text":"…"}` | 打字或点建议 |
-| `{"type":"response.cancel"}` | 打断 |
+| `{"type":"input.audio.end","turn":3}` / `input.audio.cancel` | 一句话说完 / 丢弃（说到一半静音、误触发） |
+| `{"type":"input.text","text":"…","turn":4}` | 打字或点建议；正在听的那句话会被丢弃 |
+| `{"type":"response.cancel","response":5}` | 打断。带 `response` 时只取消那一次回复，避免迟到的取消误杀新回复 |
+
+`turn` 是客户端自己递增的句子编号，服务端在定稿和 `response.start` 里原样带回。客户端只展示“最新一句、且之后没有被打断”的回复，其余的按编号取消。这样孩子连着说两句、或在识别还没出结果时点小熊打断，都不会播出过时的回复。
 
 下行：
 
 | 消息 | 说明 |
 | --- | --- |
 | `hello` → `session.ready {child, audio:{input, output}}` | `input`/`output` 为 null 表示没配 ASR/TTS |
-| `input.transcript.partial / final / empty` | 实时字幕、定稿、没听到内容 |
-| `response.start {response}` | 一次回复开始；`response` 是递增编号 |
+| `input.transcript.partial / final {turn} / empty {turn}` | 实时字幕、定稿、没听到内容 |
+| `response.start {response, turn}` | 一次回复开始；`response` 是递增编号 |
 | `segment {response, index, speech, board, await}` | 一段要说的话和白板 op；`await` 表示在等孩子回答 |
-| 二进制帧 | 前 4 字节：uint16 回复编号、uint16 段号（大端），后面是 PCM16LE，采样率见 `audio.output` |
+| 二进制帧 | 前 4 字节：uint16 回复编号、uint16 段号（大端），后面是 PCM16LE（每帧都是完整的 16 位采样），采样率见 `audio.output` |
 | `segment.audio.done {response, index, audio}` | 这段音频发完；`audio:false` 表示没有声音 |
 | `response.done` / `response.cancelled` / `error {code}` | |
 
@@ -107,5 +110,15 @@ WebSocket `/v1/teacher`，`Authorization: Bearer <一期设备凭证>`。
 ## 验收前要做的
 
 1. Mac 上 `xcodegen generate` 后编译、跑 `TeacherTests`（这一版没有在 Xcode 里编译过）。
-2. 配好 `VOLC_ASR_API_KEY`、`VOLC_TTS_SPEAKER` 和 DeepSeek，在真机上验：首句延迟、回声下的误打断、打断是否干脆、白板和语音是否对齐。
-3. 用 10 道二三年级数学题检查 DeepSeek 的输出：是否守住“一行一段”格式、白板 op 的合法率、是否直接说出答案。
+2. 配好 `VOLC_ASR_API_KEY`、`VOLC_TTS_SPEAKER` 和 DeepSeek，在真机上验：首句延迟、回声下的误打断、打断是否干脆、白板和语音是否对齐。用孩子的声音测识别（童声错误率通常明显高于成人），必要时配数学术语热词。
+3. 检查 DeepSeek 的输出：是否守住“一行一段”格式、白板 op 的合法率、是否直接说出答案。先用 10 道二三年级数学题冒烟，再建分年级的评测集（调研建议 300–500 题），换模型时用它对比。
+
+已知的取舍：检测到孩子开口就取消整段回复。咳嗽或环境噪声误触发时，这段回复会丢。真机上如果误打断多，改成“先暂停，识别出文字才取消，否则继续播”。
+
+## 参考
+
+[K12 数字老师 Agent：开源模型选型调研](https://claude.ai/artifact/Rjd6Sgm5jMS7waDGki23Xz)（2026-11-13，数字未逐页复核）。和本方案一致的部分：级联语音、say/draw 结构化白板、服务端校验、按段同步、不让模型给坐标。从中采纳、尚未实现的：
+
+- **验算**：流程拆成解题、代码验算、生成讲解。现在模型一遍输出；竖式的结果由 iPad 自己计算，不会错，但应用题的口头结论可能算错。
+- **拍题**：题图直接交给多模态模型，不先 OCR。
+- **模型升级路径**：先用 API，量大后评估单卡自部署。大脑走 OpenAI 兼容接口，换模型只改环境变量。

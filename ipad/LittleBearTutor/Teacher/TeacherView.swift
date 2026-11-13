@@ -23,12 +23,12 @@ struct TeacherView: View {
                     if wide {
                         HStack(spacing: 24) {
                             board
-                            sidePanel.frame(width: min(360, geometry.size.width * 0.3))
+                            panel(wide: true).frame(width: min(360, geometry.size.width * 0.3))
                         }
                     } else {
                         VStack(spacing: 20) {
                             board
-                            sidePanel.frame(height: 300)
+                            panel(wide: false).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -37,15 +37,17 @@ struct TeacherView: View {
             }
         }
         .background(Color.paper.ignoresSafeArea())
-        .task {
-            guard let session = store.session else { return }
-            teacher.start(session: session, child: child)
-        }
+        .task { connect() }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         .onDisappear {
             teacher.stop()
             UIApplication.shared.isIdleTimerDisabled = false
         }
+    }
+
+    private func connect() {
+        guard let session = store.session else { return }
+        teacher.start(session: session, child: child)
     }
 
     // MARK: Pieces
@@ -69,10 +71,7 @@ struct TeacherView: View {
                 }
                 .accessibilityLabel(teacher.muted ? "打开麦克风" : "关闭麦克风")
             }
-            Button {
-                typing.toggle()
-                fieldFocused = typing
-            } label: {
+            Button { typing.toggle() } label: {
                 Image(systemName: "keyboard").font(.system(size: 22, weight: .semibold)).foregroundStyle(typing ? Color.pine : Color.ink)
                     .frame(width: 52, height: 52).background(typing ? Color.pineSoft : Color.card, in: Circle()).overlay(Circle().stroke(Color.line))
             }
@@ -82,7 +81,7 @@ struct TeacherView: View {
     }
 
     private var board: some View {
-        WhiteboardView(elements: teacher.elements, lastChanged: teacher.lastChanged, placeholder: AnyView(emptyBoard))
+        WhiteboardView(elements: teacher.elements, focus: teacher.focus, placeholder: AnyView(emptyBoard))
     }
 
     private var emptyBoard: some View {
@@ -94,7 +93,7 @@ struct TeacherView: View {
                         Text(text).font(.system(size: 20, weight: .semibold)).foregroundStyle(Color.pine)
                             .padding(.horizontal, 18).frame(height: 48).background(Color.pineSoft, in: Capsule())
                     }
-                    .disabled(!canTalk)
+                    .disabled(!teacher.canTalk)
                 }
             }
             .frame(maxWidth: 560)
@@ -102,34 +101,57 @@ struct TeacherView: View {
         .padding(32)
     }
 
-    private var sidePanel: some View {
-        VStack(spacing: 18) {
-            Spacer(minLength: 0)
-            BearOrb(phase: teacher.phase, level: teacher.level)
-                .onTapGesture { teacher.interrupt() }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("小熊说话时点一下可以打断")
-            Text(statusText).font(.system(size: 20, weight: .bold)).foregroundStyle(statusColor)
-            if teacher.awaitingAnswer && teacher.phase == .listening {
-                Chip(text: "轮到你说啦", fg: .honeyInk, bg: .honeySoft, size: 17)
+    /// The bear and what is being said: a column beside the board in landscape, a row under it in portrait.
+    @ViewBuilder private func panel(wide: Bool) -> some View {
+        if wide {
+            VStack(spacing: 18) {
+                Spacer(minLength: 0)
+                orb(size: 200)
+                status
+                texts
+                Spacer(minLength: 0)
             }
-            if !teacher.caption.isEmpty {
-                Text(teacher.caption).font(.system(size: 22, weight: .medium, design: .rounded)).foregroundStyle(Color.ink)
-                    .multilineTextAlignment(.center).lineLimit(5).minimumScaleFactor(0.7)
-                    .padding(16).frame(maxWidth: .infinity).background(Color.card, in: RoundedRectangle(cornerRadius: 20))
-                    .animation(.easeInOut(duration: 0.2), value: teacher.caption)
+        } else {
+            HStack(alignment: .center, spacing: 24) {
+                VStack(spacing: 10) { orb(size: 140); status }
+                VStack(spacing: 12) { texts }.frame(maxWidth: .infinity)
             }
-            if !teacher.heard.isEmpty {
-                HStack(alignment: .top, spacing: 8) {
-                    Avatar(child: child, size: 30)
-                    Text(teacher.heard).font(.system(size: 18)).foregroundStyle(Color.ink2).lineLimit(3)
-                }
-                .padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color.chip, in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private func orb(size: CGFloat) -> some View {
+        BearOrb(phase: teacher.phase, level: teacher.voiceLevel, size: size)
+            .onTapGesture { teacher.interrupt() }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("小熊说话时点一下可以打断")
+    }
+
+    private var status: some View {
+        Text(statusText).font(.system(size: 20, weight: .bold)).foregroundStyle(statusColor).multilineTextAlignment(.center)
+    }
+
+    @ViewBuilder private var texts: some View {
+        if teacher.awaitingAnswer && teacher.phase == .listening {
+            Chip(text: "轮到你说啦", fg: .honeyInk, bg: .honeySoft, size: 17)
+        }
+        if !teacher.caption.isEmpty {
+            Text(teacher.caption).font(.system(size: 22, weight: .medium, design: .rounded)).foregroundStyle(Color.ink)
+                .multilineTextAlignment(.center).lineLimit(5).minimumScaleFactor(0.7)
+                .padding(16).frame(maxWidth: .infinity).background(Color.card, in: RoundedRectangle(cornerRadius: 20))
+                .animation(.easeInOut(duration: 0.2), value: teacher.caption)
+        }
+        if !teacher.heard.isEmpty {
+            HStack(alignment: .top, spacing: 8) {
+                Avatar(child: child, size: 30)
+                Text(teacher.heard).font(.system(size: 18)).foregroundStyle(Color.ink2).lineLimit(3)
             }
-            if let notice = teacher.notice {
-                Text(notice).font(.system(size: 16)).foregroundStyle(Color.honeyInk).multilineTextAlignment(.center)
-            }
-            Spacer(minLength: 0)
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Color.chip, in: RoundedRectangle(cornerRadius: 16))
+        }
+        if let notice = teacher.notice {
+            Text(notice).font(.system(size: 16)).foregroundStyle(Color.honeyInk).multilineTextAlignment(.center)
+        }
+        if case .failed = teacher.phase {
+            Button("再试一次", action: connect).buttonStyle(SecondaryButtonStyle())
         }
     }
 
@@ -141,20 +163,18 @@ struct TeacherView: View {
                 .focused($fieldFocused)
                 .submitLabel(.send)
                 .onSubmit(sendDraft)
+                .onAppear { fieldFocused = true }
             Button("发送", action: sendDraft).buttonStyle(PrimaryButtonStyle())
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || !canTalk)
+                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || !teacher.canTalk)
         }
         .padding(.horizontal, 28).padding(.vertical, 14)
         .background(Color.paper)
     }
 
     private func sendDraft() {
+        guard teacher.canTalk else { return } // keep the text when the connection is down
         teacher.say(draft)
         draft = ""
-    }
-
-    private var canTalk: Bool {
-        switch teacher.phase { case .connecting, .ended, .failed: false; default: true }
     }
 
     private var statusText: String {
@@ -179,7 +199,8 @@ struct TeacherView: View {
 /// and pulses while talking.
 struct BearOrb: View {
     let phase: TeacherSession.Phase
-    let level: Float
+    @ObservedObject var level: VoiceLevel
+    var size: CGFloat = 200
     @State private var pulse = false
     @State private var spin = false
 
@@ -187,7 +208,7 @@ struct BearOrb: View {
         ZStack {
             Circle().fill(ringColor.opacity(0.14))
                 .scaleEffect(scale)
-                .animation(.easeOut(duration: 0.12), value: level)
+                .animation(.easeOut(duration: 0.12), value: level.value)
             Circle().stroke(ringColor.opacity(0.5), lineWidth: 6)
                 .scaleEffect(phase == .speaking && pulse ? 1.08 : 1)
             if phase == .thinking {
@@ -196,15 +217,15 @@ struct BearOrb: View {
                     .onAppear { withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) { spin = true } }
                     .onDisappear { spin = false }
             }
-            BearView(size: 128)
+            BearView(size: size * 0.64)
         }
-        .frame(width: 200, height: 200)
+        .frame(width: size, height: size)
         .onAppear { withAnimation(.easeInOut(duration: 0.9).repeatForever()) { pulse = true } }
     }
 
     private var scale: CGFloat {
         switch phase {
-        case .hearing: 0.9 + CGFloat(level) * 0.35
+        case .hearing: 0.9 + CGFloat(level.value) * 0.35
         case .listening: pulse ? 0.95 : 0.9
         case .speaking: pulse ? 1.05 : 0.95
         default: 0.9

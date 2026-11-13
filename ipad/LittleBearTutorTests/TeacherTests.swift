@@ -34,9 +34,9 @@ final class TeacherTests: XCTestCase {
 
     func testBoardOpsUpsertRemoveAndClear() {
         var elements: [BoardElement] = []
-        let add: [String: Any] = ["op": "add", "el": ["id": "v1", "type": "vertical", "a": 38, "b": 27, "operator": "+", "reveal": 0, "focus": -1]]
+        let add: [String: Any] = ["op": "add", "el": ["id": "v1", "type": "vertical", "a": 38, "b": 27, "operator": "+", "reveal": 0, "focus": -1] as [String: Any]]
         XCTAssertEqual(BoardOps.apply(add, to: &elements), "v1")
-        let update: [String: Any] = ["op": "update", "el": ["id": "v1", "type": "vertical", "a": 38, "b": 27, "operator": "+", "reveal": 1, "focus": 0]]
+        let update: [String: Any] = ["op": "update", "el": ["id": "v1", "type": "vertical", "a": 38, "b": 27, "operator": "+", "reveal": 1, "focus": 0] as [String: Any]]
         BoardOps.apply(update, to: &elements)
         XCTAssertEqual(elements.count, 1)
         XCTAssertEqual(elements[0].kind, .vertical(a: 38, b: 27, op: "+", reveal: 1, focus: 0))
@@ -56,7 +56,8 @@ final class TeacherTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         let element = try XCTUnwrap(BoardElement(json: object))
         XCTAssertEqual(element.kind, .bar(rows: [.init(label: "小红", parts: [.init(value: 12, label: "12本"), .init(value: nil, label: "?")])], total: "一共"))
-        let line = try XCTUnwrap(BoardElement(json: ["id": "n1", "type": "number_line", "from": 0, "to": 20, "marks": [8], "jumps": [["from": 8, "to": 13, "label": "+5"]]]))
+        let jump: [String: Any] = ["from": 8, "to": 13, "label": "+5"]
+        let line = try XCTUnwrap(BoardElement(json: ["id": "n1", "type": "number_line", "from": 0, "to": 20, "marks": [8], "jumps": [jump]]))
         XCTAssertEqual(line.kind, .numberLine(from: 0, to: 20, step: 1, marks: [8], jumps: [.init(from: 8, to: 13, label: "+5")]))
     }
 

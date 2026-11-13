@@ -3,6 +3,7 @@ import { acceptWebSocket } from './websocket.mjs';
 import { Board, describeLearner, normalizeSegment, teacherPrompt } from './board.mjs';
 
 export const TEACHER_PATH = '/v1/teacher';
+const turnOf = event => (Number.isSafeInteger(event?.turn) ? event.turn : undefined);
 const maxText = 1_000;
 const maxHistory = 16;
 
@@ -10,7 +11,9 @@ const maxHistory = 16;
  * Voice teacher session (`littlebear.teacher.v1`), authenticated with a phase-1 device credential.
  *
  * Client → server: `session.start {childId}`; binary PCM16LE 16 kHz mono while the child speaks, then
- * `input.audio.end` (or `input.audio.cancel`); `input.text {text}`; `response.cancel` to barge in.
+ * `input.audio.end {turn}` (or `input.audio.cancel`); `input.text {text, turn}`; `response.cancel {response}` to
+ * barge in. `turn` is the client's own counter, echoed on the transcript and `response.start`, so a client can
+ * drop a reply to a sentence it has since moved on from; `response` limits a cancel to that reply.
  * Server → client: `session.ready`, `input.transcript.partial|final|empty`, `response.start`, then per segment
  * `segment {index, speech, board, await}`, binary audio frames (4-byte header: uint16 response, uint16 segment,
  * then PCM16LE at `audio.output.sample_rate`) and `segment.audio.done`, finally `response.done`.
@@ -34,15 +37,15 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
     const cancelResponse = () => { generation += 1; controller?.abort(); controller = null; };
     const dropUtterance = () => { utterance?.stream?.abort(); utterance = null; };
 
-    async function respond(text) {
+    async function respond(text, turn) {
       inputTimes = inputTimes.filter(time => Date.now() - time < 60_000);
-      if (inputTimes.length >= 20) return send({ type: 'error', code: 'rate_limited' });
+      if (inputTimes.length >= 20) return send({ type: 'error', code: 'rate_limited', turn });
       inputTimes.push(Date.now());
       cancelResponse();
       const response = generation, abort = new AbortController(), signal = abort.signal;
       controller = abort;
       const stale = () => closed || signal.aborted || response !== generation;
-      send({ type: 'response.start', response });
+      send({ type: 'response.start', response, turn });
       const spoken = [];
       let index = 0;
       try {
@@ -57,8 +60,13 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
           let audio = false;
           if (tts && segment.speech) {
             try {
-              for await (const pcm of tts.synthesize(segment.speech, { signal })) {
+              let odd = null; // a sample split across two chunks: frames always carry whole 16-bit samples
+              for await (const chunk of tts.synthesize(segment.speech, { signal })) {
                 if (stale()) return;
+                let pcm = odd ? Buffer.concat([odd, chunk]) : chunk;
+                odd = pcm.length % 2 ? pcm.subarray(pcm.length - 1) : null;
+                if (odd) pcm = pcm.subarray(0, pcm.length - 1);
+                if (!pcm.length) continue;
                 const header = Buffer.alloc(4);
                 header.writeUInt16BE(response & 0xffff, 0); header.writeUInt16BE(index & 0xffff, 2);
                 connection.sendBinary(Buffer.concat([header, pcm]));
@@ -128,24 +136,29 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
       }
       if (!learner) return send({ type: 'error', code: 'session_not_started' });
       switch (event?.type) {
-        case 'response.cancel': cancelResponse(); return send({ type: 'response.cancelled' });
+        case 'response.cancel':
+          // A cancel naming a reply only stops that one: a late cancel must not kill the reply to a newer sentence.
+          if (event.response === undefined || event.response === generation) cancelResponse();
+          return send({ type: 'response.cancelled' });
         case 'input.audio.cancel': return dropUtterance();
         case 'input.audio.end': {
-          const current = utterance; utterance = null;
-          if (!current || current.unsupported) return send({ type: 'input.transcript.empty' });
+          const current = utterance, turn = turnOf(event); utterance = null;
+          if (!current || current.unsupported) return send({ type: 'input.transcript.empty', turn });
           let text = '';
           try { text = (await current.stream.end()).text.trim().slice(0, maxText); }
-          catch (error) { if (!closed) { console.error('teacher asr error', error?.message); send({ type: 'error', code: 'asr_unavailable' }); } return; }
+          catch (error) { if (!closed) { console.error('teacher asr error', error?.message); send({ type: 'error', code: 'asr_unavailable', turn }); } return; }
           if (closed) return;
-          if (!text) return send({ type: 'input.transcript.empty' });
-          send({ type: 'input.transcript.final', text });
-          return respond(text);
+          if (!text) return send({ type: 'input.transcript.empty', turn });
+          send({ type: 'input.transcript.final', text, turn });
+          return respond(text, turn);
         }
         case 'input.text': {
           const text = typeof event.text === 'string' ? event.text.trim().slice(0, maxText) : '';
           if (!text) return send({ type: 'error', code: 'empty_input' });
-          send({ type: 'input.transcript.final', text });
-          return respond(text);
+          dropUtterance(); // typing replaces a sentence that was still being heard
+          const turn = turnOf(event);
+          send({ type: 'input.transcript.final', text, turn });
+          return respond(text, turn);
         }
         default: return undefined;
       }

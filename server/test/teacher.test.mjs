@@ -170,7 +170,8 @@ test('teacher session: learner context reaches the model, segments arrive with b
       '{"speech":"我们来算三十八加二十七。","board":[{"op":"clear"},{"op":"add","el":{"id":"v1","type":"vertical","a":38,"b":27,"operator":"+"}}]}\n',
       '{"speech":"个位八加七等于几？","board":[{"op":"update","id":"v1","set":{"focus":0}},{"op":"add","el":{"id":"x","type":"svg"}}],"await":true}\n']));
   };
-  const tts = { sampleRate: 24000, async *synthesize(text) { yield Buffer.from([text.length, 0]); yield Buffer.from([1, 0]); } };
+  // Chunks that split a 16-bit sample: 3 + 1 bytes must arrive as two whole samples.
+  const tts = { sampleRate: 24000, async *synthesize(text) { yield Buffer.from([text.length, 0, 1]); yield Buffer.from([0]); } };
   const { connect, childId } = await setup(t, { fetchImpl, tts });
   const { send, until, events } = await connect();
   assert.equal((await until(e => e.type === 'hello')).protocol, 'littlebear.teacher.v1');
@@ -180,8 +181,10 @@ test('teacher session: learner context reaches the model, segments arrive with b
   assert.deepEqual(ready.audio.output, { format: 'pcm_s16le', sample_rate: 24000, channels: 1 });
   assert.equal(ready.audio.input, null, 'no ASR configured');
 
-  send({ type: 'input.text', text: '三十八加二十七怎么算' });
+  send({ type: 'input.text', text: '三十八加二十七怎么算', turn: 7 });
   await until(e => e.type === 'response.done');
+  assert.equal(events.find(e => e.type === 'input.transcript.final').turn, 7);
+  assert.equal(events.find(e => e.type === 'response.start').turn, 7);
   assert.equal(modelRequest.stream, true);
   assert.match(modelRequest.messages[1].content, /林林，2年级/);
   assert.match(modelRequest.messages[1].content, /口算本第 12 页（还没做）/);
@@ -189,10 +192,12 @@ test('teacher session: learner context reaches the model, segments arrive with b
 
   const kinds = events.slice(events.findIndex(e => e.type === 'response.start')).map(e => e.type ?? 'binary');
   assert.deepEqual(kinds, ['response.start', 'segment', 'binary', 'binary', 'segment.audio.done', 'segment', 'binary', 'binary', 'segment.audio.done', 'response.done']);
+  assert.deepEqual(events.filter(e => e.binary).map(e => e.binary.length - 4), [2, 2, 2, 2], 'whole samples only');
   const segments = events.filter(e => e.type === 'segment');
   assert.deepEqual(segments[1].board, [{ op: 'update', el: { id: 'v1', type: 'vertical', a: 38, b: 27, operator: '+', reveal: 0, focus: 0 } }], 'invalid element dropped');
   assert.equal(segments[1].await, true);
   const audio = events.filter(e => e.binary);
+  assert.deepEqual([...audio[1].binary.subarray(4)], [1, 0], 'the split sample is rejoined');
   assert.equal(audio[2].binary.readUInt16BE(0), segments[1].response);
   assert.equal(audio[2].binary.readUInt16BE(2), 1, 'segment index in the frame header');
 
@@ -205,15 +210,16 @@ test('teacher session: learner context reaches the model, segments arrive with b
 });
 
 test('teacher session: speech goes through streaming ASR, and a barge-in cancels the response', async t => {
-  let release;
-  const fetchImpl = async (url, init) => new Response((async function* () {
+  let release, modelSignal;
+  const fetchImpl = async (url, init) => { modelSignal = init.signal; return new Response((async function* () {
     yield Buffer.from(`data: ${JSON.stringify({ choices: [{ delta: { content: '{"speech":"第一段"}\n' } }] })}\n\n`);
     await new Promise(resolve => { release = resolve; init.signal.addEventListener('abort', resolve); });
     yield Buffer.from(`data: ${JSON.stringify({ choices: [{ delta: { content: '{"speech":"第二段"}\n' } }] })}\n\n`);
-  })());
+  })()); };
   const received = [];
+  let aborted = 0;
   const asr = { stream({ onText }) {
-    return { write(pcm) { received.push(pcm.length); onText(received.length === 1 ? '八加' : '八加七'); }, end: async () => ({ text: '八加七' }), abort() {} };
+    return { write(pcm) { received.push(pcm.length); onText(received.length === 1 ? '八加' : '八加七'); }, end: async () => ({ text: '八加七' }), abort() { aborted++; } };
   } };
   const { connect, childId } = await setup(t, { fetchImpl, asr });
   const { ws, send, until, events } = await connect();
@@ -226,13 +232,27 @@ test('teacher session: speech goes through streaming ASR, and a barge-in cancels
   assert.equal((await until(e => e.type === 'input.transcript.final')).text, '八加七');
   await until(e => e.type === 'segment.audio.done');
   assert.equal(events.find(e => e.type === 'segment.audio.done').audio, false, 'no TTS configured');
-  send({ type: 'response.cancel' });
+  const running = events.find(e => e.type === 'response.start').response;
+  send({ type: 'response.cancel', response: running - 1 });
   await until(e => e.type === 'response.cancelled');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(modelSignal.aborted, false, 'a cancel for an older reply leaves this one running');
+  events.length = events.findIndex(e => e.type === 'response.cancelled'); // forget the first acknowledgement
+  send({ type: 'response.cancel', response: running });
+  await until(e => e.type === 'response.cancelled');
+  assert.equal(modelSignal.aborted, true);
   release?.();
   await new Promise(resolve => setTimeout(resolve, 50));
   assert.equal(events.filter(e => e.type === 'segment').length, 1, 'nothing after the barge-in');
   assert.ok(!events.some(e => e.type === 'response.done'));
   assert.deepEqual(received, [3200, 3200]);
+
+  // Typing while a sentence is being heard drops that sentence instead of leaving its recognition open.
+  ws.send(new Uint8Array(3200));
+  await until(e => e.type === 'input.transcript.partial' && events.indexOf(e) > events.findIndex(x => x.type === 'response.cancelled'));
+  send({ type: 'input.text', text: '我打字', turn: 3 });
+  await until(e => e.type === 'input.transcript.final' && e.text === '我打字' && e.turn === 3);
+  assert.equal(aborted, 1);
 });
 
 test('teacher session: mock lesson without a model, unknown child and bad credentials are refused', async t => {

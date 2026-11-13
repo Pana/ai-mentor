@@ -74,7 +74,7 @@ iPad 孩子端右上角“小熊老师”进入。孩子直接说话（不用按
 
 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- |
-| `WS /v1/teacher` | 一期设备凭证（家长或孩子设备） | 协议 `littlebear.teacher.v1`：`session.start {childId}` 后，上行 16 kHz PCM 音频帧 + `input.audio.end`，或 `input.text`；下行字幕、`segment {speech, board, await}`、带 4 字节头的 24 kHz PCM 音频帧。每分钟最多 20 轮，10 分钟无活动自动断开 |
+| `WS /v1/teacher` | 一期设备凭证（家长或孩子设备） | 协议 `littlebear.teacher.v1`：`session.start {childId}` 后，上行 16 kHz PCM 音频帧 + `input.audio.end {turn}`，或 `input.text {text, turn}`，打断用 `response.cancel {response}`；下行字幕、`segment {speech, board, await}`、带 4 字节头的 24 kHz PCM 音频帧。每分钟最多 20 轮，10 分钟无活动自动断开 |
 
 链路：火山流式语音识别（`bigmodel_async`，有实时字幕）→ `TEACHER_MODEL_NAME`（默认 `MODEL_NAME`，即 DeepSeek）流式输出“一行一段”的 JSON → 每段送火山语音合成。模型只能放语义化白板元素（竖式、数轴、点子图、线段图、钟面、文字），服务端逐条校验后才下发。
 

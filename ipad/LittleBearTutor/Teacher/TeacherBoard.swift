@@ -63,6 +63,12 @@ struct BoardElement: Identifiable, Equatable, Sendable {
     }
 }
 
+/// The element the board should scroll to. `tick` changes on every op, so updating the same element scrolls again.
+struct BoardFocus: Equatable, Sendable {
+    var id: String
+    var tick: Int
+}
+
 enum BoardOps {
     /// Applies one server op to `elements`; returns the id that changed, for scrolling to it.
     @discardableResult
@@ -138,7 +144,7 @@ struct ColumnCalc: Equatable {
 
 struct WhiteboardView: View {
     let elements: [BoardElement]
-    let lastChanged: String?
+    let focus: BoardFocus?
     var placeholder: AnyView? = nil
 
     var body: some View {
@@ -155,9 +161,9 @@ struct WhiteboardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(.spring(duration: 0.45), value: elements)
             }
-            .onChange(of: lastChanged) { _, id in
-                guard let id else { return }
-                withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(id, anchor: .center) }
+            .onChange(of: focus) { _, focus in
+                guard let focus else { return }
+                withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(focus.id, anchor: .center) }
             }
         }
         .overlay { if elements.isEmpty, let placeholder { placeholder } }
@@ -258,6 +264,7 @@ struct VerticalCalcView: View {
     private func digit(_ value: Int?, color: Color = .ink) -> some View {
         Text(value.map(String.init) ?? " ").font(.system(size: 50, weight: .bold, design: .rounded)).monospacedDigit()
             .foregroundStyle(color).frame(height: cell)
+            .id(value) // a digit being written is a new view, so it scales in
             .transition(.scale.combined(with: .opacity))
     }
 
