@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { attachVoice } from './voice.mjs';
+import { attachTeacher, TEACHER_PATH } from './teacher.mjs';
 
 const subjects = ['MATH', 'CHINESE', 'ENGLISH'];
 const modes = ['help', 'check', 'recognize', 'practice'];
@@ -160,6 +161,14 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
   });
   server.requestTimeout = 20_000;
   server.headersTimeout = 10_000;
-  return attachVoice(server, { ...config.voice, token: config.token,
+  attachVoice(server, { ...config.voice, token: config.token,
     respondText: config.voice?.respondText ?? voiceResponder(config, fetchImpl) });
+  if (config.api) attachTeacher(server, { api: config.api, model: config, mock: config.voice?.mock === true, fetchImpl, ...config.teacher });
+  // Any other upgrade path is refused here, after the voice and teacher listeners had their chance.
+  server.on('upgrade', (req, socket) => {
+    const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    if (path !== '/v1/voice' && path !== TEACHER_PATH) { socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); socket.destroy(); }
+    else if (path === TEACHER_PATH && !config.api) { socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n'); socket.destroy(); }
+  });
+  return server;
 }

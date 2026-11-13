@@ -574,6 +574,9 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     if (!header.startsWith('Bearer ')) fail(401, 'unauthorized');
     const device = q('SELECT * FROM devices WHERE token_hash = ? AND revoked_at IS NULL').get(hash(header.slice(7)));
     if (!device) fail(401, 'unauthorized');
+    return touch(device);
+  }
+  function touch(device) {
     const recent = (deviceRequests.get(device.id) ?? []).filter(t => now() - t < 60_000);
     if (recent.length >= 300) fail(429, 'rate_limited');
     recent.push(now());
@@ -627,5 +630,30 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     }
   }
 
-  return { handle, db, close: () => db.close() };
+  /** The device for a WebSocket upgrade's credential, or null. Same rate limit as HTTP requests. */
+  function deviceFor(req) {
+    try { return authenticate(req); } catch { return null; }
+  }
+
+  /**
+   * What the voice teacher knows about a child: profile, recent and upcoming homework with status and the
+   * parent's latest review. Plain facts from the homework tables; mastery and textbook progress come later.
+   */
+  function learnerContext(familyId, childId) {
+    const row = q('SELECT * FROM children WHERE id = ? AND family_id = ?').get(childId, familyId);
+    if (!row) return null;
+    materializeRoutines(familyId);
+    const { date } = today(familyId);
+    const items = q(`SELECT * FROM homework WHERE family_id = ? AND child_id = ? AND date BETWEEN ? AND ?
+      ORDER BY date DESC, created_at DESC LIMIT 30`).all(familyId, row.id, addDays(date, -7), addDays(date, 1));
+    const homework = items.map(h => {
+      const review = q(`SELECT r.* FROM reviews r JOIN submissions s ON s.id = r.submission_id WHERE r.homework_id = ?
+        ORDER BY s.attempt DESC LIMIT 1`).get(h.id);
+      return { date: h.date, dueDate: h.due_date, subject: h.subject, content: h.content.slice(0, 300), status: h.status,
+        ...(review ? { review: { grade: review.grade, comment: review.comment.slice(0, 200), requireCorrection: !!review.require_correction } } : {}) };
+    });
+    return { child: { id: row.id, name: row.name, grade: row.grade }, today: date, homework };
+  }
+
+  return { handle, db, deviceFor, learnerContext, close: () => db.close() };
 }

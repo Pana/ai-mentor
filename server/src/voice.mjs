@@ -15,7 +15,8 @@ export function attachVoice(server, config = {}) {
   const token = config.token, respondText = config.respondText, mock = config.mock === true;
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    if (url.pathname !== '/v1/voice' || !authorized(req, token)) {
+    if (url.pathname !== '/v1/voice') return; // other upgrade listeners handle their own paths
+    if (!authorized(req, token)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
     }
     let started = false, closed = false, sessionContext = {};
