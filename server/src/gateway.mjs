@@ -2,6 +2,7 @@ import http from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { attachVoice } from './voice.mjs';
 import { attachTeacher, TEACHER_PATH } from './teacher.mjs';
+import { createTeacherPage } from './teacher-page.mjs';
 
 const subjects = ['MATH', 'CHINESE', 'ENGLISH'];
 const modes = ['help', 'check', 'recognize', 'practice'];
@@ -120,11 +121,14 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
     if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) || url.username || url.password || url.hash) throw new Error('Invalid MODEL_API_URL');
   }
   let requests = [], active = 0;
+  const teacherPage = config.api ? createTeacherPage({ webDir: config.teacher?.webDir }) : null;
   const server = http.createServer(async (req, res) => {
     const send = (status, body) => { if (!res.destroyed) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); } };
     if (req.method === 'GET' && req.url === '/health') return send(200, { ok: true });
     // Hanzi dictionary: the /hanzi/ page, its stroke data and /v1/hanzi/lookup.
     if (config.hanzi && await config.hanzi(req, res)) return;
+    // Voice teacher web page at /teacher/ (its WebSocket is attached below).
+    if (teacherPage && await teacherPage(req, res)) return;
     // Phase-1 homework API: everything under /v1/ except the tutor endpoint.
     if (config.api && req.url.startsWith('/v1/') && !req.url.startsWith('/v1/tutor')) return config.api.handle(req, res);
     if (req.method !== 'POST' || req.url !== '/v1/tutor') return send(404, { error: 'not_found' });
@@ -163,7 +167,10 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
   server.headersTimeout = 10_000;
   attachVoice(server, { ...config.voice, token: config.token,
     respondText: config.voice?.respondText ?? voiceResponder(config, fetchImpl) });
-  if (config.api) attachTeacher(server, { api: config.api, model: config, mock: config.voice?.mock === true, fetchImpl, ...config.teacher });
+  if (config.api) {
+    const { webDir: _webDir, ...teacher } = config.teacher ?? {};
+    attachTeacher(server, { api: config.api, model: config, mock: config.voice?.mock === true, fetchImpl, ...teacher });
+  }
   // Any other upgrade path is refused here, after the voice and teacher listeners had their chance.
   server.on('upgrade', (req, socket) => {
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;

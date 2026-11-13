@@ -255,6 +255,40 @@ test('teacher session: speech goes through streaming ASR, and a barge-in cancels
   assert.equal(aborted, 1);
 });
 
+test('teacher session: an interrupted reply keeps only what was heard and puts the board back', async t => {
+  const requests = [];
+  const fetchImpl = async (url, init) => {
+    requests.push(JSON.parse(init.body));
+    return new Response(sse([
+      '{"speech":"先列竖式。","board":[{"op":"add","el":{"id":"v1","type":"vertical","a":38,"b":27,"operator":"+"}}]}\n',
+      '{"speech":"个位写五。","board":[{"op":"update","id":"v1","set":{"reveal":1}}]}\n',
+      '{"speech":"十位写六。","board":[{"op":"update","id":"v1","set":{"reveal":2}}]}\n']));
+  };
+  const { connect, childId } = await setup(t, { fetchImpl });
+  const { send, until, events } = await connect();
+  send({ type: 'session.start', childId });
+  await until(e => e.type === 'session.ready');
+  send({ type: 'input.text', text: '三十八加二十七', turn: 1 });
+  const done = await until(e => e.type === 'response.done'); // generated in full, long before it would be spoken
+  // The child speaks up while the second segment is playing.
+  send({ type: 'response.cancel', response: done.response, played: 2 });
+  await until(e => e.type === 'response.cancelled');
+  send({ type: 'input.text', text: '等一下', turn: 2 });
+  await until(e => e.type === 'response.done' && e.response !== done.response);
+  const second = requests[1].messages;
+  assert.equal(second.at(-2).content, '先列竖式。个位写五。（说到这里被孩子打断了）');
+  assert.match(second.at(-1).content, /"reveal":1/, 'the board is what the child saw, not what was generated');
+
+  // A reply that never started playing leaves no words and no drawing behind.
+  const third = events.filter(e => e.type === 'response.start').at(-1).response;
+  send({ type: 'response.cancel', response: third, played: 0 });
+  events.length = 0;
+  send({ type: 'input.text', text: '重新来', turn: 3 });
+  await until(e => e.type === 'response.done');
+  assert.equal(requests[2].messages.at(-2).content, '（还没开口就被孩子打断了）');
+  assert.match(requests[2].messages.at(-1).content, /"reveal":1/);
+});
+
 test('teacher session: mock lesson without a model, unknown child and bad credentials are refused', async t => {
   const { connect, childId } = await setup(t, { mock: true, withModel: false });
   const { send, until, events } = await connect();

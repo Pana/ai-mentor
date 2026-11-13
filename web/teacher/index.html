@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="小熊老师">
+  <meta name="theme-color" content="#f5f1e8">
+  <title>小熊老师</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%BB%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="bear" viewBox="0 0 64 64">
+      <circle cx="16" cy="16" r="10" fill="#c9822b"/><circle cx="48" cy="16" r="10" fill="#c9822b"/>
+      <circle cx="16" cy="16" r="5" fill="#f6d7a7"/><circle cx="48" cy="16" r="5" fill="#f6d7a7"/>
+      <circle cx="32" cy="35" r="24" fill="#e39a3b"/>
+      <ellipse cx="32" cy="44" rx="11" ry="8.5" fill="#f6d7a7"/>
+      <circle cx="23" cy="31" r="3" fill="#2a1e14"/><circle cx="41" cy="31" r="3" fill="#2a1e14"/>
+      <ellipse cx="32" cy="40" rx="3.6" ry="2.6" fill="#2a1e14"/>
+      <path d="M28 46 Q32 49 36 46" fill="none" stroke="#2a1e14" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-mic" viewBox="0 0 24 24"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6-3.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H8.5a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2H13v-2.59a6 6 0 0 0 5-5.91Z"/></symbol>
+    <symbol id="icon-mic-off" viewBox="0 0 24 24"><path fill="currentColor" opacity=".4" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6-3.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H8.5a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2H13v-2.59a6 6 0 0 0 5-5.91Z"/><path d="M4 3.5 20 20.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1.5M9.5 10H11M13 10h1.5M16.5 10H18M8 14h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="icon-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="2.95 2.94"/><circle cx="12" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" fill="currentColor"/></symbol>
+  </svg>
+
+  <div class="app" id="app">
+    <header class="top">
+      <div class="brand">
+        <svg class="brand-bear" aria-hidden="true"><use href="#bear"/></svg>
+        <div class="brand-text"><strong>小熊老师</strong><span id="who"></span></div>
+      </div>
+      <div class="actions">
+        <button class="round" id="mute" type="button" aria-label="关闭麦克风" aria-pressed="false" hidden>
+          <svg class="on" aria-hidden="true"><use href="#icon-mic"/></svg><svg class="off" aria-hidden="true"><use href="#icon-mic-off"/></svg>
+        </button>
+        <button class="round" id="keyboard" type="button" aria-label="打字" aria-pressed="false"><svg aria-hidden="true"><use href="#icon-keyboard"/></svg></button>
+        <button class="round" id="settings" type="button" aria-label="家长设置"><svg aria-hidden="true"><use href="#icon-gear"/></svg></button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="board" id="board" aria-label="白板">
+        <div class="board-content" id="board-content" aria-live="off"></div>
+        <div class="board-empty" id="board-empty">
+          <p>想学什么，直接跟小熊说吧！</p>
+          <div class="suggestions" id="suggestions">
+            <button type="button" class="suggestion">教我算 38 + 27</button>
+            <button type="button" class="suggestion">今天有什么作业？</button>
+            <button type="button" class="suggestion">怎么看钟表上的时间？</button>
+            <button type="button" class="suggestion">为什么会有白天和黑夜？</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel" id="panel">
+        <div class="panel-bear">
+          <button class="orb" id="orb" type="button" data-phase="idle" aria-label="小熊老师。小熊说话时点一下可以打断">
+            <span class="orb-fill"></span><span class="orb-ring"></span><span class="orb-spin"></span>
+            <svg class="orb-bear" aria-hidden="true"><use href="#bear"/></svg>
+          </button>
+          <p class="status" id="status" role="status"></p>
+        </div>
+        <div class="panel-text">
+          <p class="your-turn" id="your-turn" hidden>轮到你说啦</p>
+          <p class="caption" id="caption" aria-live="polite" hidden></p>
+          <p class="heard" id="heard" hidden><span class="avatar" id="avatar" aria-hidden="true"></span><span id="heard-text"></span></p>
+          <p class="notice" id="notice" hidden></p>
+          <button class="secondary" id="retry" type="button" hidden>再试一次</button>
+        </div>
+      </aside>
+    </main>
+
+    <form class="input-bar" id="input-bar" autocomplete="off" hidden>
+      <input id="draft" type="text" enterkeyhint="send" maxlength="200" placeholder="打字问小熊" aria-label="打字问小熊">
+      <button class="primary" type="submit">发送</button>
+    </form>
+  </div>
+
+  <!-- Before the conversation: connect this device, pick the child, then one tap to start (browsers need it for sound). -->
+  <div class="overlay" id="overlay">
+    <div class="sheet">
+      <svg class="sheet-bear" aria-hidden="true"><use href="#bear"/></svg>
+
+      <section id="step-loading"><p class="sheet-note">正在连接…</p></section>
+
+      <section id="step-pair" hidden>
+        <h1>连接小熊老师</h1>
+        <form id="pair-form" autocomplete="off">
+          <label for="pair-code">配对码</label>
+          <input id="pair-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="6 位数字" required>
+          <button class="primary" type="submit">连接</button>
+          <p class="sheet-note">请家长在小熊伴学家长端生成配对码。</p>
+        </form>
+        <details>
+          <summary>没有家长端？用家长密钥连接</summary>
+          <form id="secret-form" autocomplete="off">
+            <label for="secret">家长密钥（服务器上的 PARENT_BOOTSTRAP_TOKEN）</label>
+            <input id="secret" type="password" autocomplete="off" required>
+            <button class="secondary" type="submit">用密钥连接</button>
+          </form>
+        </details>
+      </section>
+
+      <section id="step-add-child" hidden>
+        <h1>添加孩子</h1>
+        <form id="child-form" autocomplete="off">
+          <label for="child-name">名字</label>
+          <input id="child-name" maxlength="20" required>
+          <label for="child-grade">年级</label>
+          <select id="child-grade">
+            <option value="1">一年级</option><option value="2" selected>二年级</option><option value="3">三年级</option>
+            <option value="4">四年级</option><option value="5">五年级</option><option value="6">六年级</option>
+          </select>
+          <button class="primary" type="submit">添加</button>
+        </form>
+      </section>
+
+      <section id="step-pick" hidden>
+        <h1>谁来学习？</h1>
+        <div class="children" id="children"></div>
+      </section>
+
+      <section id="step-start" hidden>
+        <h1 id="start-title">小熊老师</h1>
+        <p class="sheet-note" id="start-note">直接说话就行，不用按按钮。小熊说话时也可以打断它。</p>
+        <button class="primary big" id="start" type="button">开始</button>
+      </section>
+
+      <p class="sheet-error" id="sheet-error" role="alert" hidden></p>
+    </div>
+  </div>
+
+  <dialog id="settings-dialog">
+    <h2>家长设置</h2>
+    <p id="settings-info"></p>
+    <div class="dialog-actions">
+      <button class="secondary" id="switch-child" type="button" hidden>换一个孩子</button>
+      <button class="secondary danger" id="disconnect" type="button">断开这台设备</button>
+      <button class="primary" id="close-settings" type="button">关闭</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

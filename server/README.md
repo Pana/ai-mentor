@@ -70,16 +70,18 @@
 
 ## 小熊老师（语音老师）
 
-iPad 孩子端右上角“小熊老师”进入。孩子直接说话（不用按住按钮），小熊边说边在白板上画；小熊说话时孩子开口或点小熊就能打断。协议、白板 DSL 和分期见 [语音老师技术方案](../docs/voice-teacher.md)。
+网页在 `/teacher/`，源码在 `web/teacher/`，打开方式和真机检查清单见 [web/teacher/README.md](../web/teacher/README.md)。孩子直接说话（不用按住按钮），小熊边说边在白板上画；小熊说话时孩子开口或点小熊就能打断。协议、白板 DSL 和分期见 [语音老师技术方案](../docs/voice-teacher.md)。
 
 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- |
-| `WS /v1/teacher` | 一期设备凭证（家长或孩子设备） | 协议 `littlebear.teacher.v1`：`session.start {childId}` 后，上行 16 kHz PCM 音频帧 + `input.audio.end {turn}`，或 `input.text {text, turn}`，打断用 `response.cancel {response}`；下行字幕、`segment {speech, board, await}`、带 4 字节头的 24 kHz PCM 音频帧。每分钟最多 20 轮，10 分钟无活动自动断开 |
+| `GET /teacher/` | 无（页面自己用配对码或家长密钥连接成一台设备） | 网页和它的脚本、样式 |
+| `WS /v1/teacher` | 一期设备凭证（家长或孩子设备）：`Authorization` 头，或浏览器用子协议 `littlebear.token.<凭证>` | 协议 `littlebear.teacher.v1`：`session.start {childId}` 后，上行 16 kHz PCM 音频帧 + `input.audio.end {turn}`，或 `input.text {text, turn}`，打断用 `response.cancel {response, played}`；下行字幕、`segment {speech, board, await}`、带 4 字节头的 24 kHz PCM 音频帧。每分钟最多 20 轮，10 分钟无活动自动断开 |
 
 链路：火山流式语音识别（`bigmodel_async`，有实时字幕）→ `TEACHER_MODEL_NAME`（默认 `MODEL_NAME`，即 DeepSeek）流式输出“一行一段”的 JSON → 每段送火山语音合成。模型只能放语义化白板元素（竖式、数轴、点子图、线段图、钟面、文字），服务端逐条校验后才下发。
 
 - 发给模型：孩子说的话、最近 8 轮对话、当前白板，以及学情摘要（孩子姓名年级、最近 7 天到明天的作业内容、状态、家长评分和评语）。
 - 发给火山：孩子说话的音频（识别）和小熊要说的话（合成）。服务端不保存音频和对话。
+- 反向代理要转发 WebSocket 升级请求和 `Sec-WebSocket-Protocol` 头（Caddy 默认会）。iPad 上用麦克风需要 HTTPS。
 - 只配置了模型、没配语音时：没有 ASR，孩子端只能打字；没有 TTS，每段字幕停留一段时间后再显示下一段。`VOICE_MOCK=true` 且没有模型时，回复固定的竖式演示，便于在模拟器里调界面。
 
 ## 辅导网关

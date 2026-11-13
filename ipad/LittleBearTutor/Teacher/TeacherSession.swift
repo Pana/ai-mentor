@@ -67,6 +67,8 @@ import SwiftUI
     private var nextIndex = 0
     private var outstanding = 0
     private var responseDone = false
+    /// Segments of this reply that began playing: what the child heard and saw.
+    private var started = 0
     private var playbackToken = 0
 
     init() {
@@ -177,7 +179,8 @@ import SwiftUI
     }
 
     private func interruptIfNeeded() {
-        if response >= 0 { send(["type": "response.cancel", "response": response]) }
+        // The server has usually generated the whole reply already; tell it how far the child actually got.
+        if response >= 0 { send(["type": "response.cancel", "response": response, "played": started]) }
         resetPresentation()
         caption = ""
     }
@@ -227,7 +230,7 @@ import SwiftUI
             if eventTurn == turn, phase == .thinking { phase = .listening }
         case "response.start":
             guard let responseId else { return }
-            guard wanted else { send(["type": "response.cancel", "response": responseId]); return }
+            guard wanted else { send(["type": "response.cancel", "response": responseId, "played": 0]); return }
             resetPresentation()
             response = responseId
             phase = .thinking
@@ -328,6 +331,7 @@ import SwiftUI
         }
         let index = nextIndex
         presenting = index
+        started = index + 1
         phase = .speaking
         audio.strict = true
         caption = segment.speech
@@ -388,6 +392,7 @@ import SwiftUI
         nextIndex = 0
         outstanding = 0
         responseDone = false
+        started = 0
         awaitingAnswer = false
     }
 

@@ -3,6 +3,20 @@ import { acceptWebSocket } from './websocket.mjs';
 import { Board, describeLearner, normalizeSegment, teacherPrompt } from './board.mjs';
 
 export const TEACHER_PATH = '/v1/teacher';
+const PROTOCOL = 'littlebear.teacher.v1';
+const tokenProtocol = /^littlebear\.token\.([A-Za-z0-9_-]{24,128})$/;
+
+/**
+ * The upgrade request with its credential in the Authorization header. Browsers cannot set headers on a
+ * WebSocket, so the page offers the subprotocols `littlebear.teacher.v1, littlebear.token.<device token>`.
+ */
+function credentials(req) {
+  const offered = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map(value => value.trim());
+  const selected = offered.includes(PROTOCOL) ? PROTOCOL : undefined;
+  if (req.headers.authorization) return { request: req, selected };
+  const token = offered.map(value => tokenProtocol.exec(value)?.[1]).find(Boolean);
+  return { request: { headers: { authorization: token ? `Bearer ${token}` : '' } }, selected };
+}
 const turnOf = event => (Number.isSafeInteger(event?.turn) ? event.turn : undefined);
 const maxText = 1_000;
 const maxHistory = 16;
@@ -14,6 +28,8 @@ const maxHistory = 16;
  * `input.audio.end {turn}` (or `input.audio.cancel`); `input.text {text, turn}`; `response.cancel {response}` to
  * barge in. `turn` is the client's own counter, echoed on the transcript and `response.start`, so a client can
  * drop a reply to a sentence it has since moved on from; `response` limits a cancel to that reply.
+ * A reply is generated much faster than it is spoken, so a cancel also says how many segments had started
+ * playing (`played`): the history then keeps only what the child heard, and the board goes back to what they saw.
  * Server → client: `session.ready`, `input.transcript.partial|final|empty`, `response.start`, then per segment
  * `segment {index, speech, board, await}`, binary audio frames (4-byte header: uint16 response, uint16 segment,
  * then PCM16LE at `audio.output.sample_rate`) and `segment.audio.done`, finally `response.done`.
@@ -25,7 +41,8 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== TEACHER_PATH) return;
-    const ctx = api?.deviceFor(req);
+    const { request, selected } = credentials(req);
+    const ctx = api?.deviceFor(request);
     if (!ctx) { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
 
     const sessionID = randomUUID(), board = new Board(), history = [];
@@ -35,6 +52,19 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
     const send = value => { if (!closed) connection?.sendJSON(value); };
 
     const cancelResponse = () => { generation += 1; controller?.abort(); controller = null; };
+    // Per reply: each segment's words and the board after it, so an interrupted reply can be cut back.
+    const records = new Map();
+    let latest = null;
+    const said = record => {
+      if (record.played === null) return record.spoken.join('') || '（没有说完）';
+      const heard = record.spoken.slice(0, record.played).join('');
+      return heard ? `${heard}（说到这里被孩子打断了）` : '（还没开口就被孩子打断了）';
+    };
+    function cutBack(record, played) {
+      record.played = Math.min(played, record.spoken.length);
+      if (record.entry) record.entry.content = said(record);
+      if (record === latest) board.elements = structuredClone(record.played ? record.boards[record.played - 1] : record.before);
+    }
     const dropUtterance = () => { utterance?.stream?.abort(); utterance = null; };
 
     async function respond(text, turn) {
@@ -46,7 +76,10 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
       controller = abort;
       const stale = () => closed || signal.aborted || response !== generation;
       send({ type: 'response.start', response, turn });
-      const spoken = [];
+      const record = { spoken: [], boards: [], before: structuredClone(board.elements), played: null, entry: null };
+      records.set(response, record);
+      for (const id of records.keys()) if (records.size > 4) records.delete(id);
+      latest = record;
       let index = 0;
       try {
         const source = modelReady ? modelSegments(text, signal) : mock ? mockSegments(text) : null;
@@ -56,7 +89,8 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
           const segment = normalizeSegment(raw, board);
           if (!segment) continue;
           send({ type: 'segment', response, index, ...segment });
-          if (segment.speech) spoken.push(segment.speech);
+          record.spoken.push(segment.speech);
+          record.boards.push(structuredClone(board.elements));
           let audio = false;
           if (tts && segment.speech) {
             try {
@@ -87,8 +121,8 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
         if (!stale()) { console.error('teacher model error', error?.message); send({ type: 'error', code: 'teacher_model_unavailable' }); }
       } finally {
         // Keep what the child actually heard, even after a barge-in, so the next turn continues from there.
-        history.push({ role: 'user', content: text });
-        history.push({ role: 'assistant', content: spoken.join('') || '（没有说完）' });
+        record.entry = { role: 'assistant', content: said(record) };
+        history.push({ role: 'user', content: text }, record.entry);
         history.splice(0, Math.max(0, history.length - maxHistory));
         if (response === generation) controller = null;
       }
@@ -139,6 +173,7 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
         case 'response.cancel':
           // A cancel naming a reply only stops that one: a late cancel must not kill the reply to a newer sentence.
           if (event.response === undefined || event.response === generation) cancelResponse();
+          if (records.has(event.response) && Number.isInteger(event.played) && event.played >= 0) cutBack(records.get(event.response), event.played);
           return send({ type: 'response.cancelled' });
         case 'input.audio.cancel': return dropUtterance();
         case 'input.audio.end': {
@@ -162,10 +197,10 @@ export function attachTeacher(server, { api, model = {}, asr = null, tts = null,
         }
         default: return undefined;
       }
-    }, () => { closed = true; clearTimeout(idleTimer); cancelResponse(); dropUtterance(); });
+    }, () => { closed = true; clearTimeout(idleTimer); cancelResponse(); dropUtterance(); }, { protocol: selected });
     if (!connection) return;
     touch();
-    connection.sendJSON({ type: 'hello', protocol: 'littlebear.teacher.v1' });
+    connection.sendJSON({ type: 'hello', protocol: PROTOCOL });
   });
   return server;
 }
