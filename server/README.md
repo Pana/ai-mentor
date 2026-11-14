@@ -68,6 +68,22 @@
 
 汉字语音识别配置：`VOLC_ASR_API_KEY` 使用火山引擎新版控制台 API Key；`VOLC_ASR_RESOURCE_ID` 推荐从 `volc.seedasr.sauc.duration` 开始。网页会把短句录成 PCM 发给服务端，调用流式语音识别模型 2.0 的 `bigmodel_nostream` 一句话模式并等待最终结果；未配置 ASR 或服务端暂不可用时明确提示，不调用浏览器自带的语音识别。
 
+## 小熊老师（语音老师）
+
+网页在 `/teacher/`，源码在 `web/teacher/`，打开方式和真机检查清单见 [web/teacher/README.md](../web/teacher/README.md)。孩子直接说话（不用按住按钮），小熊边说边在白板上画；小熊说话时孩子开口或点小熊就能打断。协议、白板 DSL 和分期见 [语音老师技术方案](../docs/voice-teacher.md)。
+
+| 路径 | 鉴权 | 说明 |
+| --- | --- | --- |
+| `GET /teacher/` | 无（页面自己用配对码或家长密钥连接成一台设备） | 网页和它的脚本、样式 |
+| `WS /v1/teacher` | 一期设备凭证（家长或孩子设备）：`Authorization` 头，或浏览器用子协议 `littlebear.token.<凭证>` | 协议 `littlebear.teacher.v1`：`session.start {childId}` 后，上行 16 kHz PCM 音频帧 + `input.audio.end {turn}`，或 `input.text {text, turn}`，打断用 `response.cancel {response, played}`；下行字幕、`segment {speech, board, await}`、带 4 字节头的 24 kHz PCM 音频帧。每分钟最多 20 轮，10 分钟无活动自动断开 |
+
+链路：火山流式语音识别（`bigmodel_async`，有实时字幕）→ `TEACHER_MODEL_NAME`（默认 `MODEL_NAME`，即 DeepSeek）流式输出“一行一段”的 JSON → 每段送火山语音合成。模型只能放语义化白板元素（竖式、数轴、点子图、线段图、钟面、文字），服务端逐条校验后才下发。
+
+- 发给模型：孩子说的话、最近 8 轮对话、当前白板，以及学情摘要（孩子姓名年级、最近 7 天到明天的作业内容、状态、家长评分和评语）。
+- 发给火山：孩子说话的音频（识别）和小熊要说的话（合成）。服务端不保存音频和对话。
+- 反向代理要转发 WebSocket 升级请求和 `Sec-WebSocket-Protocol` 头（Caddy 默认会）。iPad 上用麦克风需要 HTTPS。
+- 只配置了模型、没配语音时：没有 ASR，孩子端只能打字；没有 TTS，每段字幕停留一段时间后再显示下一段。`VOICE_MOCK=true` 且没有模型时，回复固定的竖式演示，便于在模拟器里调界面。
+
 ## 辅导网关
 
 面向单个试用家庭的无状态网关。接收当前任务的文字、可选 JPEG 图片及最近 8 轮对话，转发给配置的兼容 Chat Completions 服务。供应商密钥仅存在于服务端环境变量。
@@ -94,6 +110,13 @@ npm start
 | `VOLC_ASR_API_KEY` | 火山引擎豆包语音 API Key，仅服务端使用 |
 | `VOLC_ASR_RESOURCE_ID` | 火山引擎 ASR 资源 ID，默认 `volc.seedasr.sauc.duration` |
 | `VOLC_ASR_URL` | 火山引擎 ASR WebSocket 地址，默认 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream` |
+| `VOLC_ASR_STREAM_URL` | 小熊老师用的双向流式识别地址，默认 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async` |
+| `VOLC_TTS_API_KEY` | 火山语音合成 API Key；不填则沿用 `VOLC_ASR_API_KEY` |
+| `VOLC_TTS_SPEAKER` | 语音合成音色 ID（在火山控制台的音色列表里选，必须和资源 ID 的版本匹配）；不填则不合成语音 |
+| `VOLC_TTS_RESOURCE_ID` | 语音合成资源 ID，默认 `seed-tts-2.0`（只能用 2.0 音色；1.0 音色填 `seed-tts-1.0`） |
+| `VOLC_TTS_URL` | 默认 `https://openspeech.bytedance.com/api/v3/tts/unidirectional`（HTTP Chunked 单向流式） |
+| `VOLC_TTS_SPEECH_RATE` | 语速，默认 `0`；范围按火山文档，负数更慢 |
+| `TEACHER_MODEL_NAME` | 小熊老师用的模型 ID，默认 `MODEL_NAME` |
 | `MODEL_VISION_NAME` | 可选。同一供应商下支持图片输入的模型 ID，只用于带照片的请求（拍照识题、带图求助/检查） |
 | `MODEL_SUPPORTS_IMAGES` | 默认 `true`。`MODEL_NAME` 不能看图且未配置 `MODEL_VISION_NAME` 时设为 `false`：带图请求直接返回 422 `images_not_supported`，App 提示改用文字，不再请求上游 |
 | `MODEL_JSON_MODE` | 默认为 `true`，发送 `response_format: {type: "json_object"}`；供应商不支持时设 `false`，仍严格校验返回 JSON |

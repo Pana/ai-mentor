@@ -14,7 +14,7 @@ settings:
     INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
     INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
     INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
-    INFOPLIST_KEY_NSMicrophoneUsageDescription: "用于将你说的问题识别成文字，确认后才发送给辅导服务。"
+    INFOPLIST_KEY_NSMicrophoneUsageDescription: "用于和小熊老师语音对话：你说的话会发送到家里配置的辅导服务识别成文字。也用于录音作业。"
     INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "用于把你说的问题识别成文字，识别结果会先显示供你修改。"
     INFOPLIST_KEY_NSLocalNetworkUsageDescription: "用于连接家长配置的家庭辅导服务。"
     INFOPLIST_KEY_NSCameraUsageDescription: "拍摄当前作业题目，只有在你确认发送时才会交给辅导服务。"

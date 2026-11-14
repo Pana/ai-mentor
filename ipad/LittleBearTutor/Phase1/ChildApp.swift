@@ -83,6 +83,7 @@ struct ChildShell: View {
     @State private var tab = ChildTab.today
     @State private var path: [ChildRoute] = []
     @State private var settings = false
+    @State private var teacher = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -107,6 +108,7 @@ struct ChildShell: View {
             }
         }
         .sheet(isPresented: $settings) { IPadSettings() }
+        .fullScreenCover(isPresented: $teacher) { TeacherView(child: child).environmentObject(store) }
     }
 
     private var topBar: some View {
@@ -129,6 +131,12 @@ struct ChildShell: View {
             }
             .padding(5).background(Color(hex: 0xEAE4D8), in: Capsule())
             Spacer()
+            Button { teacher = true } label: {
+                HStack(spacing: 8) { BearView(size: 34); Text("小熊老师").font(.system(size: 18, weight: .bold)) }
+                    .foregroundStyle(Color.ink).padding(.leading, 8).padding(.trailing, 18).frame(height: 52)
+                    .background(Color.honeySoft, in: Capsule()).overlay(Capsule().stroke(Color.honey.opacity(0.5)))
+            }
+            .accessibilityLabel("和小熊老师语音聊天")
             ParentLockButton { settings = true }
         }
         .padding(.horizontal, 28).padding(.vertical, 14)

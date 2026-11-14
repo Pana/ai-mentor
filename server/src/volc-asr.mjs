@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
 
 const DEFAULT_URL = 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream';
+const DEFAULT_STREAM_URL = 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async';
 const DEFAULT_RESOURCE_ID = 'volc.seedasr.sauc.duration';
 
 function header(messageType, flags = 0b0001) {
@@ -70,9 +71,74 @@ export function parseResponse(message) {
  * This waits for the final result instead of rendering interim text, which is the
  * right tradeoff for a child saying a phrase such as “春天的春”.
  */
-export function createVolcAsr({ apiKey, resourceId = DEFAULT_RESOURCE_ID, url = DEFAULT_URL, WebSocketImpl = WebSocket } = {}) {
+export function createVolcAsr({ apiKey, resourceId = DEFAULT_RESOURCE_ID, url = DEFAULT_URL, streamUrl = DEFAULT_STREAM_URL,
+  WebSocketImpl = WebSocket } = {}) {
   if (!apiKey) return null;
+  resourceId ||= DEFAULT_RESOURCE_ID; url ||= DEFAULT_URL; streamUrl ||= DEFAULT_STREAM_URL;
   return {
+    /**
+     * Opens a bidirectional streaming recognition for one utterance (the voice teacher). Audio is sent while
+     * the child speaks; `onText` receives interim text; `end()` sends the last packet and resolves with the final text.
+     */
+    stream({ onText, signal } = {}) {
+      const requestId = randomUUID();
+      const ws = new WebSocketImpl(streamUrl, { headers: {
+        'X-Api-Key': apiKey, 'X-Api-Resource-Id': resourceId, 'X-Api-Request-Id': requestId, 'X-Api-Connect-Id': requestId
+      } });
+      let sequence = 1, open = false, ended = false, settled = false, latestText = '', bytes = 0, timer;
+      const queue = [];
+      let resolveFinal, rejectFinal;
+      const final = new Promise((resolve, reject) => { resolveFinal = resolve; rejectFinal = reject; });
+      final.catch(() => {}); // observed through end(); an abandoned stream must not raise an unhandled rejection
+      const finish = (error, value) => {
+        if (settled) return;
+        settled = true; clearTimeout(timer); signal?.removeEventListener('abort', abort);
+        try { ws.close(); } catch { /* already closed */ }
+        error ? rejectFinal(error) : resolveFinal(value);
+      };
+      const abort = () => { try { ws.terminate?.(); } catch { /* already closed */ } finish(Object.assign(new Error('aborted'), { name: 'AbortError' })); };
+      signal?.addEventListener('abort', abort, { once: true });
+      timer = setTimeout(() => finish(new Error('volc_asr_timeout')), 90_000);
+      const sendAudio = (chunk, last) => ws.send(audioFrame(chunk, sequence++, last));
+      ws.on('error', error => finish(error));
+      ws.on('close', () => finish(new Error('volc_asr_closed')));
+      ws.on('message', message => {
+        try {
+          const response = parseResponse(message);
+          if (response.code) return finish(new Error(`volc_asr_${response.code}`));
+          if (response.text && response.text !== latestText) { latestText = response.text; onText?.(latestText); }
+          if (response.last) finish(null, { text: latestText, requestId });
+        } catch (error) { finish(error); }
+      });
+      ws.once('open', () => {
+        try {
+          ws.send(fullRequestFrame({
+            user: { uid: 'littlebear-teacher' },
+            audio: { language: 'zh-CN', format: 'pcm', codec: 'raw', rate: 16_000, bits: 16, channel: 1 },
+            request: { model_name: 'bigmodel', enable_itn: true, enable_punc: true, enable_ddc: false, show_utterances: true, result_type: 'full' }
+          }, sequence++));
+          open = true;
+          for (const [chunk, last] of queue.splice(0)) sendAudio(chunk, last);
+        } catch (error) { finish(error); }
+      });
+      return {
+        write(pcm) {
+          if (settled || ended || !pcm?.length || bytes + pcm.length > 3_200_000) return; // 100 s; the caller ends the turn
+          bytes += pcm.length;
+          open ? sendAudio(pcm, false) : queue.push([Buffer.from(pcm), false]);
+        },
+        end() {
+          if (!settled && !ended) {
+            ended = true;
+            // The last packet must carry audio; 20 ms of silence closes an utterance that ended on a full chunk.
+            const tail = Buffer.alloc(640);
+            open ? sendAudio(tail, true) : queue.push([tail, true]);
+          }
+          return final;
+        },
+        abort
+      };
+    },
     async transcribe(pcm, { signal } = {}) {
       if (!Buffer.isBuffer(pcm) || pcm.length < 320) throw new Error('audio_too_short');
       if (pcm.length > 1_600_000) throw new Error('audio_too_large');

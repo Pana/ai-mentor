@@ -3,15 +3,16 @@ import { createHash } from 'node:crypto';
 // Small RFC 6455 server used by the gateway so the project does not need a
 // native module or a second public port. It supports text, binary, ping/pong
 // and close frames needed by the voice session.
-export function acceptWebSocket(req, socket, head, onMessage, onClose) {
+export function acceptWebSocket(req, socket, head, onMessage, onClose, { protocol } = {}) {
   const key = req.headers['sec-websocket-key'];
   if (!key || req.headers.upgrade?.toLowerCase() !== 'websocket') {
     socket.destroy();
     return null;
   }
   const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+  // `protocol` is the subprotocol the server selected from the client's offer (browsers require the echo).
   socket.write(['HTTP/1.1 101 Switching Protocols', 'Upgrade: websocket', 'Connection: Upgrade',
-    `Sec-WebSocket-Accept: ${accept}`, '\r\n'].join('\r\n'));
+    `Sec-WebSocket-Accept: ${accept}`, ...(protocol ? [`Sec-WebSocket-Protocol: ${protocol}`] : []), '\r\n'].join('\r\n'));
   const connection = new WebSocketConnection(socket, onMessage, onClose);
   if (head?.length) connection.receive(head);
   return connection;
