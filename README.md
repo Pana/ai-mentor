@@ -8,7 +8,7 @@
 | `server/` | 作业管理 API + AI 网关（Node 22，兼容 OpenAI API） | 一期接口已实现并测试；AI 整理作业已用 DeepSeek 实测 |
 | `web/teacher/` + `server/src/teacher.mjs` | 小熊老师：语音对话 + 白板讲题（火山 ASR/TTS + DeepSeek），网页版，服务端 `/teacher/` 提供 | 第一版已实现；用替身上游端到端跑通（`scripts/teacher-web.sh`），待接真实服务和 iPad Safari 真机验收。原生页面的代码在 `ipad/…/Teacher/`，未编译 |
 | `web/hanzi/` | 小熊写字：语音查字的汉字笔顺字典（网页版，服务端 `/hanzi/` 提供） | 支线任务；网页版可用，待集成到 iPad 端 |
-| `app/` | Android 客户端（Kotlin + Jetpack Compose） | 1.0.0-beta.1 候选，保留但暂停新功能 |
+| `app/` | Android 客户端（Kotlin + Jetpack Compose）：家长端和孩子端，手机和平板都能用 | 一期作业管理已实现（1.1.0-alpha.1）；真实服务端全流程测试通过（`scripts/android-phase1-e2e.sh`）；待真机验收 |
 
 AI 网关需要一个兼容 OpenAI 接口、**支持图片输入**的模型（拍照识题和带图求助需要看图）。小熊写字网页的短句识别已预留火山引擎豆包流式语音识别模型 2.0 一句话模式；iPad 前台实时语音仍使用本机中文识别和 `VOICE_MOCK=true` 联调，真实实时语音供应商尚未接入。外接摄像头和完整学科专项流程仍未完成，详见状态文档。
 
@@ -26,7 +26,8 @@ AI 网关需要一个兼容 OpenAI 接口、**支持图片输入**的模型（�
 - [首版候选实现与验证状态](docs/first-version-status.md)
 - [原型阶段记录](docs/prototype-status.md)
 - [开发环境、构建与机器迁移](docs/development.md)
-- [Android 实机验收清单](docs/device-validation.md)
+- [安卓一期：作业管理](docs/android-phase1.md)（实现说明与真机验收清单）
+- [Android 实机验收清单（旧版辅导）](docs/device-validation.md)
 - [AI 网关配置与供应商联调](server/README.md)
 
 ## iPad 构建（首发）
@@ -50,7 +51,7 @@ xcodebuild -project ipad/LittleBearTutor.xcodeproj -scheme LittleBearTutor \
 
 真机运行：在 Xcode 的 Signing & Capabilities 中选择个人 Team，连接 iPad 后 Run。详见 [iPad 客户端说明](ipad/README.md)。
 
-## Android 构建（保留）
+## Android 构建
 
 准备 JDK 17、Android SDK Platform 35、Build Tools 34.0.0，并在本机 `local.properties` 配置 `sdk.dir`。详细步骤见开发文档。
 
@@ -61,6 +62,8 @@ xcodebuild -project ipad/LittleBearTutor.xcodeproj -scheme LittleBearTutor \
 Windows 使用 `gradlew.bat`。项目通过 Wrapper 固定 Gradle 8.9，不需要全局安装 Gradle。
 
 构建产物：`app/build/outputs/apk/debug/app-debug.apk`。最低运行版本为 Android 8.0（API 26）。
+
+单元测试会用 Robolectric 渲染手机和平板截图，输出到 `app/build/screenshots/`。用真实服务端跑一期全流程：`scripts/android-phase1-e2e.sh`。
 
 当前默认为低内存机器限制构建并发。首次构建需要联网下载 Gradle 和 Maven 依赖。
 
