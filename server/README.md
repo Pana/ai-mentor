@@ -60,9 +60,9 @@
 | 方法与路径 | 鉴权 | 说明 |
 | --- | --- | --- |
 | `GET /hanzi/` | 无 | 网页 |
-| `GET /hanzi/strokes/<汉字>.json` | 无 | 笔顺数据 `{strokes, medians, radStrokes}`；第一次请求时从 jsDelivr/unpkg 下载 hanzi-writer-data 并存到 `DATA_DIR/hanzi-strokes/`。没有这个字返回 404 `no_stroke_data` |
+| `GET /hanzi/strokes/<汉字>.json` | 无 | 笔顺数据 `{strokes, medians, radStrokes, radical, radicalName, radicalMeaning}`，部首字段和 `radStrokes` 来自本地部首表 `src/hanzi-radicals.json`（`node scripts/hanzi-radicals.mjs` 生成），不用下载数据里的；第一次请求时从 jsDelivr/unpkg 下载 hanzi-writer-data 并存到 `DATA_DIR/hanzi-strokes/`。没有这个字返回 404 `no_stroke_data` |
 | `POST /v1/hanzi/asr` | 同源会话或 `TUTOR_DEVICE_TOKEN` | 16 kHz、单声道、16-bit PCM 短句 → `{text}`；配置 `VOLC_ASR_API_KEY` 后调用火山引擎豆包流式语音识别模型 2.0 的一句话模式 |
-| `POST /v1/hanzi/lookup` | 同源打开 `/hanzi/` 自动建立会话；跨地址访问可用 `TUTOR_DEVICE_TOKEN` | `{text}`（≤60 字，语音识别出的原话）→ `{word, chars:[{char, pinyin, radical, radicalName, radicalMeaning, structure, meaning, words, tip}], alternatives:[{char, pinyin, hint}], message}`。每分钟最多 30 次，相同问题的回答在内存里缓存 |
+| `POST /v1/hanzi/lookup` | 同源打开 `/hanzi/` 自动建立会话；跨地址访问可用 `TUTOR_DEVICE_TOKEN` | `{text}`（≤60 字，语音识别出的原话）→ `{word, chars:[{char, pinyin, radical, radicalName, radicalMeaning, structure, meaning, words, tip}], alternatives:[{char, pinyin, hint}], message}`。部首三项来自本地部首表，不来自模型；表里没有的字不带部首。每分钟最多 30 次，相同问题的回答在内存里缓存 |
 
 `HANZI_MODEL_NAME` 可单独指定字典用的模型，默认用 `MODEL_NAME`。只有孩子说的这句话会发给模型供应商。
 

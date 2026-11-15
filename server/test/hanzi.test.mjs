@@ -5,12 +5,16 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGateway } from '../src/gateway.mjs';
-import { createHanzi, validateLookupReply, validStrokeData, normalizeQuery, normalizeDetailWord } from '../src/hanzi.mjs';
+import { createHanzi, validateLookupReply, validStrokeData, normalizeQuery, normalizeDetailWord, radicalOf, withRadicals } from '../src/hanzi.mjs';
+import { openDatabase } from '../src/db.mjs';
 
 const token = 'device-test-token-not-a-secret-12345';
 const model = { apiUrl: 'https://model.test/chat/completions', apiKey: 'k', model: 'm', jsonMode: true };
-const strokeJson = { strokes: ['M 1 1 Z', 'M 2 2 Z'], medians: [[[1, 1]], [[2, 2]]], radStrokes: [0] };
-const jiang = { word: '江', chars: [{ char: '江', pinyin: 'jiāng', radical: '氵', radical_name: '三点水', radical_meaning: '和水有关',
+// 江 has six strokes; upstream marks the wrong radical strokes on purpose, the server must use its own table.
+const strokeJson = { strokes: ['M 1 1 Z', 'M 2 2 Z', 'M 3 3 Z', 'M 4 4 Z', 'M 5 5 Z', 'M 6 6 Z'],
+  medians: [[[1, 1]], [[2, 2]], [[3, 3]], [[4, 4]], [[5, 5]], [[6, 6]]], radStrokes: [3, 4, 5] };
+// The model is no longer asked for the radical; a stray (wrong) one in its reply must not reach the child.
+const jiang = { word: '江', chars: [{ char: '江', pinyin: 'jiāng', radical: '工', radical_name: '工字旁', radical_meaning: '',
   structure: '左右结构', meaning: '大河', words: ['长江', '江水'], tip: '三点水加工' }], alternatives: [], message: '' };
 
 async function setup(t, { reply = jiang, replies = [], strokes = strokeJson } = {}) {
@@ -49,6 +53,7 @@ test('lookup turns what the child said into characters and caches the answer', a
   assert.deepEqual(body.chars[0], { char: '江', pinyin: 'jiāng', radical: '氵', radicalName: '三点水', radicalMeaning: '和水有关',
     structure: '左右结构', meaning: '大河', words: ['长江', '江水'], tip: '三点水加工' });
   assert.equal(JSON.parse(calls.model[0].messages[1].content).text, '三点水的将');
+  assert.doesNotMatch(calls.model[0].messages[0].content, /radical/);
   assert.equal((await lookup({ text: '三点水的将' })).status, 200);
   assert.equal(calls.model.length, 1);
 });
@@ -141,7 +146,8 @@ test('stroke data is fetched once, validated and cached on disk', async t => {
   const url = `${base}/hanzi/strokes/${encodeURIComponent('江')}.json`;
   const first = await fetch(url);
   assert.equal(first.status, 200);
-  assert.deepEqual(await first.json(), strokeJson);
+  assert.deepEqual(await first.json(), { strokes: strokeJson.strokes, medians: strokeJson.medians, radStrokes: [0, 1, 2],
+    radical: '氵', radicalName: '三点水', radicalMeaning: '和水有关' });
   assert.equal((await fetch(url)).status, 200);
   assert.equal(calls.strokes.length, 1);
   assert.equal((await fetch(`${base}/hanzi/strokes/a.json`)).status, 400);
@@ -153,6 +159,47 @@ test('missing stroke data is a 404, malformed data is not cached', async t => {
   assert.equal((await fetch(`${missing.base}/hanzi/strokes/${encodeURIComponent('江')}.json`)).status, 404);
   const broken = await setup(t, { strokes: { strokes: ['M 1 1 Z'], medians: [] } });
   assert.equal((await fetch(`${broken.base}/hanzi/strokes/${encodeURIComponent('江')}.json`)).status, 502);
+});
+
+test('stroke data never colours strokes it does not have', async t => {
+  const short = await setup(t, { strokes: { strokes: ['M 1 1 Z', 'M 2 2 Z'], medians: [[[1, 1]], [[2, 2]]], radStrokes: [0] } });
+  const body = await (await fetch(`${short.base}/hanzi/strokes/${encodeURIComponent('江')}.json`)).json();
+  assert.deepEqual(body.radStrokes, []);
+  assert.equal(body.radical, '氵');
+});
+
+test('answers cached before the radical table get the table radical', async t => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'hanzi-old-'));
+  t.after(() => rmSync(dataDir, { recursive: true, force: true }));
+  const old = { word: '江', chars: [{ char: '江', pinyin: 'jiāng', radical: '工', radicalName: '工字旁', radicalMeaning: '' }], alternatives: [], message: '' };
+  const db = openDatabase(join(dataDir, 'littlebear.db'));
+  db.prepare('INSERT INTO hanzi_answers (query, answer, created_at) VALUES (?, ?, ?)').run('江', JSON.stringify(old), new Date().toISOString());
+  db.close();
+  const hanzi = createHanzi({ token, model, dataDir, webDir: dataDir, fetchImpl: async () => { throw new Error('no network'); } });
+  const server = createGateway({ token, hanzi });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise(resolve => { server.close(() => { hanzi.close(); resolve(); }); server.closeAllConnections(); }));
+  const reply = await fetch(`http://127.0.0.1:${server.address().port}/v1/hanzi/detail`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ word: '江' }) });
+  const { chars: [jiangChar] } = await reply.json();
+  assert.deepEqual([jiangChar.radical, jiangChar.radicalName, jiangChar.radicalMeaning], ['氵', '三点水', '和水有关']);
+});
+
+test('radicals come from the local table, in the textbook form', () => {
+  assert.deepEqual(radicalOf('问'), { radical: '门', radicalName: '门字框', radicalMeaning: '和门有关', strokes: [0, 1, 2] });
+  assert.equal(radicalOf('夏').radical, '夂');                           // the dictionary's Kangxi 夊, written as in textbooks
+  assert.deepEqual(radicalOf('修').strokes, [0, 1]);                      // 亻 found inside 攸
+  assert.deepEqual([radicalOf('年').radical, radicalOf('年').strokes], ['丿', [0]]);   // corrected to 《新华字典》
+  assert.equal(radicalOf('大').radicalName, '本身就是部首');
+  assert.deepEqual(radicalOf('大').strokes, [0, 1, 2]);
+  assert.equal(radicalOf('阳').radicalName, '左耳刀');
+  assert.equal(radicalOf('那').radicalName, '右耳刀');
+  assert.equal(radicalOf('a'), null);
+  assert.equal(radicalOf('constructor'), null);
+  const reply = withRadicals({ word: '江𠀀', chars: [{ char: '江', radical: '工' }, { char: '𠀀', radical: '一' }] });
+  assert.equal(reply.chars[0].radical, '氵');
+  assert.equal(reply.chars[1].radical, undefined);                        // not in the table: no radical rather than a guess
 });
 
 test('the page is served without escaping its folder', async t => {

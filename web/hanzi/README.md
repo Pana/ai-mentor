@@ -28,7 +28,8 @@ scripts/lan-gateway.sh             # 同一 Wi-Fi 的 iPad：http://<Mac 的 IP>
 | 字卡、大字、部首、组词里的楷书字形 | 同一份笔顺数据画成 SVG。安卓手机和国产浏览器没有可用的楷体（CSS 里的“楷体”会退成宋体），这样各设备显示一致，也和田字格里写的字一致；数据到之前先用系统字体 |
 | 书写动画、描写判定 | [Hanzi Writer](https://hanziwriter.org) 3.7.3（MIT），在 `vendor/` 里 |
 | 理解孩子说的话，定出要写哪个字 | `POST /v1/hanzi/lookup`，调用服务端配置的模型（见 `server/src/hanzi.mjs`） |
-| 拼音、部首、意思、组词 | 同一个模型。字已经确定时（如直接输入单个汉字）走 `POST /v1/hanzi/detail`，不做语义解读。两个接口的答案共用缓存：先查内存，再查 `littlebear.db` 的 `hanzi_answers` 表（重启不失效），最后才问模型。笔顺和笔画数只用笔顺数据，不用模型的回答 |
+| 部首 | 本地部首表 `server/src/hanzi-radicals.json`，不问模型。由 `node scripts/hanzi-radicals.mjs` 从 [Make Me a Hanzi](https://github.com/skishore/makemeahanzi) 的 `dictionary.txt`（LGPL-3.0，和笔顺数据同一个项目）生成：取它标的部首，再按“每一笔属于哪个部件”算出部首是第几笔。右侧部首卡片和田字格的“部首变色”都用这张表，所以两边一定一致。康熙部首写法换成课本写法（夊→夂、⺼→月……），和《新华字典》不同的字在脚本的 `OVERRIDES` 里改，改完重新生成。部首叫法和“和什么有关”在 `server/src/hanzi-radical-names.mjs` |
+| 拼音、意思、组词 | 同一个模型。字已经确定时（如直接输入单个汉字）走 `POST /v1/hanzi/detail`，不做语义解读。两个接口的答案共用缓存：先查内存，再查 `littlebear.db` 的 `hanzi_answers` 表（重启不失效），最后才问模型。笔顺、笔画数和部首都不用模型的回答 |
 | 语音输入 | 浏览器录制 16 kHz 单声道 PCM，由服务端调用豆包流式语音识别模型 2.0 的一句话模式；未配置或不可用时明确提示，不调用浏览器 Web Speech API |
 | 朗读 | 浏览器的 `speechSynthesis`（中文语音） |
 
