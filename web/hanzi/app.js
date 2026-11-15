@@ -300,7 +300,8 @@ function renderAlternatives() {
 const strokeCache = new Map();
 function loadStrokes(char) {
   if (!strokeCache.has(char)) {
-    strokeCache.set(char, fetch(`/hanzi/strokes/${encodeURIComponent(char)}.json`)
+    // v=2：部首改由服务端的部首表提供后，让浏览器丢掉旧缓存里的 radStrokes
+    strokeCache.set(char, fetch(`/hanzi/strokes/${encodeURIComponent(char)}.json?v=2`)
       .then(r => (r.ok ? r.json() : null)).catch(() => null)
       .then(data => { if (!data) strokeCache.delete(char); return data; }));
   }
@@ -486,8 +487,10 @@ function renderInfo(entry, data) {
     el('span', { class: 'big-ch' }, glyph(entry.char)),
     el('div', {}, el('div', { class: 'pinyin' }, entry.pinyin || ''),
       el('button', { type: 'button', class: 'btn small', onclick: () => speak(entry.char) }, '🔊 读一读')));
+  // 部首和田字格里变色的笔画出自服务端同一张部首表；笔顺数据先到时（字典还没回来、或离线）也能先显示
+  const rad = entry.radical ? entry : data?.radical ? data : null;
   const facts = el('div', { class: 'facts' },
-    entry.radical ? fact('部首', [el('span', { class: 'rad' }, glyph(entry.radical)), entry.radicalName || ''], entry.radicalMeaning) : null,
+    rad ? fact('部首', [el('span', { class: 'rad' }, glyph(rad.radical)), rad.radicalName || ''], rad.radicalMeaning) : null,
     entry.structure ? fact('结构', entry.structure) : null,
     fact('笔画', data ? `${data.strokes.length} 画` : '…'));
   const parts = [top, facts];
@@ -498,7 +501,7 @@ function renderInfo(entry, data) {
         [...w].map(c => (c === entry.char ? el('mark', {}, glyph(c)) : glyph(c))))))));
   }
   if (entry.tip) parts.push(el('div', { class: 'tip' }, el('span', { 'aria-hidden': 'true' }, '🐻'), el('span', {}, entry.tip)));
-  if (!entry.pinyin && !entry.meaning) parts.push(el('p', { class: 'muted' }, '连上字典服务后，这里会显示拼音、部首、意思和组词。'));
+  if (!entry.pinyin && !entry.meaning) parts.push(el('p', { class: 'muted' }, '连上字典服务后，这里会显示拼音、意思和组词。'));
   box.replaceChildren(...parts);
 }
 
