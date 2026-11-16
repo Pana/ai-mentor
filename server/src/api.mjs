@@ -91,8 +91,26 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
   let anonymousAttempts = [];
 
   // ---------- helpers bound to the database ----------
-  const record = (familyId, entity, id, op = 'UPSERT') =>
+  const record = (familyId, entity, id, op = 'UPSERT') => {
     q('INSERT INTO changes (family_id, entity, entity_id, op, at) VALUES (?, ?, ?, ?, ?)').run(familyId, entity, id, op, iso());
+    wake(familyId);
+  };
+  // Long-polling /v1/changes: requests waiting for a family's next change. Woken on the next turn of the event loop,
+  // after the synchronous transaction that recorded the change has committed.
+  const waiters = new Map();
+  const wake = familyId => {
+    const waiting = waiters.get(familyId);
+    if (!waiting) return;
+    waiters.delete(familyId);
+    setImmediate(() => { for (const resolve of waiting) resolve(); });
+  };
+  const nextChange = (familyId, ms, signal) => new Promise(resolve => {
+    const done = () => { clearTimeout(timer); signal?.removeEventListener('abort', done); waiters.get(familyId)?.delete(done); resolve(); };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+    if (!waiters.has(familyId)) waiters.set(familyId, new Set());
+    waiters.get(familyId).add(done);
+  });
   const family = familyId => q('SELECT * FROM families WHERE id = ?').get(familyId);
   const rulesFor = familyId => ({ ...defaultRules, ...JSON.parse(q('SELECT rules FROM reward_rules WHERE family_id = ?').get(familyId)?.rules ?? '{}') });
   const today = familyId => localParts(now(), family(familyId).timezone);
@@ -534,10 +552,13 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     return { id, minutes, endsAt: new Date(now() + minutes * 60_000).toISOString() };
   }));
 
-  route('GET', '/v1/changes', ANY, ({ familyId, query }) => {
-    const since = Number(query.get('since') ?? 0);
-    if (!Number.isInteger(since) || since < 0) fail(400, 'invalid_input');
-    const rows = q('SELECT seq, entity, entity_id, op FROM changes WHERE family_id = ? AND seq > ? ORDER BY seq LIMIT 501').all(familyId, since);
+  // `wait` (seconds, ≤25): with nothing new yet, hold the request until the family's next change or the time runs out.
+  route('GET', '/v1/changes', ANY, async ({ familyId, query, signal }) => {
+    const since = Number(query.get('since') ?? 0), wait = Number(query.get('wait') ?? 0);
+    if (!Number.isInteger(since) || since < 0 || !Number.isInteger(wait) || wait < 0) fail(400, 'invalid_input');
+    const read = () => q('SELECT seq, entity, entity_id, op FROM changes WHERE family_id = ? AND seq > ? ORDER BY seq LIMIT 501').all(familyId, since);
+    let rows = read();
+    if (!rows.length && wait > 0 && !closed) { await nextChange(familyId, Math.min(wait, 25) * 1000, signal); if (!closed) rows = read(); }
     const page = rows.slice(0, 500);
     return { changes: page.map(c => ({ seq: c.seq, entity: c.entity, id: c.entity_id, op: c.op })),
       next: page.at(-1)?.seq ?? since, hasMore: rows.length > 500 };
@@ -655,5 +676,13 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     return { child: { id: row.id, name: row.name, grade: row.grade }, today: date, homework };
   }
 
-  return { handle, db, deviceFor, learnerContext, close: () => db.close() };
+  let closed = false;
+  function close() {
+    closed = true;
+    for (const waiting of waiters.values()) for (const resolve of waiting) resolve();
+    waiters.clear();
+    db.close();
+  }
+
+  return { handle, db, deviceFor, learnerContext, close };
 }

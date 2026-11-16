@@ -232,6 +232,31 @@ test('change feed lists what to re-fetch, in order', async t => {
   assert.deepEqual((await call('GET', `/v1/changes?since=${feed.next}`, { token: child })).body.changes, []);
 });
 
+test('change feed can wait for the next change', async t => {
+  const { call, child, parent, addHomework } = await setup(t);
+  const start = (await call('GET', '/v1/me', { token: child })).body.cursor;
+  // Something already new: answers at once.
+  await addHomework();
+  let begun = Date.now();
+  const ready = (await call('GET', `/v1/changes?since=${start}&wait=20`, { token: child })).body;
+  assert.equal(ready.changes.length, 1);
+  assert.ok(Date.now() - begun < 1000);
+  // Nothing new: holds the request until another device writes.
+  begun = Date.now();
+  const waiting = call('GET', `/v1/changes?since=${ready.next}&wait=20`, { token: parent });
+  await new Promise(resolve => setTimeout(resolve, 200));
+  await addHomework();
+  const woken = (await waiting).body;
+  assert.deepEqual(woken.changes.map(c => c.entity), ['homework']);
+  assert.ok(Date.now() - begun < 2000, 'answered as soon as the change was recorded');
+  // Nothing at all: answers empty when the wait runs out.
+  begun = Date.now();
+  const empty = (await call('GET', `/v1/changes?since=${woken.next}&wait=1`, { token: child })).body;
+  assert.deepEqual(empty, { changes: [], next: woken.next, hasMore: false });
+  assert.ok(Date.now() - begun >= 900);
+  assert.equal((await call('GET', '/v1/changes?since=0&wait=-1', { token: child })).status, 400);
+});
+
 test('deleting a child removes their homework, routines and rewards', async t => {
   const { call, parent, childId, addHomework, submit, balance } = await setup(t);
   await submit(await addHomework());

@@ -6,8 +6,13 @@ struct RootView: View {
     @EnvironmentObject private var store: HomeworkStore
     @Environment(\.scenePhase) private var scenePhase
 
+    /// The sync loop restarts whenever this changes. `scenePhase` read inside an already running task keeps the value it had
+    /// when the task began (at cold launch that is not yet `.active`), so the phase has to be part of the task's id.
+    private struct SyncLoop: Equatable { var deviceId: UUID?; var active: Bool }
+
     var body: some View {
-        Group {
+        let loop = SyncLoop(deviceId: store.session?.deviceId, active: scenePhase == .active)
+        return Group {
             if let session = store.session {
                 if session.isParent { ParentApp() } else { ChildApp() }
             } else {
@@ -18,14 +23,15 @@ struct RootView: View {
         .environment(\.locale, Locale(identifier: "zh_CN"))
         .tint(.pine)
         .storeErrors()
-        .task(id: store.session?.deviceId) {
-            // Foreground polling stands in for push notifications until the app has an Apple Developer account.
+        .task(id: loop) {
+            // In the foreground: sync, then hold a request open until the server has news (long polling stands in for
+            // push notifications until the app has an Apple Developer account). Cancelled when the app leaves the foreground.
+            guard loop.active, loop.deviceId != nil else { return }
             while !Task.isCancelled {
-                if scenePhase == .active { await store.sync() }
-                try? await Task.sleep(for: .seconds(20))
+                await store.sync()
+                await store.waitForChanges()
             }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await store.sync() } } }
     }
 }
 
