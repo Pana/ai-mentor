@@ -149,6 +149,7 @@ class ScreenshotTest {
     fun phoneParentTabs() {
         show(seed("parent"))
         tap("录入"); shot("phone-parent-5-entry")
+        tap("手动填写"); shot("phone-parent-5b-entry-manual")
         tap("每天坚持"); shot("phone-parent-6-routines")
         tap("奖励"); shot("phone-parent-7-rewards")
     }

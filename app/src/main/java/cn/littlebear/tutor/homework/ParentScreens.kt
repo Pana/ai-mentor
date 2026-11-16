@@ -1,5 +1,6 @@
 package cn.littlebear.tutor.homework
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,6 +31,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +40,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -109,7 +113,7 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
                                 }
                             }
                         } else ParentOverview(child, { childId = it }, Modifier.fillMaxSize(), null, { push(ParentRoute.Detail(it)) }, push)
-                        ParentTab.ENTRY -> ParentEntry(entry, push)
+                        ParentTab.ENTRY -> ParentEntry(entry, push) { entry.reset(); tab = ParentTab.HOMEWORK }
                         ParentTab.ROUTINES -> ParentRoutines(child, { childId = it }, push)
                         ParentTab.REWARDS -> ParentRewards(child) { childId = it }
                     }
@@ -395,35 +399,112 @@ data class DraftItem(
     }
 }
 
-// ---------- 录入: paste the teacher's message → AI clean-up → check → save ----------
+// ---------- 录入: pick AI clean-up or filling in by hand → save ----------
+
+/** How the parent enters homework: AI splits the teacher's message, or the parent fills items in directly. */
+enum class EntryMode(val label: String, val hint: String) {
+    AI("AI 整理", "粘贴老师发的作业，AI 拆成一项项，你核对后保存。"),
+    MANUAL("手动填写", "自己一项项填写，填完直接保存。");
+    companion object { fun of(name: String?) = entries.firstOrNull { it.name == name } ?: AI }
+}
 
 /** Kept across tab switches, like the iOS form that keeps its rows until the next entry. */
 class EntryForm {
     var text by mutableStateOf("")
     val images = mutableStateListOf<ByteArray>()
     var childIds by mutableStateOf(setOf<String>())
+    /** Items being filled in by hand; the AI result page keeps its own list. */
+    val manualDrafts = mutableStateListOf<DraftItem>()
+
+    fun addImage(data: ByteArray) {
+        if (images.size >= 6) return
+        images.add(data)
+        // Pictures added while filling in by hand go with the first item, as they do after AI.
+        if (images.size == 1 && manualDrafts.none { it.attachImages }) manualDrafts.firstOrNull()?.let { manualDrafts[0] = it.copy(attachImages = true) }
+    }
+
     fun reset() { text = ""; images.clear() }
 }
 
-@Composable private fun ParentEntry(form: EntryForm, push: (ParentRoute) -> Unit) {
+fun List<DraftItem>.complete() = isNotEmpty() && none { it.content.isBlank() }
+
+/** One new homework per draft for every selected child; the pictures go only with the drafts that carry them. */
+fun newHomework(drafts: List<DraftItem>, children: List<RemoteChild>, childIds: Set<String>, rawText: String, attachments: List<String>) =
+    children.filter { it.id in childIds }.flatMap { child ->
+        drafts.map { d ->
+            NewHomework(childId = child.id, subject = d.subject, date = d.date, dueDate = if (d.hasDue) maxOf(d.dueDate, d.date) else null,
+                content = d.content.trim(), rawText = rawText.take(5000), mode = d.kind.mode, onlineKind = d.kind.onlineKind,
+                durationMinutes = if (d.kind.usesDuration) d.minutes else null, parentTodo = d.parentTodo.trim(), attachmentIds = if (d.attachImages) attachments else emptyList())
+        }
+    }
+
+/** Saves the drafts for every selected child, uploading the pictures once if any draft carries them. */
+suspend fun HomeworkStore.saveDrafts(drafts: List<DraftItem>, images: List<ByteArray>, childIds: Set<String>, rawText: String) {
+    val attachments = if (images.isNotEmpty() && drafts.any { it.attachImages }) uploadImages(images) else emptyList()
+    create(newHomework(drafts, state.value.children, childIds, rawText, attachments))
+}
+
+/** One section per draft plus “再加一项”; shared by the AI result page and manual entry. */
+@Composable fun DraftList(drafts: SnapshotStateList<DraftItem>, imageCount: Int) {
+    val store = LocalStore.current
+    drafts.forEachIndexed { i, draft ->
+        key(draft.key) {
+            FormSection(SubjectStyle.label(draft.subject)) {
+                DraftFields(draft, imageCount) { drafts[i] = it }
+                if (drafts.size > 1) TextButton({ drafts.removeAt(i) }) { Text("删除这一项", color = Palette.redPen) }
+            }
+        }
+    }
+    TextButton({ drafts.add(DraftItem.blank(store.today)) }) { Icon(Icons.Filled.Add, null); Text("再加一项") }
+}
+
+/** “加入 X 的作业（N 项）”: shared by the AI result page and manual entry. */
+@Composable private fun SaveDraftsButton(drafts: List<DraftItem>, form: EntryForm, rawText: String, onSaved: () -> Unit) {
+    val store = LocalStore.current
+    val state by store.state.collectAsStateWithLifecycle()
+    var saving by remember { mutableStateOf(false) }
+    val names = state.children.filter { it.id in form.childIds }.joinToString("、") { it.name }
+    PrimaryButton(if (saving) "正在保存…" else "加入${names}的作业（${drafts.size} 项）", Modifier.fillMaxWidth(), busy = saving,
+        enabled = form.childIds.isNotEmpty() && drafts.complete()) {
+        saving = true
+        val items = drafts.toList(); val images = form.images.toList(); val childIds = form.childIds
+        store.launch({ saving = false; if (it) onSaved() }) { saveDrafts(items, images, childIds, rawText) }
+    }
+    Text("加入后，孩子的设备下次同步就能看到。", fontSize = 13.sp, color = Palette.ink3)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun ParentEntry(form: EntryForm, push: (ParentRoute) -> Unit, onSaved: () -> Unit) {
     val store = LocalStore.current
     val state by store.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    val prefs = remember { context.getSharedPreferences("phase1.parent", Context.MODE_PRIVATE) }
+    var mode by remember { mutableStateOf(EntryMode.of(prefs.getString("entryMode", null))) }
     var busy by remember { mutableStateOf(false) }
     var cameraFile by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(state.children) { if (form.childIds.isEmpty()) state.children.firstOrNull()?.let { form.childIds = setOf(it.id) } }
-    fun add(uri: Uri) = scope.launch { if (form.images.size < 6) Photos.prepare(context, uri)?.let { form.images.add(it) } ?: store.reportError("这张图片读不出来，换一张试试。") }
+    LaunchedEffect(form.manualDrafts.isEmpty()) { if (form.manualDrafts.isEmpty()) form.manualDrafts.add(DraftItem.blank(store.today, form.images.isNotEmpty())) }
+    fun add(uri: Uri) = scope.launch { if (form.images.size < 6) Photos.prepare(context, uri)?.let { form.addImage(it) } ?: store.reportError("这张图片读不出来，换一张试试。") }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(6)) { uris -> uris.take(6 - form.images.size).forEach { add(it) } }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        cameraFile?.let { path -> val file = java.io.File(path); if (ok) scope.launch { Photos.prepare(context, Uri.fromFile(file))?.let { form.images.add(it) }; file.delete() } else file.delete() }
+        cameraFile?.let { path -> val file = java.io.File(path); if (ok) scope.launch { Photos.prepare(context, Uri.fromFile(file))?.let { form.addImage(it) }; file.delete() } else file.delete() }
         cameraFile = null
     }
     Column(Modifier.fillMaxSize()) {
         PageHeader("录入作业")
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().semantics { contentDescription = "录入方式" }) {
+                    EntryMode.entries.forEachIndexed { i, m ->
+                        SegmentedButton(mode == m, { mode = m; prefs.edit().putString("entryMode", m.name).apply() }, SegmentedButtonDefaults.itemShape(i, EntryMode.entries.size),
+                            enabled = !busy, colors = SegmentedButtonDefaults.colors(activeContainerColor = Palette.pineSoft, activeContentColor = Palette.pine)) { Text(m.label) }
+                    }
+                }
+                Text(mode.hint, fontSize = 13.sp, color = Palette.ink3, modifier = Modifier.padding(horizontal = 8.dp))
+            }
             FormSection {
                 if (state.children.isEmpty()) Text("先在“作业 → 设置”里添加孩子。", color = Palette.ink2)
                 Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -434,7 +515,7 @@ class EntryForm {
                     }
                 }
             }
-            FormSection("老师发的作业", "直接从班级群复制过来就行，口语和表情 AI 会整理掉。") {
+            if (mode == EntryMode.AI) FormSection("老师发的作业", "直接从班级群复制过来就行，口语和表情 AI 会整理掉。") {
                 OutlinedTextField(form.text, { form.text = it.take(5000) }, Modifier.fillMaxWidth(), minLines = 6, placeholder = { Text("粘贴老师在群里发的作业") })
                 TextButton({ clipboard.getText()?.text?.let { form.text = it.take(5000) } }) { Text("从剪贴板粘贴") }
             }
@@ -458,54 +539,31 @@ class EntryForm {
                     }, enabled = form.images.size < 6) { Text("拍作业单") }
                 }
             }
-            PrimaryButton(if (busy) "AI 正在整理…" else "让 AI 整理", Modifier.fillMaxWidth(), busy = busy, enabled = form.childIds.isNotEmpty() && form.text.isNotBlank()) {
-                busy = true
-                store.launch({ busy = false }) {
-                    val result = parse(form.text)
-                    val today = this.today
-                    val drafts = result.items.mapIndexed { i, p -> DraftItem.from(p, today, i == 0 && form.images.isNotEmpty()) }
-                    push(ParentRoute.EntryResult(drafts.ifEmpty { listOf(DraftItem.blank(today, form.images.isNotEmpty())) }, result.message))
+            when (mode) {
+                EntryMode.AI -> PrimaryButton(if (busy) "AI 正在整理…" else "让 AI 整理", Modifier.fillMaxWidth(), busy = busy, enabled = form.childIds.isNotEmpty() && form.text.isNotBlank()) {
+                    busy = true
+                    store.launch({ busy = false }) {
+                        val result = parse(form.text)
+                        val today = this.today
+                        val drafts = result.items.mapIndexed { i, p -> DraftItem.from(p, today, i == 0 && form.images.isNotEmpty()) }
+                        push(ParentRoute.EntryResult(drafts.ifEmpty { listOf(DraftItem.blank(today, form.images.isNotEmpty())) }, result.message))
+                    }
                 }
-            }
-            SecondaryButton("不用 AI，手动填写", Modifier.fillMaxWidth(), enabled = !busy && form.childIds.isNotEmpty()) {
-                push(ParentRoute.EntryResult(listOf(DraftItem.blank(store.today, form.images.isNotEmpty())), ""))
+                EntryMode.MANUAL -> {
+                    DraftList(form.manualDrafts, form.images.size)
+                    SaveDraftsButton(form.manualDrafts, form, rawText = "") { form.manualDrafts.clear(); onSaved() }
+                }
             }
         }
     }
 }
 
 @Composable private fun EntryResult(initial: List<DraftItem>, message: String, form: EntryForm, onBack: () -> Unit, onSaved: () -> Unit) {
-    val store = LocalStore.current
-    val state by store.state.collectAsStateWithLifecycle()
     val drafts = remember(initial) { initial.toMutableStateList() }
-    var saving by remember { mutableStateOf(false) }
-    val names = state.children.filter { it.id in form.childIds }.joinToString("、") { it.name }
-    val valid = drafts.none { it.content.isBlank() }
     FormScaffold("核对作业", onBack) {
         if (message.isNotEmpty()) Text("✨ $message", color = Palette.ink2)
-        drafts.forEachIndexed { i, draft ->
-            FormSection(SubjectStyle.label(draft.subject)) {
-                DraftFields(draft, form.images.size) { drafts[i] = it }
-                if (drafts.size > 1) TextButton({ drafts.removeAt(i) }) { Text("删除这一项", color = Palette.redPen) }
-            }
-        }
-        TextButton({ drafts.add(DraftItem.blank(store.today)) }) { Icon(Icons.Filled.Add, null); Text("再加一项") }
-        PrimaryButton(if (saving) "正在保存…" else "加入${names}的作业（${drafts.size} 项）", Modifier.fillMaxWidth(), busy = saving, enabled = valid) {
-            saving = true
-            val images = form.images.toList()
-            store.launch({ saving = false; if (it) onSaved() }) {
-                val attachments = if (drafts.any { it.attachImages }) uploadImages(images) else emptyList()
-                val items = state.children.filter { it.id in form.childIds }.flatMap { child ->
-                    drafts.map { d ->
-                        NewHomework(childId = child.id, subject = d.subject, date = d.date, dueDate = if (d.hasDue) maxOf(d.dueDate, d.date) else null,
-                            content = d.content.trim(), rawText = form.text.take(5000), mode = d.kind.mode, onlineKind = d.kind.onlineKind,
-                            durationMinutes = if (d.kind.usesDuration) d.minutes else null, parentTodo = d.parentTodo.trim(), attachmentIds = if (d.attachImages) attachments else emptyList())
-                    }
-                }
-                create(items)
-            }
-        }
-        Text("加入后，孩子的设备下次同步就能看到。", fontSize = 13.sp, color = Palette.ink3)
+        DraftList(drafts, form.images.size)
+        SaveDraftsButton(drafts, form, form.text, onSaved)
     }
 }
 
