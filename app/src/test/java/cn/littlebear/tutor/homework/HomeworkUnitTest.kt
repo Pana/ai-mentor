@@ -68,4 +68,46 @@ class HomeworkUnitTest {
         assertTrue(reopened.state.value.outbox.isEmpty())
         assertFalse(store.outboxFile(store.state.value.outbox.single().files.single()).exists())
     }
+
+    @Test fun entryModeDefaultsToAiAndRemembersTheChoice() {
+        assertEquals(EntryMode.AI, EntryMode.of(null))
+        assertEquals(EntryMode.AI, EntryMode.of("SOMETHING_OLD"))
+        assertEquals(EntryMode.MANUAL, EntryMode.of(EntryMode.MANUAL.name))
+        assertEquals("粘贴老师发的作业，AI 拆成一项项，你核对后保存。", EntryMode.AI.hint)
+        assertEquals("自己一项项填写，填完直接保存。", EntryMode.MANUAL.hint)
+    }
+
+    @Test fun picturesAddedWhileFillingInGoWithTheFirstItem() {
+        val form = EntryForm()
+        form.manualDrafts.addAll(listOf(DraftItem.blank("2026-11-16"), DraftItem.blank("2026-11-16")))
+        form.addImage(byteArrayOf(1))
+        assertEquals(listOf(true, false), form.manualDrafts.map { it.attachImages })
+        // The parent's own choice wins after that.
+        form.manualDrafts[0] = form.manualDrafts[0].copy(attachImages = false)
+        form.addImage(byteArrayOf(2))
+        assertEquals(listOf(false, false), form.manualDrafts.map { it.attachImages })
+        repeat(6) { form.addImage(byteArrayOf(3)) }
+        assertEquals(6, form.images.size)
+        form.reset()
+        assertTrue(form.images.isEmpty())
+        assertEquals(2, form.manualDrafts.size)
+    }
+
+    @Test fun draftsBecomeOneHomeworkPerChildAndItem() {
+        val ming = RemoteChild("c1", "小明", 2); val hong = RemoteChild("c2", "小红", 3); val other = RemoteChild("c3", "小刚", 1)
+        val drafts = listOf(
+            DraftItem.blank("2026-11-16", attach = true).copy(content = " 口算第 12 页 ", parentTodo = " 签字 "),
+            DraftItem.blank("2026-11-16").copy(subject = "CHINESE", content = "朗读课文", kind = DoneBy.TIMER, minutes = 15, hasDue = true, dueDate = "2026-11-15"),
+        )
+        assertTrue(drafts.complete())
+        assertFalse((drafts + DraftItem.blank("2026-11-16")).complete())
+        assertFalse(emptyList<DraftItem>().complete())
+        val items = newHomework(drafts, listOf(ming, hong, other), setOf("c1", "c2"), "", listOf("f1"))
+        assertEquals(listOf("c1", "c1", "c2", "c2"), items.map { it.childId })
+        assertEquals("口算第 12 页", items[0].content); assertEquals("签字", items[0].parentTodo)
+        assertEquals(listOf("f1"), items[0].attachmentIds); assertTrue(items[1].attachmentIds.isEmpty())
+        assertNull(items[0].dueDate); assertNull(items[0].durationMinutes); assertEquals("OFFLINE", items[0].mode)
+        // A due date before the assigned day is moved up to it.
+        assertEquals("2026-11-16", items[1].dueDate); assertEquals(15, items[1].durationMinutes); assertEquals("TIMER", items[1].onlineKind)
+    }
 }
