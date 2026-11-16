@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGateway } from '../src/gateway.mjs';
-import { createHanzi, validateLookupReply, validStrokeData, normalizeQuery, normalizeDetailWord, radicalOf, withRadicals } from '../src/hanzi.mjs';
+import { createHanzi, lookupBody, detailBody, validateLookupReply, validStrokeData, normalizeQuery, normalizeDetailWord, radicalOf, withRadicals } from '../src/hanzi.mjs';
 import { openDatabase } from '../src/db.mjs';
 
 const token = 'device-test-token-not-a-secret-12345';
@@ -27,8 +27,8 @@ async function setup(t, { reply = jiang, replies = [], strokes = strokeJson } = 
   const fetchImpl = async (url, init) => {
     if (url === model.apiUrl) {
       calls.model.push(JSON.parse(init.body));
-      const content = replies.length ? replies.shift() : reply;
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }));
+      const content = replies.length ? replies.shift() : reply;   // a string is sent as the raw reply text
+      return new Response(JSON.stringify({ choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }] }));
     }
     calls.strokes.push(url);
     return strokes ? new Response(JSON.stringify(strokes)) : new Response('Not found', { status: 404 });
@@ -106,6 +106,34 @@ test('detail retries once when the model swaps the characters, then gives up', a
   const stubborn = await setup(t, { replies: [he, he] });
   assert.equal((await stubborn.detail({ word: '江' })).status, 502);
   assert.equal(stubborn.calls.model.length, 2);
+});
+
+test('lookup and detail retry once on a blank or malformed reply, then give up', async t => {
+  const broken = '{"word":"江","chars":[{"char":"江","tip":"三点水加工}],"alternatives":[]}';
+  for (const bad of ['  ', broken]) {
+    const retried = await setup(t, { replies: [bad, jiang] });
+    assert.equal((await retried.lookup({ text: '三点水的江' })).status, 200);
+    assert.equal((await retried.detail({ word: '河' })).status, 502);   // 江 ≠ 河 twice: swapped, gives up
+    assert.equal(retried.calls.model.length, 4);
+  }
+  const stubborn = await setup(t, { replies: [broken, broken] });
+  assert.equal((await stubborn.lookup({ text: '三点水的江' })).status, 502);
+  assert.equal(stubborn.calls.model.length, 2);
+  const detailed = await setup(t, { replies: [broken, jiang] });
+  assert.equal((await detailed.detail({ word: '江' })).status, 200);
+  assert.equal(detailed.calls.model.length, 2);
+});
+
+test('thinking is switched only when configured, and the lookup prompt carries the correction rules', () => {
+  const base = { model: 'm', jsonMode: true };
+  assert.deepEqual(lookupBody('江', { ...base, thinking: 'disabled' }).thinking, { type: 'disabled' });
+  assert.deepEqual(detailBody('江', { ...base, thinking: 'enabled' }).thinking, { type: 'enabled' });
+  assert.equal('thinking' in lookupBody('江', { ...base, thinking: 'none' }), false);
+  assert.equal('thinking' in detailBody('江', base), false);
+  assert.deepEqual(lookupBody('江', base).response_format, { type: 'json_object' });
+  const prompt = lookupBody('江', base).messages[0].content;
+  assert.match(prompt, /蓝天的兰/);
+  assert.match(prompt, /上面小下面土/);
 });
 
 test('answers survive a server restart in the database', async t => {

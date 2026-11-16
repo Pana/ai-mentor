@@ -13,7 +13,7 @@ const tts = createVolcTts({ apiKey: process.env.VOLC_TTS_API_KEY || process.env.
   resourceId: process.env.VOLC_TTS_RESOURCE_ID, speaker: process.env.VOLC_TTS_SPEAKER, url: process.env.VOLC_TTS_URL,
   speechRate: Number(process.env.VOLC_TTS_SPEECH_RATE || 0) });
 const hanzi = createHanzi({ token: process.env.TUTOR_DEVICE_TOKEN, dataDir: process.env.DATA_DIR || './data',
-  model: { ...model, model: process.env.HANZI_MODEL_NAME || model.model }, asr });
+  model: { ...model, model: process.env.HANZI_MODEL_NAME || model.model, thinking: process.env.HANZI_MODEL_THINKING || 'disabled' }, asr });
 const server = createGateway({ token: process.env.TUTOR_DEVICE_TOKEN, ...model,
   visionModel: process.env.MODEL_VISION_NAME || '', imagesSupported: process.env.MODEL_SUPPORTS_IMAGES !== 'false',
   voice: { token: process.env.TUTOR_DEVICE_TOKEN, mock: process.env.VOICE_MOCK === 'true' }, api, hanzi,

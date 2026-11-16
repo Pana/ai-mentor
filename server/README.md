@@ -64,7 +64,7 @@
 | `POST /v1/hanzi/asr` | 同源会话或 `TUTOR_DEVICE_TOKEN` | 16 kHz、单声道、16-bit PCM 短句 → `{text}`；配置 `VOLC_ASR_API_KEY` 后调用火山引擎豆包流式语音识别模型 2.0 的一句话模式 |
 | `POST /v1/hanzi/lookup` | 同源打开 `/hanzi/` 自动建立会话；跨地址访问可用 `TUTOR_DEVICE_TOKEN` | `{text}`（≤60 字，语音识别出的原话）→ `{word, chars:[{char, pinyin, radical, radicalName, radicalMeaning, structure, meaning, words, tip}], alternatives:[{char, pinyin, hint}], message}`。部首三项来自本地部首表，不来自模型；表里没有的字不带部首。每分钟最多 30 次，相同问题的回答在内存里缓存 |
 
-`HANZI_MODEL_NAME` 可单独指定字典用的模型，默认用 `MODEL_NAME`。只有孩子说的这句话会发给模型供应商。
+`HANZI_MODEL_NAME` 可单独指定字典用的模型，默认用 `MODEL_NAME`。`HANZI_MODEL_THINKING` 控制 DeepSeek 的思考模式，默认 `disabled`：2026-11-15 用 60 种刁钻说法实测，关闭思考后判断孩子要写哪个字的准确率不变（235/240 对 236/240），耗时中位从 1.7 秒降到 1.1 秒；设为 `enabled` 打开，设为 `none` 不发这个字段（给不认识它的供应商用）。模型偶尔回空内容或坏掉的 JSON，服务端会自动重试一次。只有孩子说的这句话会发给模型供应商。
 
 汉字语音识别配置：`VOLC_ASR_API_KEY` 使用火山引擎新版控制台 API Key；`VOLC_ASR_RESOURCE_ID` 推荐从 `volc.seedasr.sauc.duration` 开始。网页会把短句录成 PCM 发给服务端，调用流式语音识别模型 2.0 的 `bigmodel_nostream` 一句话模式并等待最终结果；未配置 ASR 或服务端暂不可用时明确提示，不调用浏览器自带的语音识别。
 
