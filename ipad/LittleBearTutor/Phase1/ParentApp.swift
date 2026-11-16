@@ -174,16 +174,18 @@ struct ParentHomeworkDetail: View {
                 if item.submissions.isEmpty { Section { Text("孩子还没有提交。").foregroundStyle(Color.ink2) } }
                 Section {
                     Button("修改作业") { editing = true }
+                    // Anchored to the button: iOS shows the confirmation as a popover pointing at the view it is attached to.
                     Button("删除作业", role: .destructive) { confirmingDelete = true }
+                        .confirmationDialog("删除这项作业？", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                            Button("删除", role: .destructive) { Task { await perform(store) { try await store.delete(id); dismiss() } } }
+                            Button("取消", role: .cancel) {}
+                        } message: { Text("会同时删除孩子提交的照片、录音和批改，奖励记录保留。") }
                 }
             }
             .navigationTitle(SubjectStyle.label(item.subject))
             .navigationBarTitleDisplayMode(.inline)
             .fullScreenCover(item: $reviewing) { submission in ReviewFlow(item: item, submission: submission) }
             .sheet(isPresented: $editing) { EditHomeworkView(item: item) }
-            .confirmationDialog("删除这项作业？", isPresented: $confirmingDelete, titleVisibility: .visible) {
-                Button("删除", role: .destructive) { Task { await perform(store) { try await store.delete(id); dismiss() } } }
-            } message: { Text("会同时删除孩子提交的照片、录音和批改，奖励记录保留。") }
         } else {
             ContentUnavailableView("作业已删除", systemImage: "trash")
         }
@@ -335,21 +337,39 @@ struct DraftFields: View {
     }
 }
 
+/// How the parent enters homework: AI splits the teacher's message, or the parent fills items in directly.
+enum EntryMode: String, CaseIterable, Identifiable {
+    case ai, manual
+    var id: Self { self }
+    var label: String { self == .ai ? "AI 整理" : "手动填写" }
+    var hint: String {
+        self == .ai ? "粘贴老师发的作业，AI 拆成一项项，你核对后保存。" : "自己一项项填写，填完直接保存。"
+    }
+}
+
 struct ParentEntry: View {
     @EnvironmentObject private var store: HomeworkStore
     let onSaved: () -> Void
+    @AppStorage("parent.entryMode") private var mode = EntryMode.ai
     @State private var text = ""
     @State private var images: [Data] = []
     @State private var childIds: Set<UUID> = []
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var drafts: [DraftItem] = []
+    @State private var manualDrafts: [DraftItem] = []
     @State private var showingResult = false
     @State private var aiMessage = ""
     @State private var busy = false
+    @State private var saving = false
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Picker("录入方式", selection: $mode) { ForEach(EntryMode.allCases) { Text($0.label).tag($0) } }
+                        .pickerStyle(.segmented)
+                        .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                } footer: { Text(mode.hint) }
                 Section {
                     if store.children.isEmpty { Text("先在“作业 → 设置”里添加孩子。").foregroundStyle(Color.ink2) }
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -364,34 +384,33 @@ struct ParentEntry: View {
                         }
                     }
                 }
-                Section {
-                    TextEditor(text: $text).frame(minHeight: 180).font(.body)
-                    Button { if let s = UIPasteboard.general.string { text = s } } label: { Label("从剪贴板粘贴", systemImage: "doc.on.clipboard") }
-                } header: { Text("老师发的作业") } footer: { Text("直接从班级群复制过来就行，口语和表情 AI 会整理掉。") }
-                Section {
-                    if !images.isEmpty {
-                        ScrollView(.horizontal) {
-                            HStack {
-                                ForEach(Array(images.enumerated()), id: \.offset) { index, data in
-                                    ZStack(alignment: .topTrailing) {
-                                        if let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFill().frame(width: 76, height: 76).clipShape(RoundedRectangle(cornerRadius: 10)) }
-                                        Button { images.remove(at: index) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.white, .black.opacity(0.6)) }.accessibilityLabel("删除图片")
-                                    }
-                                }
-                            }
-                        }
+                switch mode {
+                case .ai:
+                    Section {
+                        TextEditor(text: $text).frame(minHeight: 180).font(.body)
+                        Button { if let s = UIPasteboard.general.string { text = s } } label: { Label("从剪贴板粘贴", systemImage: "doc.on.clipboard") }
+                    } header: { Text("老师发的作业") } footer: { Text("直接从班级群复制过来就行，口语和表情 AI 会整理掉。") }
+                    imagesSection
+                    Section {
+                        Button { parse() } label: { HStack { Text(busy ? "AI 正在整理…" : "让 AI 整理").bold(); if busy { ProgressView() } } }
+                            .disabled(busy || childIds.isEmpty || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    PhotosPicker(selection: $pickerItems, maxSelectionCount: 6, matching: .images) { Label("从相册选图片", systemImage: "photo.on.rectangle") }
-                    if CameraController.hasCamera { PhotoSourceButtons(cameraTitle: "拍作业单", showsLibrary: false) { append($0) } }
-                } header: { Text("图片（选填）") } footer: { Text("作业单、课本页。最多 6 张。") }
-                Section {
-                    Button { parse() } label: { HStack { Text(busy ? "AI 正在整理…" : "让 AI 整理").bold(); if busy { ProgressView() } } }
-                        .disabled(busy || childIds.isEmpty || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button("不用 AI，手动填写") { manual() }.disabled(busy || childIds.isEmpty)
+                case .manual:
+                    imagesSection
+                    DraftList(drafts: $manualDrafts, images: images)
+                    Section {
+                        Button { saveManual() } label: { HStack { Text(saving ? "正在保存…" : "加入\(childNames(store, childIds))的作业（\(manualDrafts.count) 项）").bold(); if saving { ProgressView() } } }
+                            .disabled(!canSaveManual)
+                    } footer: { Text("加入后，孩子的 iPad 下次同步就能看到。") }
                 }
             }
             .navigationTitle("录入作业")
             .keyboardDoneButton()
+            .toolbar {
+                if mode == .manual {
+                    ToolbarItem(placement: .confirmationAction) { Button("保存") { saveManual() }.disabled(!canSaveManual) }
+                }
+            }
             .navigationDestination(isPresented: $showingResult) {
                 // The form keeps its rows until the next entry replaces them, so nothing it binds to disappears mid-dismissal.
                 EntryResult(drafts: $drafts, images: images, message: aiMessage, childIds: childIds, rawText: text) {
@@ -402,9 +421,37 @@ struct ParentEntry: View {
                 for item in pickerItems { if let data = try? await item.loadTransferable(type: Data.self) { append(data) } }
                 pickerItems = []
             }
-            .onAppear { if childIds.isEmpty, let first = store.children.first { childIds = [first.id] } }
+            .onChange(of: images.isEmpty) { _, empty in
+                // Pictures added while filling in by hand go with the first item, as they do after AI.
+                if !empty, mode == .manual, !manualDrafts.isEmpty, !manualDrafts.contains(where: \.attachImages) { manualDrafts[0].attachImages = true }
+            }
+            .onAppear {
+                if childIds.isEmpty, let first = store.children.first { childIds = [first.id] }
+                if manualDrafts.isEmpty { manualDrafts = [blank()] }
+            }
         }
     }
+
+    private var imagesSection: some View {
+        Section {
+            if !images.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack {
+                        ForEach(Array(images.enumerated()), id: \.offset) { index, data in
+                            ZStack(alignment: .topTrailing) {
+                                if let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFill().frame(width: 76, height: 76).clipShape(RoundedRectangle(cornerRadius: 10)) }
+                                Button { images.remove(at: index) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.white, .black.opacity(0.6)) }.accessibilityLabel("删除图片")
+                            }
+                        }
+                    }
+                }
+            }
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: 6, matching: .images) { Label("从相册选图片", systemImage: "photo.on.rectangle") }
+            if CameraController.hasCamera { PhotoSourceButtons(cameraTitle: "拍作业单", showsLibrary: false) { append($0) } }
+        } header: { Text("图片（选填）") } footer: { Text("作业单、课本页。最多 6 张。") }
+    }
+
+    private var canSaveManual: Bool { !saving && !childIds.isEmpty && !manualDrafts.isEmpty && draftsComplete(manualDrafts) }
 
     private func append(_ data: Data) {
         guard images.count < 6, let image = UIImage(data: data), let jpeg = PhotoStore.gatewayJPEG(image) else { return }
@@ -425,8 +472,53 @@ struct ParentEntry: View {
         }
     }
 
-    private func manual() { aiMessage = ""; drafts = [blank()]; showingResult = true }
-    private func blank() -> DraftItem { var d = DraftItem(); d.date = store.today; d.dueDate = Day.add(store.today, 1); d.attachImages = !images.isEmpty; return d }
+    private func saveManual() {
+        saving = true
+        Task {
+            await perform(store) {
+                try await saveDrafts(manualDrafts, images: images, childIds: childIds, rawText: "", store: store)
+                images = []; manualDrafts = [blank()]; onSaved()
+            }
+            saving = false
+        }
+    }
+
+    private func blank() -> DraftItem { var d = blankDraft(today: store.today); d.attachImages = !images.isEmpty; return d }
+}
+
+func blankDraft(today: String) -> DraftItem { var d = DraftItem(); d.date = today; d.dueDate = Day.add(today, 1); return d }
+func draftsComplete(_ drafts: [DraftItem]) -> Bool { !drafts.contains { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
+@MainActor func childNames(_ store: HomeworkStore, _ ids: Set<UUID>) -> String { store.children.filter { ids.contains($0.id) }.map(\.name).joined(separator: "、") }
+
+/// Saves each draft for every selected child, uploading the pictures once if any draft carries them.
+@MainActor func saveDrafts(_ drafts: [DraftItem], images: [Data], childIds: Set<UUID>, rawText: String, store: HomeworkStore) async throws {
+    let attachments = !images.isEmpty && drafts.contains(where: \.attachImages) ? try await store.uploadImages(images) : []
+    var items: [NewHomework] = []
+    for child in store.children where childIds.contains(child.id) {
+        for d in drafts {
+            items.append(NewHomework(childId: child.id, subject: d.subject, date: d.date, dueDate: d.hasDue ? max(d.dueDate, d.date) : nil,
+                                     content: d.content.trimmingCharacters(in: .whitespacesAndNewlines), rawText: String(rawText.prefix(5000)),
+                                     mode: d.kind.mode, onlineKind: d.kind.onlineKind, durationMinutes: d.kind.usesDuration ? d.minutes : nil,
+                                     parentTodo: d.parentTodo, attachmentIds: d.attachImages ? attachments : []))
+        }
+    }
+    try await store.create(items)
+}
+
+/// One section per draft plus “再加一项”; shared by the AI result page and manual entry.
+struct DraftList: View {
+    @EnvironmentObject private var store: HomeworkStore
+    @Binding var drafts: [DraftItem]
+    let images: [Data]
+    var body: some View {
+        ForEach($drafts) { $draft in
+            Section {
+                DraftFields(draft: $draft, images: images)
+                if drafts.count > 1 { Button("删除这一项", role: .destructive) { drafts.removeAll { $0.id == draft.id } } }
+            } header: { Text(SubjectStyle.label(draft.subject)) }
+        }
+        Section { Button { drafts.append(blankDraft(today: store.today)) } label: { Label("再加一项", systemImage: "plus") } }
+    }
 }
 
 struct EntryResult: View {
@@ -442,16 +534,10 @@ struct EntryResult: View {
     var body: some View {
         Form {
             if !message.isEmpty { Section { Label(message, systemImage: "sparkles").foregroundStyle(Color.ink2) } }
-            ForEach($drafts) { $draft in
-                Section {
-                    DraftFields(draft: $draft, images: images)
-                    if drafts.count > 1 { Button("删除这一项", role: .destructive) { drafts.removeAll { $0.id == draft.id } } }
-                } header: { Text(SubjectStyle.label(draft.subject)) }
-            }
-            Section { Button { var d = DraftItem(); d.date = store.today; d.dueDate = Day.add(store.today, 1); drafts.append(d) } label: { Label("再加一项", systemImage: "plus") } }
+            DraftList(drafts: $drafts, images: images)
             Section {
-                Button { save() } label: { HStack { Text(saving ? "正在保存…" : "加入\(names)的作业（\(drafts.count) 项）").bold(); if saving { ProgressView() } } }
-                    .disabled(saving || drafts.contains { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+                Button { save() } label: { HStack { Text(saving ? "正在保存…" : "加入\(childNames(store, childIds))的作业（\(drafts.count) 项）").bold(); if saving { ProgressView() } } }
+                    .disabled(saving || !draftsComplete(drafts))
             } footer: { Text("加入后，孩子的 iPad 下次同步就能看到。") }
         }
         .navigationTitle("核对作业")
@@ -459,28 +545,16 @@ struct EntryResult: View {
         .keyboardDoneButton()
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存") { save() }.disabled(saving || drafts.contains { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+                Button("保存") { save() }.disabled(saving || !draftsComplete(drafts))
             }
         }
     }
-
-    private var names: String { store.children.filter { childIds.contains($0.id) }.map(\.name).joined(separator: "、") }
 
     private func save() {
         saving = true
         Task {
             await perform(store) {
-                let attachments = drafts.contains(where: \.attachImages) ? try await store.uploadImages(images) : []
-                var items: [NewHomework] = []
-                for child in store.children where childIds.contains(child.id) {
-                    for d in drafts {
-                        items.append(NewHomework(childId: child.id, subject: d.subject, date: d.date, dueDate: d.hasDue ? max(d.dueDate, d.date) : nil,
-                                                 content: d.content.trimmingCharacters(in: .whitespacesAndNewlines), rawText: String(rawText.prefix(5000)),
-                                                 mode: d.kind.mode, onlineKind: d.kind.onlineKind, durationMinutes: d.kind.usesDuration ? d.minutes : nil,
-                                                 parentTodo: d.parentTodo, attachmentIds: d.attachImages ? attachments : []))
-                    }
-                }
-                try await store.create(items)
+                try await saveDrafts(drafts, images: images, childIds: childIds, rawText: rawText, store: store)
                 onSaved()
             }
             saving = false
@@ -759,15 +833,16 @@ struct ParentSettings: View {
                 Section {
                     LabeledContent("服务器", value: store.session?.server ?? "")
                     Button("退出这台手机", role: .destructive) { confirmingSignOut = true }
+                        .confirmationDialog("退出后需要用家长密钥重新连接。", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+                            Button("退出", role: .destructive) { store.signOut() }
+                            Button("取消", role: .cancel) {}
+                        }
                 }
             }
             .navigationTitle("设置")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
             .task { devices = (try? await store.devices()) ?? [] }
             .sheet(item: $editingChild) { ChildEditor(draft: $0) }
-            .confirmationDialog("退出后需要用家长密钥重新连接。", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                Button("退出", role: .destructive) { store.signOut() }
-            }
             .alert("删除\(deletingChild?.name ?? "")的全部数据？", isPresented: Binding(get: { deletingChild != nil }, set: { if !$0 { deletingChild = nil } })) {
                 Button("删除", role: .destructive) { if let child = deletingChild { Task { await perform(store) { try await store.deleteChild(child.id) } } } }
                 Button("取消", role: .cancel) {}

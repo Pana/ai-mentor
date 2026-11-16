@@ -41,7 +41,7 @@
 | `GET/PUT /v1/reward-rules` | 读：全部；写：家长 | 奖励规则，含每天完成时间 `finishTime` |
 | `GET /v1/rewards?childId` | 全部 | 余额、今天获得和使用的分钟数、最近 50 条明细 |
 | `POST /v1/rewards/sessions` | 全部 | `{id, childId, minutes}` 使用奖励时间；按时段、当天作业是否交完、每日上限、余额检查 |
-| `GET /v1/changes?since=<seq>` | 全部 | 增量同步：返回需要重新拉取的实体和 `next` |
+| `GET /v1/changes?since=<seq>&wait=<秒>` | 全部 | 增量同步：返回需要重新拉取的实体和 `next`。带 `wait`（最多 25）时，若暂无新变化，请求会挂起，直到本家庭有新变化或超时，App 在前台用它代替轮询，另一台设备的改动 1 秒内就能看到 |
 
 作业状态：`NOT_STARTED` → `SUBMITTED` → `REVIEWED` 或 `NEEDS_CORRECTION`（订正后再提交）。计时类作业提交即 `REVIEWED`。
 

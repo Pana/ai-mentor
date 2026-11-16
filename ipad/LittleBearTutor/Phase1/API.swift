@@ -261,13 +261,13 @@ struct APIClient: Sendable {
     static let encoder = JSONEncoder()
     static let decoder = JSONDecoder()
 
-    func request(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil, contentType: String? = nil) throws -> URLRequest {
+    func request(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil, contentType: String? = nil, timeout: TimeInterval? = nil) throws -> URLRequest {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw APIError.invalidServer }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = path.hasSuffix("/parse") ? 75 : 30
+        request.timeoutInterval = timeout ?? (path.hasSuffix("/parse") ? 75 : 30)
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             request.httpBody = body
@@ -290,9 +290,9 @@ struct APIClient: Sendable {
         return data
     }
 
-    func send<T: Decodable & Sendable>(_ method: String, _ path: String, query: [URLQueryItem] = [], json: (any Encodable)? = nil) async throws -> T {
+    func send<T: Decodable & Sendable>(_ method: String, _ path: String, query: [URLQueryItem] = [], json: (any Encodable)? = nil, timeout: TimeInterval? = nil) async throws -> T {
         let body = try json.map { try Self.encoder.encode($0) } ?? (["POST", "PUT", "PATCH"].contains(method) ? Data("{}".utf8) : nil)
-        let data = try await raw(request(method, path, query: query, body: body))
+        let data = try await raw(request(method, path, query: query, body: body, timeout: timeout))
         do { return try Self.decoder.decode(T.self, from: data) } catch { throw APIError.invalidResponse }
     }
 
@@ -306,6 +306,10 @@ struct APIClient: Sendable {
     }
     func me() async throws -> MeResponse { try await send("GET", "v1/me") }
     func changes(since: Int) async throws -> ChangeFeed { try await send("GET", "v1/changes", query: [.init(name: "since", value: String(since))]) }
+    /// Held open by the server until the family's next change, or about `wait` seconds with nothing new.
+    func waitForChanges(since: Int, wait: Int) async throws -> ChangeFeed {
+        try await send("GET", "v1/changes", query: [.init(name: "since", value: String(since)), .init(name: "wait", value: String(wait))], timeout: TimeInterval(wait + 15))
+    }
     func homework(from: String, to: String) async throws -> [RemoteHomework] {
         struct Page: Decodable, Sendable { var items: [RemoteHomework] }
         let page: Page = try await send("GET", "v1/homework", query: [.init(name: "from", value: from), .init(name: "to", value: to)])

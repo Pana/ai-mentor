@@ -242,6 +242,22 @@ private struct Cache: Codable {
         } while syncAgain
     }
 
+    /// Returns once the server has something new for this family, or after about 25 s with nothing new,
+    /// so the sync that follows picks up the other device's change within a second.
+    func waitForChanges() async {
+        guard let api = client, !signedOut, cursor > 0 else { try? await Task.sleep(for: .seconds(20)); return }
+        let started = Date()
+        do {
+            let feed = try await api.waitForChanges(since: cursor, wait: 25)
+            // A server without long-polling answers an empty feed at once: fall back to polling every 20 s.
+            if feed.changes.isEmpty, Date().timeIntervalSince(started) < 2 { try? await Task.sleep(for: .seconds(20)) }
+        } catch is CancellationError {
+        } catch {
+            // Offline or the server restarted: retry soon without spinning.
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
     private func fullRefresh(_ api: APIClient) async throws {
         let me = try await api.me()
         apply(me)
