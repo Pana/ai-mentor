@@ -56,24 +56,26 @@ final class Phase1E2EUITests: XCTestCase {
         app.navigationBars["设置"].buttons["完成"].waitTap()
 
         app.tabBars.buttons["录入"].waitTap()
-        let editor = app.textViews.firstMatch
-        wait(editor, "paste box")
-        editor.waitTap()
-        editor.typeText(env["E2E_HOMEWORK_TEXT"] ?? "数学口算本第12页1-20题，明早交。语文背诵《咏柳》，家长签字。")
-        app.buttons["完成"].firstMatch.waitTap()
-        shot(app, "p2-entry")
         if env["E2E_AI"] == "1" {
+            let editor = app.textViews.firstMatch
+            wait(editor, "paste box")
+            editor.waitTap()
+            editor.typeText(env["E2E_HOMEWORK_TEXT"] ?? "数学口算本第12页1-20题，明早交。语文背诵《咏柳》，家长签字。")
+            app.buttons["完成"].firstMatch.waitTap()
+            shot(app, "p2-entry")
             app.buttons["让 AI 整理"].waitTap()
             wait(app.navigationBars["核对作业"], "AI result", timeout: 90)
+            shot(app, "p3-result")
+            app.navigationBars["核对作业"].buttons["保存"].waitTap()
         } else {
-            app.buttons["不用 AI，手动填写"].waitTap()
-            wait(app.navigationBars["核对作业"], "manual form")
+            app.buttons["手动填写"].waitTap()
             let content = app.textFields["作业内容"].firstMatch
+            wait(content, "manual form")
             content.waitTap(); content.typeText("口算本第 12 页，第 1–20 题")
             app.buttons["完成"].firstMatch.waitTap()
+            shot(app, "p2-entry")
+            app.navigationBars["录入作业"].buttons["保存"].waitTap()
         }
-        shot(app, "p3-result")
-        app.navigationBars["核对作业"].buttons["保存"].waitTap()
         wait(app.navigationBars["作业"], "back on the homework list")
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '口算'")).firstMatch.waitForExistence(timeout: 10))
         shot(app, "p4-list")

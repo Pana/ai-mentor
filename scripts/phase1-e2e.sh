@@ -19,7 +19,7 @@ if [[ "${E2E_AI:-}" == 1 ]]; then
   envfile=(--env-file="$root/server/.env")
 fi
 TUTOR_DEVICE_TOKEN="e2e-tutor-token-$(openssl rand -hex 12)" PARENT_BOOTSTRAP_TOKEN="$secret" DATA_DIR="$out/data" HOST=127.0.0.1 PORT=$port \
-  node "${envfile[@]}" "$root/server/src/index.mjs" >"$out/server.log" 2>&1 &
+  node ${envfile[@]+"${envfile[@]}"} "$root/server/src/index.mjs" >"$out/server.log" 2>&1 &
 server=$!
 trap 'kill $server 2>/dev/null || true' EXIT
 # --env-file values lose to variables already set in the environment, so the throwaway port and data dir win.
