@@ -32,7 +32,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import cn.littlebear.tutor.BuildConfig
-import kotlinx.coroutines.delay
 
 /** App entry: role choice and pairing until this device is connected, then the parent or child app. */
 @Composable fun HomeworkApp(store: HomeworkStore) {
@@ -40,11 +39,12 @@ import kotlinx.coroutines.delay
         HomeworkTheme {
             val state by store.state.collectAsStateWithLifecycle()
             val lifecycle = LocalLifecycleOwner.current.lifecycle
-            // Foreground polling stands in for push notifications (FCM is unavailable on many devices in mainland China).
+            // In the foreground: sync, then hold a request open until the server has news. Long polling stands in for
+            // push notifications (FCM is unavailable on many devices in mainland China); stopped when the app leaves the foreground.
             LaunchedEffect(state.session?.deviceId) {
                 if (state.session == null) return@LaunchedEffect
                 lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                    while (true) { store.sync(); delay(20_000) }
+                    while (true) { store.sync(); store.waitForChanges() }
                 }
             }
             Surface(Modifier.fillMaxSize(), color = Palette.paper) {
