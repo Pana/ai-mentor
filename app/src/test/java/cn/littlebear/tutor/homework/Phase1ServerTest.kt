@@ -2,6 +2,8 @@ package cn.littlebear.tutor.homework
 
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.junit.Assert.assertEquals
@@ -38,6 +40,32 @@ class Phase1ServerTest {
 
     /** The server only checks the MP4 `ftyp` box; real recordings come from MediaRecorder. */
     private fun m4a(): ByteArray = byteArrayOf(0, 0, 0, 0x18) + "ftypM4A ".toByteArray() + ByteArray(64)
+
+    @Test fun childSeesParentsChangeWhileWaitingForChanges() = runBlocking {
+        assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
+        val parent = HomeworkStore(tempDir("lp-parent"), MemorySessionStorage(), debug = true)
+        parent.connectParent(server!!, secret!!, "长轮询家长")
+        parent.saveChild(name = "长轮询", grade = 1)
+        val child = parent.state.value.children.single { it.name == "长轮询" }
+        // The server has one family; this child is removed again so the full-loop test still sees only its own.
+        try {
+            val kid = HomeworkStore(tempDir("lp-child"), MemorySessionStorage(), debug = true)
+            kid.pairChild(server, parent.pairingCode().code, "长轮询平板")
+            kid.sync()
+
+            // The child's request is held open; the parent's write answers it at once instead of after the 25 s wait.
+            val started = System.currentTimeMillis()
+            val waiting = async { kid.waitForChanges(); System.currentTimeMillis() - started }
+            delay(500)
+            parent.create(listOf(NewHomework(childId = child.id, subject = "MATH", date = parent.today, content = "长轮询测试", mode = "OFFLINE")))
+            val waited = waiting.await()
+            assertTrue("woken by the change, waited $waited ms", waited in 400..5_000)
+            kid.sync()
+            assertTrue(kid.state.value.items(child.id).any { it.content == "长轮询测试" })
+        } finally {
+            parent.deleteChild(child.id)
+        }
+    }
 
     @Test fun parentAndChildRunThePhase1LoopThroughTheServer() = runBlocking {
         assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)

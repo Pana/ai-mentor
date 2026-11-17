@@ -255,6 +255,9 @@ class ApiClient(val baseUrl: String, val token: String?, private val transport: 
         send("POST", "v1/devices/pair", DeviceGrant.serializer(), json = wireJson.encodeToString(PairBody.serializer(), PairBody(code, deviceId, name)))
     suspend fun me(): MeResponse = send("GET", "v1/me", MeResponse.serializer())
     suspend fun changes(since: Int): ChangeFeed = send("GET", "v1/changes", ChangeFeed.serializer(), mapOf("since" to since.toString()))
+    /** Held open by the server until the family's next change, or about `wait` seconds with nothing new (within OkHttp's 75 s read timeout). */
+    suspend fun waitForChanges(since: Int, wait: Int): ChangeFeed =
+        send("GET", "v1/changes", ChangeFeed.serializer(), mapOf("since" to since.toString(), "wait" to wait.toString()))
     suspend fun homework(from: String, to: String): List<RemoteHomework> =
         send("GET", "v1/homework", HomeworkPage.serializer(), mapOf("from" to from, "to" to to)).items
     suspend fun homework(id: String): RemoteHomework = send("GET", "v1/homework/${id.lowercase()}", RemoteHomework.serializer())
