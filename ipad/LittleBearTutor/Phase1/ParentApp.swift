@@ -860,16 +860,44 @@ struct ChildDraft: Identifiable {
     init(_ child: RemoteChild) { id = child.id; name = child.name; grade = child.grade; isNew = false }
 }
 
+/// The voice teacher's notes about a child, as the server returns them.
+struct TeacherMemory: Decodable, Sendable {
+    var card: String
+    var sessions: Int
+    var updatedAt: String?
+}
+
 struct ChildEditor: View {
     @EnvironmentObject private var store: HomeworkStore
     @Environment(\.dismiss) private var dismiss
     @State var draft: ChildDraft
+    @State private var memory: TeacherMemory?
+    @State private var confirmingClear = false
     var body: some View {
         NavigationStack {
             Form {
                 TextField("昵称", text: $draft.name)
                 Picker("年级", selection: $draft.grade) { ForEach(1...6, id: \.self) { Text("\($0) 年级").tag($0) } }
+                if !draft.isNew {
+                    Section {
+                        if let notes = memory?.card, !notes.isEmpty {
+                            Text(notes).font(.callout).foregroundStyle(Color.ink).textSelection(.enabled)
+                            Button("清除记忆", role: .destructive) { confirmingClear = true }
+                                .confirmationDialog("清除后小熊老师不再记得以前和\(draft.name)聊过什么。", isPresented: $confirmingClear, titleVisibility: .visible) {
+                                    Button("清除", role: .destructive) {
+                                        Task { await perform(store) { try await store.clearTeacherMemory(draft.id); memory = try await store.teacherMemory(draft.id) } }
+                                    }
+                                    Button("取消", role: .cancel) {}
+                                }
+                        } else {
+                            Text(memory == nil ? "正在读取…" : "还没有记录。").foregroundStyle(Color.ink2)
+                        }
+                    } header: { Text("小熊老师的记忆") } footer: {
+                        Text("每次语音对话结束后，小熊老师会把学了什么、哪里卡住记成几行小结，下次接着教。录音和对话原文不会保存。")
+                    }
+                }
             }
+            .task { if !draft.isNew { memory = (try? await store.teacherMemory(draft.id)) ?? TeacherMemory(card: "", sessions: 0, updatedAt: nil) } }
             .navigationTitle(draft.isNew ? "添加孩子" : "修改孩子")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }

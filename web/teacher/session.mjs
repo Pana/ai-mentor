@@ -9,7 +9,14 @@ import { TeacherAudio } from './audio.mjs';
  *
  * Every sentence the child sends carries a `turn` number that the server echoes. A reply is shown only if it
  * answers the latest turn and the child has not interrupted since; anything else is cancelled by its id.
+ *
+ * Talking over the bear pauses it rather than cancelling: the reply is held while the child's words are recognized.
+ * Once there are words the reply is cancelled; if nothing was said (a cough, a door, echo) the bear says the
+ * interrupted segment again from its start and carries on.
  */
+/** No recognized words this long after the mic heard “speech”: it was noise, so stop listening to it. */
+const NO_WORDS_MS = 4000;
+
 export class TeacherSession {
   /** phase: idle | connecting | listening | hearing | thinking | speaking | ended | failed */
   state = { phase: 'idle', failure: '', caption: '', heard: '', awaiting: false, voiceInput: false, notice: '', muted: false };
@@ -19,6 +26,8 @@ export class TeacherSession {
   onBoard = null;
   /** Called with the mic level, 0…1. */
   onLevel = null;
+  /** Called when the teacher has said goodbye and the conversation closed itself. */
+  onEnded = null;
 
   audio = new TeacherAudio();
   #ws = null;
@@ -28,6 +37,10 @@ export class TeacherSession {
   #presenting = null; #nextIndex = 0; #outstanding = 0; #responseDone = false;
   #started = 0; // segments of this reply that began playing: what the child heard and saw
   #playToken = 0; #waitTimer = 0;
+  /** Gives up on a “sentence” that has produced no words (noise the mic took for speech). */
+  #wordsTimer = 0;
+  /** A reply paused because the child may be talking over it: `{turn}` of the reply, until words are heard. */
+  #held = null;
 
   constructor() {
     this.audio.onSpeechStart = () => this.#speechStarted();
@@ -111,12 +124,53 @@ export class TeacherSession {
 
   #speechStarted() {
     if (!this.state.voiceInput || !this.canTalk) return;
-    this.#interruptIfNeeded();
+    if (this.#response >= 0 && ['speaking', 'thinking'].includes(this.state.phase)) this.#hold();
+    else this.#interruptIfNeeded();
     this.#set({ heard: '', notice: '', phase: 'hearing' });
+    clearTimeout(this.#wordsTimer);
+    this.#wordsTimer = setTimeout(() => {
+      if (this.state.phase === 'hearing' && !this.state.heard.trim()) this.#cancelHearing();
+    }, NO_WORDS_MS);
+  }
+
+  /** Pauses the reply while the child may be talking; `#confirmInterrupt` or `#resume` follows. */
+  #hold() {
+    this.#held = { turn: this.#turn };
+    this.#playToken += 1; // ended callbacks of what was playing no longer count
+    clearTimeout(this.#waitTimer);
+    this.audio.stopPlayback();
+    this.audio.strict = false;
+    this.#outstanding = 0;
+    this.state.caption = '';
+  }
+
+  /** Words were heard: the held reply is cancelled, as a tap on the bear would. */
+  #confirmInterrupt() {
+    if (!this.#held) return;
+    this.#held = null;
+    this.#interruptIfNeeded();
+  }
+
+  /** Nothing was said after all: the bear repeats the segment it was on and goes on with the reply. */
+  #resume() {
+    if (!this.#held) return;
+    this.#held = null;
+    const index = this.#presenting, segment = index === null ? null : this.#segments.get(index);
+    if (!segment) {
+      this.#set({ phase: 'thinking' });
+      this.#presentNextIfReady();
+      return;
+    }
+    this.audio.strict = true;
+    Object.assign(segment, { played: false, waiting: false, waited: false, chunks: [] });
+    this.#set({ phase: 'speaking', caption: segment.speech, awaiting: segment.awaits });
+    for (const chunk of segment.all) this.#schedule(chunk, segment);
+    this.#finishIfPlayed();
   }
 
   #speechEnded() {
     if (!this.state.voiceInput || this.state.phase !== 'hearing') return;
+    clearTimeout(this.#wordsTimer);
     this.#turn += 1;
     this.#set({ phase: 'thinking' });
     this.#send({ type: 'input.audio.end', turn: this.#turn });
@@ -127,6 +181,7 @@ export class TeacherSession {
     this.#send({ type: 'input.audio.cancel' });
     this.audio.resetDetection();
     this.#set({ heard: '', phase: 'listening' });
+    this.#resume();
   }
 
   #interruptIfNeeded() {
@@ -141,23 +196,34 @@ export class TeacherSession {
   #handle(event) {
     const phase = this.state.phase;
     /** This event is about the latest sentence, and the child has not interrupted or started talking since. */
-    const wanted = event.turn === this.#turn && this.#turn >= this.#minTurn && phase !== 'hearing';
+    const wanted = (event.turn === this.#turn && this.#turn >= this.#minTurn && phase !== 'hearing')
+      || (this.#held !== null && event.turn === this.#held.turn); // the reply on hold keeps arriving
     switch (event.type) {
       case 'session.ready':
         this.#startAudio(Boolean(event.audio?.input), event.audio?.output?.sample_rate ?? 24000);
         break;
       case 'input.transcript.partial':
-        if (phase === 'hearing' && typeof event.text === 'string') this.#set({ heard: event.text });
+        if (phase === 'hearing' && typeof event.text === 'string') {
+          if (event.text.trim()) this.#confirmInterrupt();
+          this.#set({ heard: event.text });
+        }
+        break;
+      case 'input.speech_end':
+        // The recognizer heard the sentence end, often before the mic level drops (a noisy room, a quiet voice).
+        if (phase === 'hearing') { this.audio.resetDetection(); this.#speechEnded(); }
         break;
       case 'input.transcript.final':
-        if (wanted) this.#set({ heard: event.text ?? this.state.heard, phase: 'thinking' });
+        if (this.#held && event.turn === this.#turn) this.#confirmInterrupt(); // words, though no partial came first
+        if (event.turn === this.#turn && this.#turn >= this.#minTurn && phase !== 'hearing') this.#set({ heard: event.text ?? this.state.heard, phase: 'thinking' });
         break;
       case 'input.transcript.empty':
-        if (event.turn === this.#turn && phase === 'thinking') this.#set({ phase: 'listening' });
+        if (event.turn !== this.#turn || phase !== 'thinking') break;
+        if (this.#held) this.#resume(); else this.#set({ phase: 'listening' });
         break;
       case 'response.start':
         if (!Number.isInteger(event.response)) break;
         if (!wanted) { this.#send({ type: 'response.cancel', response: event.response, played: 0 }); break; }
+        if (this.#held) { this.#response = event.response; break; } // keep the reply, but the child is still talking
         this.#resetPresentation();
         this.#response = event.response;
         this.#set({ phase: 'thinking' });
@@ -165,7 +231,7 @@ export class TeacherSession {
       case 'segment':
         if (event.response !== this.#response || !Number.isInteger(event.index)) break;
         this.#segments.set(event.index, { speech: event.speech ?? '', ops: Array.isArray(event.board) ? event.board : [],
-          awaits: event.await === true, chunks: [], audioDone: false, hasAudio: false, played: false, waiting: false, waited: false });
+          awaits: event.await === true, ends: event.end === true, chunks: [], all: [], audioDone: false, hasAudio: false, played: false, waiting: false, waited: false });
         this.#presentNextIfReady();
         break;
       case 'segment.audio.done': {
@@ -195,7 +261,8 @@ export class TeacherSession {
     const segment = this.#segments.get(index);
     if (response !== (this.#response & 0xffff) || !segment) return;
     const pcm = frame.subarray(4);
-    if (this.#presenting === index) this.#schedule(pcm, segment); else segment.chunks.push(pcm);
+    segment.all.push(pcm); // kept so a paused segment can be said again
+    if (this.#presenting === index && !this.#held) this.#schedule(pcm, segment); else segment.chunks.push(pcm);
   }
 
   #handleError(code) {
@@ -250,7 +317,7 @@ export class TeacherSession {
   // ---------- presentation ----------
 
   #presentNextIfReady() {
-    if (this.#presenting !== null) return;
+    if (this.#presenting !== null || this.#held) return;
     const index = this.#nextIndex, segment = this.#segments.get(index);
     if (!segment) {
       if (this.#responseDone) {
@@ -282,6 +349,7 @@ export class TeacherSession {
   }
 
   #finishIfPlayed() {
+    if (this.#held) return;
     const index = this.#presenting, segment = this.#segments.get(index);
     if (index === null || !segment || !segment.audioDone || this.#outstanding > 0) return;
     if (!(segment.hasAudio && segment.played) && !segment.waited) {
@@ -299,6 +367,11 @@ export class TeacherSession {
     this.#segments.delete(index);
     this.#presenting = null;
     this.#nextIndex = index + 1;
+    if (segment.ends) { // the goodbye has been heard: the conversation is over
+      this.stop();
+      this.onEnded?.();
+      return;
+    }
     this.#presentNextIfReady();
   }
 
@@ -310,6 +383,7 @@ export class TeacherSession {
     this.#response = -1;
     this.#segments.clear();
     this.#presenting = null; this.#nextIndex = 0; this.#outstanding = 0; this.#responseDone = false; this.#started = 0;
+    this.#held = null;
     this.state.awaiting = false;
   }
 

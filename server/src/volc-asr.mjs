@@ -79,13 +79,15 @@ export function createVolcAsr({ apiKey, resourceId = DEFAULT_RESOURCE_ID, url = 
     /**
      * Opens a bidirectional streaming recognition for one utterance (the voice teacher). Audio is sent while
      * the child speaks; `onText` receives interim text; `end()` sends the last packet and resolves with the final text.
+     * `onEndpoint` runs once when the service decides a sentence is finished (`endWindowMs` of silence after words):
+     * a better signal than the mic level, which a noisy room or a quiet child can keep from ever dropping.
      */
-    stream({ onText, signal } = {}) {
+    stream({ onText, onEndpoint, signal, endWindowMs = 800 } = {}) {
       const requestId = randomUUID();
       const ws = new WebSocketImpl(streamUrl, { headers: {
         'X-Api-Key': apiKey, 'X-Api-Resource-Id': resourceId, 'X-Api-Request-Id': requestId, 'X-Api-Connect-Id': requestId
       } });
-      let sequence = 1, open = false, ended = false, settled = false, latestText = '', bytes = 0, timer;
+      let sequence = 1, open = false, ended = false, settled = false, latestText = '', bytes = 0, timer, endpointed = false;
       const queue = [];
       let resolveFinal, rejectFinal;
       const final = new Promise((resolve, reject) => { resolveFinal = resolve; rejectFinal = reject; });
@@ -107,6 +109,11 @@ export function createVolcAsr({ apiKey, resourceId = DEFAULT_RESOURCE_ID, url = 
           const response = parseResponse(message);
           if (response.code) return finish(new Error(`volc_asr_${response.code}`));
           if (response.text && response.text !== latestText) { latestText = response.text; onText?.(latestText); }
+          const utterances = response.body?.result?.utterances;
+          if (!endpointed && !ended && Array.isArray(utterances) && utterances.some(u => u?.definite && u.text?.trim())) {
+            endpointed = true;
+            onEndpoint?.(latestText);
+          }
           if (response.last) finish(null, { text: latestText, requestId });
         } catch (error) { finish(error); }
       });
@@ -115,7 +122,8 @@ export function createVolcAsr({ apiKey, resourceId = DEFAULT_RESOURCE_ID, url = 
           ws.send(fullRequestFrame({
             user: { uid: 'littlebear-teacher' },
             audio: { language: 'zh-CN', format: 'pcm', codec: 'raw', rate: 16_000, bits: 16, channel: 1 },
-            request: { model_name: 'bigmodel', enable_itn: true, enable_punc: true, enable_ddc: false, show_utterances: true, result_type: 'full' }
+            request: { model_name: 'bigmodel', enable_itn: true, enable_punc: true, enable_ddc: false, show_utterances: true, result_type: 'full',
+              ...(endWindowMs ? { end_window_size: endWindowMs } : {}) }
           }, sequence++));
           open = true;
           for (const [chunk, last] of queue.splice(0)) sendAudio(chunk, last);

@@ -7,6 +7,7 @@ struct BoardElement: Identifiable, Equatable, Sendable {
     struct Jump: Equatable, Sendable { var from: Int; var to: Int; var label: String }
     struct BarPart: Equatable, Sendable { var value: Double?; var label: String }
     struct BarRow: Equatable, Sendable { var label: String; var parts: [BarPart] }
+    struct PinyinLine: Equatable, Sendable { var text: String; var pinyin: [String] }
 
     enum Kind: Equatable, Sendable {
         case text(String, style: String)
@@ -15,6 +16,9 @@ struct BoardElement: Identifiable, Equatable, Sendable {
         case dots(groups: Int, per: Int, highlight: Int, label: String)
         case bar(rows: [BarRow], total: String)
         case clock(hour: Int, minute: Int, label: String)
+        case pinyin(title: String, lines: [PinyinLine])
+        case hanzi(char: String, pinyin: String, parts: [String], words: [String], note: String)
+        case word(word: String, syllables: String, meaning: String, example: String)
     }
 
     let id: String
@@ -57,6 +61,20 @@ struct BoardElement: Identifiable, Equatable, Sendable {
         case "clock":
             guard let hour = int("hour") else { return nil }
             kind = .clock(hour: hour, minute: int("minute") ?? 0, label: string("label"))
+        case "pinyin":
+            let lines = (json["lines"] as? [[String: Any]] ?? []).compactMap { line -> PinyinLine? in
+                guard let text = line["text"] as? String, let pinyin = line["pinyin"] as? String else { return nil }
+                return PinyinLine(text: text, pinyin: pinyin.split(separator: " ").map(String.init))
+            }
+            guard !lines.isEmpty else { return nil }
+            kind = .pinyin(title: string("title"), lines: lines)
+        case "hanzi":
+            guard let char = json["char"] as? String, !char.isEmpty else { return nil }
+            kind = .hanzi(char: char, pinyin: string("pinyin"), parts: json["parts"] as? [String] ?? [],
+                          words: json["words"] as? [String] ?? [], note: string("note"))
+        case "word":
+            guard let word = json["word"] as? String, !word.isEmpty else { return nil }
+            kind = .word(word: word, syllables: string("syllables"), meaning: string("meaning"), example: string("example"))
         default:
             return nil
         }
@@ -197,7 +215,109 @@ struct BoardElementView: View {
         case let .dots(groups, per, highlight, label): DotsView(groups: groups, per: per, highlight: highlight, label: label)
         case let .bar(rows, total): BarModelView(rows: rows, total: total)
         case let .clock(hour, minute, label): ClockView(hour: hour, minute: minute, label: label)
+        case let .pinyin(title, lines): PinyinLinesView(title: title, lines: lines)
+        case let .hanzi(char, pinyin, parts, words, note): HanziCardView(char: char, pinyin: pinyin, parts: parts, words: words, note: note)
+        case let .word(word, syllables, meaning, example): WordCardView(word: word, syllables: syllables, meaning: meaning, example: example)
         }
+    }
+}
+
+/// 拼音行: each character with its syllable above it; punctuation sits on the line without one.
+struct PinyinLinesView: View {
+    let title: String
+    let lines: [BoardElement.PinyinLine]
+    var body: some View {
+        VStack(spacing: 8) {
+            if !title.isEmpty { Text(title).font(.system(size: 32, weight: .heavy, design: .rounded)).foregroundStyle(Color.ink) }
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                FlowRow(spacing: 2) {
+                    ForEach(Array(cells(line).enumerated()), id: \.offset) { _, cell in
+                        VStack(spacing: 2) {
+                            Text(cell.mark ?? " ").font(.system(size: 18, weight: .semibold, design: .rounded)).foregroundStyle(Color.pine)
+                            Text(cell.char).font(.system(size: 44, weight: .bold, design: .rounded))
+                                .foregroundStyle(cell.mark == nil ? Color.ink3 : Color.ink)
+                        }
+                        .frame(minWidth: 50)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Characters paired with their syllables in order; punctuation and other symbols get none.
+    private func cells(_ line: BoardElement.PinyinLine) -> [(char: String, mark: String?)] {
+        var next = 0
+        return line.text.map { ch in
+            let isHan = ch.unicodeScalars.contains { (0x3400...0x9FFF).contains($0.value) || (0x20000...0x2FFFF).contains($0.value) }
+            defer { if isHan { next += 1 } }
+            return (String(ch), isHan && next < line.pinyin.count ? line.pinyin[next] : nil)
+        }
+    }
+}
+
+/// 生字卡: the character in a 田字格 with its pinyin above, then its parts and words.
+struct HanziCardView: View {
+    let char: String, pinyin: String, parts: [String], words: [String], note: String
+    private let grid = Color(hex: 0xC94A3A)
+    var body: some View {
+        HStack(alignment: .center, spacing: 24) {
+            VStack(spacing: 4) {
+                Text(pinyin).font(.system(size: 28, weight: .bold, design: .rounded)).foregroundStyle(Color.pine)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6).fill(Color.card)
+                    Canvas { context, size in
+                        var dash = Path()
+                        dash.move(to: CGPoint(x: size.width / 2, y: 0)); dash.addLine(to: CGPoint(x: size.width / 2, y: size.height))
+                        dash.move(to: CGPoint(x: 0, y: size.height / 2)); dash.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+                        dash.move(to: .zero); dash.addLine(to: CGPoint(x: size.width, y: size.height))
+                        dash.move(to: CGPoint(x: size.width, y: 0)); dash.addLine(to: CGPoint(x: 0, y: size.height))
+                        context.stroke(dash, with: .color(grid.opacity(0.45)), style: StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                    }
+                    RoundedRectangle(cornerRadius: 6).stroke(grid, lineWidth: 3)
+                    Text(char).font(.system(size: 120, weight: .regular, design: .serif)).foregroundStyle(Color.ink)
+                }
+                .frame(width: 160, height: 160)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                if !parts.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                            if index > 0 { Text("+").font(.system(size: 30, weight: .bold)).foregroundStyle(Color.ink3) }
+                            Text(part).font(.system(size: 34, weight: .bold)).foregroundStyle(Color.honeyInk)
+                                .padding(.horizontal, 12).padding(.vertical, 2).background(Color.honeySoft, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
+                }
+                if !words.isEmpty {
+                    FlowRow(spacing: 8) {
+                        ForEach(words, id: \.self) { word in
+                            Text(word).font(.system(size: 24, weight: .semibold)).foregroundStyle(Color.pine)
+                                .padding(.horizontal, 12).padding(.vertical, 4).background(Color.pineSoft, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
+                }
+                if !note.isEmpty { Text(note).font(.system(size: 21)).foregroundStyle(Color.ink2) }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("生字 \(char) \(pinyin)")
+    }
+}
+
+/// 单词卡: the word, its syllables, what it means, and an example.
+struct WordCardView: View {
+    let word: String, syllables: String, meaning: String, example: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(word).font(.system(size: 56, weight: .heavy, design: .rounded)).foregroundStyle(Color.ink)
+            if !syllables.isEmpty { Text(syllables).font(.system(size: 26, weight: .semibold, design: .rounded)).foregroundStyle(Color.honeyInk).kerning(1.5) }
+            if !meaning.isEmpty { Text(meaning).font(.system(size: 28, weight: .bold)).foregroundStyle(Color.pine) }
+            if !example.isEmpty { Text(example).font(.system(size: 22, design: .rounded)).italic().foregroundStyle(Color.ink2) }
+        }
+        .padding(.horizontal, 24).padding(.vertical, 16)
+        .background(Color.card, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.line, lineWidth: 2))
     }
 }
 

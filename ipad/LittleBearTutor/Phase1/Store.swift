@@ -398,6 +398,9 @@ private struct Cache: Codable {
         let _: OK = try await call("DELETE", "v1/children/\(id.uuidString.lowercased())")
         await sync()
     }
+    /// What the voice teacher remembers about a child: a short card of notes written after each conversation.
+    func teacherMemory(_ child: UUID) async throws -> TeacherMemory { try await call("GET", "v1/children/\(child.uuidString.lowercased())/teacher-memory") }
+    func clearTeacherMemory(_ child: UUID) async throws { let _: OK = try await call("DELETE", "v1/children/\(child.uuidString.lowercased())/teacher-memory") }
     func pairingCode() async throws -> PairingCode { try await call("POST", "v1/devices/pairing-codes") }
     func devices() async throws -> [DeviceRecord] {
         struct Page: Decodable, Sendable { var devices: [DeviceRecord] }

@@ -45,19 +45,29 @@ const lessons = {
     { speech: '小红比小明多几本，用线段图看得最清楚。', board: [{ op: 'add', el: { id: 'b1', type: 'bar', total: '一共 ? 本',
       rows: [{ label: '小明', parts: [{ value: 12, label: '12 本' }] }, { label: '小红', parts: [{ value: 12, label: '' }, { value: null, label: '多 ?' }] }] } }] },
     { speech: '这个钟面是三点半。', board: [{ op: 'add', el: { id: 'c1', type: 'clock', hour: 3, minute: 30, label: '3:30' } }] },
+    { speech: '古诗配上拼音，生字放进田字格，英语单词做成卡片。', board: [
+      { op: 'add', el: { id: 'p1', type: 'pinyin', title: '静夜思', lines: [{ text: '床前明月光，', pinyin: 'chuáng qián míng yuè guāng' }, { text: '疑是地上霜。', pinyin: 'yí shì dì shàng shuāng' }] } },
+      { op: 'add', el: { id: 'h1', type: 'hanzi', char: '晴', pinyin: 'qíng', parts: ['日', '青'], words: ['晴天', '晴朗'], note: '日字旁，和太阳有关' } },
+      { op: 'add', el: { id: 'w1', type: 'word', word: 'apple', syllables: 'ap·ple', meaning: '苹果', example: 'I like apples.' } }] },
     { speech: '退位减法的竖式是这样的。', board: [{ op: 'add', el: { id: 'v2', type: 'vertical', a: 52, b: 17, operator: '-', reveal: 2, focus: -1 } },
       { op: 'add', el: { id: 't2', type: 'text', text: '52 − 17 = 35', style: 'answer' } }, { op: 'add', el: { id: 't3', type: 'text', text: '个位不够减，向十位借一', style: 'hint' } }] }
   ],
-  other: [{ speech: '今天有一项数学作业，口算本第十二页，还没开始做。', board: [] }, { speech: '要不要现在一起看看？', board: [], await: true }]
+  other: [{ speech: '今天有一项数学作业，口算本第十二页，还没开始做。', board: [] }, { speech: '要不要现在一起看看？', board: [], await: true }],
+  bye: [{ speech: '好呀，今天学得不错，再见！', board: [], end: true }, { speech: '这一段不该出现。', board: [] }]
 };
 
-const modelRequests = [];
+const modelRequests = [], memoryRequests = [];
 const model = http.createServer(async (req, res) => {
   let body = ''; for await (const chunk of req) body += chunk;
   const request = JSON.parse(body);
+  if (!request.stream) { // the note written when a conversation ends
+    memoryRequests.push(request);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ choices: [{ message: { content: '- 11-18 学了三十八加二十七的竖式' } }] }));
+  }
   modelRequests.push(request);
   const said = request.messages.at(-1).content;
-  const lesson = /所有图/.test(said) ? lessons.gallery : /38/.test(said) ? lessons.add : lessons.other;
+  const lesson = /再见/.test(said) ? lessons.bye : /所有图/.test(said) ? lessons.gallery : /38/.test(said) ? lessons.add : lessons.other;
   res.writeHead(200, { 'Content-Type': 'text/event-stream' });
   for (const segment of lesson) {
     const line = `${JSON.stringify(segment)}\n`;
@@ -91,6 +101,8 @@ const tts = http.createServer(async (req, res) => {
 
 const asrServer = http.createServer();
 const asrSessions = [];
+/** When true the stand-in hears nothing in the audio (a cough, a door): no partial text and an empty result. */
+let asrHearsNothing = false;
 new WebSocketServer({ server: asrServer }).on('connection', ws => {
   const session = { audioBytes: 0, frames: 0 };
   asrSessions.push(session);
@@ -104,8 +116,8 @@ new WebSocketServer({ server: asrServer }).on('connection', ws => {
   ws.on('message', data => {
     if (data[1] >> 4 !== 0b0010) return; // the first frame is the request, the rest are audio
     session.frames += 1; session.audioBytes += data.length;
-    if (session.frames === 6) reply(HEARD.slice(0, 3), false);
-    if (data[1] & 0b0010) reply(HEARD, true);
+    if (session.frames === 6 && !asrHearsNothing) reply(HEARD.slice(0, 3), false);
+    if (data[1] & 0b0010) reply(asrHearsNothing ? '' : HEARD, true);
   });
 });
 
@@ -165,9 +177,9 @@ try {
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body && JSON.stringify(body) })).json();
 
   /** Chromium whose microphone plays a file: one sentence-like burst at each of `starts` seconds after the mic opens. */
-  async function launch(name, starts) {
+  async function launch(name, starts, sound) {
     const wav = join(work, `${name}.wav`);
-    microphoneWav(wav, starts);
+    microphoneWav(wav, starts, sound);
     const launched = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${wav}%noloop`] });
     browsers.push(launched);
     return launched;
@@ -204,9 +216,12 @@ try {
   /** Records each caption with the time it appeared and what the board held then. */
   const watchCaptions = page => page.evaluate(() => {
     window.captions = [];
+    let shown = '';
     const note = () => {
       const text = document.getElementById('caption').textContent;
-      if (text && window.captions.at(-1)?.text !== text) {
+      if (!text) { shown = ''; return; } // cleared: the same words shown again count as said again
+      if (text !== shown) {
+        shown = text;
         window.captions.push({ text, at: performance.now(), board: [...document.querySelectorAll('.b-item')].map(n => n.dataset.id),
           result: [...document.querySelectorAll('.v-result')].map(n => n.textContent).join('') });
       }
@@ -309,7 +324,7 @@ try {
     check(layout.apart && layout.fits, `${name.slice(3)}：小熊和字幕不盖住白板，也不出屏`);
     check(layout.inside, `${name.slice(3)}：白板内容不超出白板`);
     check(layout.boardHeight > 240, `${name.slice(3)}：白板高度够用（${Math.round(layout.boardHeight)}px）`);
-    if (name.startsWith('06')) check(layout.types === 6, '六种白板元素都画出来了');
+    if (name.startsWith('06')) check(layout.types === 9, `九种白板元素都画出来了（${layout.types}）`);
     await view.context().close();
   }
   // 5. The server goes away mid-conversation.
@@ -324,7 +339,8 @@ try {
   await shot(page, '09-断线');
   await browser.close();
 
-  // 6. The child speaks while the bear is still explaining: the reply stops and the new sentence is answered.
+  // 6. The child speaks while the bear is still explaining: the reply pauses, stops once there are words,
+  //    and the new sentence is answered.
   console.log('开口打断');
   const second = await gateway('data-interrupt', speechServices);
   const talkative = await launch('two-sentences', [3, 8.6]);
@@ -342,11 +358,37 @@ try {
   const heardBefore = lessons.add.slice(0, cut.captions.length).map(s => s.speech);
   check(JSON.stringify(all) === JSON.stringify([...heardBefore, ...lessons.add.map(s => s.speech)]), '第二句话得到完整的新回答', all);
   const retold = modelRequests[1]?.messages ?? [];
-  check(retold.at(-2)?.content === `${heardBefore.join('')}（说到这里被孩子打断了）`, '模型知道上一次只讲到哪里', retold.at(-2)?.content);
+  const toldLines = (retold.at(-2)?.content ?? '').split('\n');
+  check(toldLines.at(-1) === '（说到这里被孩子打断了）' && JSON.stringify(toldLines.slice(0, -1).map(line => JSON.parse(line).speech)) === JSON.stringify(heardBefore),
+    '模型知道上一次只讲到哪里（连同画了什么）', retold.at(-2)?.content);
   const seen = JSON.parse(/当前白板：(.*)\n/.exec(retold.at(-1)?.content ?? '')?.[1] ?? '[]');
   check(seen.length === Math.min(2, cut.captions.length) && !seen.some(el => el.reveal > (cut.captions.length >= 3 ? 1 : 0)), '模型看到的白板和孩子看到的一致', seen);
   await talkative.close();
   second.child.kill();
+
+  // 6b. A sound that is not words (a cough) while the bear talks: it pauses, then says that segment again and goes on.
+  console.log('咳嗽不打断');
+  const third = await gateway('data-cough', speechServices);
+  const coughing = await launch('cough', [4], { speech: 0.35 });
+  const cough = await newPage(coughing, { width: 1180, height: 820 });
+  await connect(cough, third.url);
+  await watchCaptions(cough);
+  modelRequests.length = 0;
+  asrHearsNothing = true;
+  await cough.locator('#start').click();
+  await cough.locator('.suggestion').first().click(); // 教我算 38 + 27, typed: the cough comes about 4 s after the mic opens
+  await cough.locator('#orb[data-phase="speaking"]').waitFor({ timeout: 20_000 });
+  await cough.locator('#orb[data-phase="hearing"]').waitFor({ timeout: 20_000 });
+  const paused = await cough.evaluate(() => window.captions.map(c => c.text));
+  await cough.locator('#your-turn').waitFor({ timeout: 40_000 });
+  const told = await cough.evaluate(() => window.captions.map(c => c.text));
+  const said = lessons.add.map(s => s.speech);
+  check(told.at(-1) === said.at(-1) && said.every(text => told.includes(text)), '咳嗽之后小熊接着讲完整段讲解', told);
+  check(told.length === said.length + 1 && told[paused.length] === paused.at(-1), `被咳嗽打断的第 ${paused.length} 段从头重说一遍`, { paused, told });
+  check(modelRequests.length === 1, '咳嗽没有引起新的回答', modelRequests.length);
+  asrHearsNothing = false;
+  await coughing.close();
+  third.child.kill();
 
   // 7. No speech services on the server: typing only, each segment stays long enough to read.
   console.log('没有配置语音');
@@ -366,6 +408,18 @@ try {
   check(silentCaptions.length === 4 && reading.every(gap => gap >= 1.4), `没有声音时每段停留够读完（${reading.map(g => g.toFixed(1)).join('、')} 秒）`);
   check(ttsRequests.length === spokenBefore, '没有调用语音合成');
   await shot(typed, '10-只打字');
+
+  // 8. The child says goodbye: the bear says one last thing, the conversation closes and its notes are written.
+  console.log('道别');
+  if (await typed.locator('#input-bar').isHidden()) await typed.locator('#keyboard').click();
+  await typed.locator('#draft').fill('我要去吃饭了，再见');
+  await typed.locator('#draft').press('Enter');
+  await typed.locator('#step-start').waitFor({ state: 'visible', timeout: 20_000 });
+  const farewell = await typed.evaluate(() => window.captions.map(c => c.text));
+  check(farewell.at(-1) === lessons.bye[0].speech && !farewell.includes('这一段不该出现。'), '小熊道别一句后对话自己结束，回到“开始”', farewell.slice(-2));
+  const noted = () => memoryRequests.filter(r => /孩子：我要去吃饭了，再见/.test(r.messages[1].content));
+  for (let i = 0; i < 50 && !noted().length; i++) await new Promise(r => setTimeout(r, 100));
+  check(noted().length === 1 && /小熊：好呀，今天学得不错，再见！/.test(noted()[0].messages[1].content), '对话结束后写了一次学情小结', memoryRequests.length);
 
   check(errors.length === 0, '浏览器控制台没有报错', errors);
   if (log.replace(/\(node:\d+\) ExperimentalWarning.*\n.*\n/g, '').replace(/LittleBear gateway listening.*\n/g, '').trim()) console.log(`服务端输出：\n${log.trim()}`);

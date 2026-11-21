@@ -49,6 +49,12 @@ const migrations = [`
 `, `
   CREATE TABLE hanzi_answers (
     query TEXT PRIMARY KEY, answer TEXT NOT NULL, created_at TEXT NOT NULL);
+`, `
+  -- What the voice teacher remembers about a child: one short card of notes, rewritten after each conversation.
+  -- The conversations themselves (audio, transcripts) are never stored.
+  CREATE TABLE teacher_memory (
+    child_id TEXT PRIMARY KEY, family_id TEXT NOT NULL, card TEXT NOT NULL, sessions INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL);
 `];
 
 export function openDatabase(path) {

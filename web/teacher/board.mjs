@@ -143,7 +143,53 @@ function renderClock(el) {
   return node;
 }
 
-const renderers = { text: renderText, vertical: renderVertical, number_line: renderNumberLine, dots: renderDots, bar: renderBar, clock: renderClock };
+const han = /\p{Script=Han}/u;
+
+/** 拼音行: each character with its syllable above it; punctuation sits on the line without one. Lines are written in turn. */
+function renderPinyin(el, prev) {
+  const before = prev?.type === 'pinyin' ? prev.lines.length : 0;
+  const node = h('div', { class: 'b-pinyin', lang: 'zh-CN' });
+  if (el.title) node.append(h('div', { class: 'p-title' }, el.title));
+  el.lines.forEach((line, index) => {
+    const marks = line.pinyin.split(' ');
+    let next = 0;
+    const row = h('div', { class: `p-line${index >= before ? ' write' : ''}` });
+    row.style.animationDelay = `${Math.max(0, index - before) * 0.25}s`;
+    for (const ch of line.text) {
+      row.append(han.test(ch) ? h('ruby', {}, ch, h('rt', {}, marks[next++] ?? '')) : h('span', { class: 'p-punct' }, ch));
+    }
+    node.append(row);
+  });
+  return node;
+}
+
+/** 生字卡: the character in a 田字格, its pinyin above, then its parts and words. */
+function renderHanzi(el) {
+  const grid = s('svg', { class: 'z-grid', viewBox: '0 0 100 100', 'aria-hidden': 'true' },
+    s('rect', { x: 1.5, y: 1.5, width: 97, height: 97, rx: 4 }),
+    s('line', { class: 'z-dash', x1: 50, y1: 2, x2: 50, y2: 98 }), s('line', { class: 'z-dash', x1: 2, y1: 50, x2: 98, y2: 50 }),
+    s('line', { class: 'z-dash', x1: 2, y1: 2, x2: 98, y2: 98 }), s('line', { class: 'z-dash', x1: 98, y1: 2, x2: 2, y2: 98 }));
+  const card = h('div', { class: 'b-hanzi', lang: 'zh-CN', role: 'img', 'aria-label': `生字 ${el.char} ${el.pinyin}` },
+    h('div', { class: 'z-head' }, h('div', { class: 'z-pinyin' }, el.pinyin), h('div', { class: 'z-cell' }, grid, h('span', { class: 'z-char' }, el.char))));
+  const info = h('div', { class: 'z-info' });
+  if (el.parts.length) info.append(h('div', { class: 'z-parts' }, ...el.parts.flatMap((part, i) => i ? [h('span', { class: 'z-plus' }, '+'), h('span', { class: 'z-part' }, part)] : [h('span', { class: 'z-part' }, part)])));
+  if (el.words.length) info.append(h('div', { class: 'z-words' }, ...el.words.map(word => h('span', { class: 'z-word' }, word))));
+  if (el.note) info.append(h('div', { class: 'z-note' }, el.note));
+  if (info.childNodes.length) card.append(info);
+  return card;
+}
+
+/** 单词卡: the word, its syllables, what it means, and an example. */
+function renderWord(el) {
+  const card = h('div', { class: 'b-word', lang: 'en' }, h('div', { class: 'w-word' }, el.word));
+  if (el.syllables) card.append(h('div', { class: 'w-syllables' }, el.syllables));
+  if (el.meaning) card.append(h('div', { class: 'w-meaning', lang: 'zh-CN' }, el.meaning));
+  if (el.example) card.append(h('div', { class: 'w-example' }, el.example));
+  return card;
+}
+
+const renderers = { text: renderText, vertical: renderVertical, number_line: renderNumberLine, dots: renderDots, bar: renderBar,
+  clock: renderClock, pinyin: renderPinyin, hanzi: renderHanzi, word: renderWord };
 
 export class Whiteboard {
   #scroller; #content; #items = new Map(); // id → { el, node }

@@ -39,6 +39,11 @@ struct TeacherView: View {
         .background(Color.paper.ignoresSafeArea())
         .task { connect() }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onChange(of: teacher.finished) { _, finished in
+            guard finished else { return }
+            // The child said goodbye: leave the last words up for a moment, then go back to the homework screen.
+            Task { try? await Task.sleep(for: .seconds(1.2)); dismiss() }
+        }
         .onDisappear {
             teacher.stop()
             UIApplication.shared.isIdleTimerDisabled = false

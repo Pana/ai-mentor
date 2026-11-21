@@ -15,6 +15,10 @@ import SwiftUI
 ///
 /// Every sentence the child sends carries a `turn` number that the server echoes. A reply is shown only if it
 /// answers the latest turn and the child has not interrupted since; anything else is cancelled by its id.
+///
+/// Talking over the bear pauses it rather than cancelling: the reply is held while the child's words are recognized.
+/// Once there are words the reply is cancelled; if nothing was said (a cough, a door, echo) the bear says the
+/// interrupted segment again from its start and carries on.
 @MainActor final class TeacherSession: ObservableObject {
     enum Phase: Equatable {
         case connecting, listening, hearing, thinking, speaking, ended
@@ -33,6 +37,8 @@ import SwiftUI
     /// The server recognizes speech; otherwise only typed input works.
     @Published private(set) var voiceInput = false
     @Published private(set) var notice: String?
+    /// The teacher has said goodbye (the child asked to stop): the view closes itself.
+    @Published private(set) var finished = false
     @Published var muted = false {
         didSet {
             audio.muted = muted
@@ -45,7 +51,10 @@ import SwiftUI
         var speech: String
         var ops: [[String: Any]]
         var awaits: Bool
+        var ends = false
         var chunks: [Data] = []
+        /// Every chunk received, so a paused segment can be said again.
+        var all: [Data] = []
         var audioDone = false
         var hasAudio = false
         /// Some of its audio was actually queued on the speaker.
@@ -70,6 +79,10 @@ import SwiftUI
     /// Segments of this reply that began playing: what the child heard and saw.
     private var started = 0
     private var playbackToken = 0
+    /// The turn of a reply paused because the child may be talking over it, until words are heard.
+    private var heldTurn: Int?
+    /// Gives up on a “sentence” that has produced no words (noise the mic took for speech).
+    private var wordsTask: Task<Void, Never>?
 
     init() {
         audio.onSpeechStart = { [weak self] in self?.speechStarted() }
@@ -94,6 +107,7 @@ import SwiftUI
 
     func start(session: DeviceSession, child: RemoteChild) {
         stop()
+        finished = false
         elements = []; focus = nil; caption = ""; heard = ""; notice = nil
         phase = .connecting
         guard let base = try? APIClient.validate(session.server),
@@ -145,10 +159,17 @@ import SwiftUI
 
     private func speechStarted() {
         guard voiceInput, canTalk else { return }
-        interruptIfNeeded()
+        if response >= 0, phase == .speaking || phase == .thinking { hold() } else { interruptIfNeeded() }
         heard = ""
         notice = nil
         phase = .hearing
+        wordsTask?.cancel()
+        wordsTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard let self, !Task.isCancelled, self.phase == .hearing,
+                  self.heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            self.cancelHearing()
+        }
     }
 
     private func sendAudio(_ data: Data) {
@@ -159,6 +180,7 @@ import SwiftUI
 
     private func speechEnded() {
         guard voiceInput, phase == .hearing else { return }
+        wordsTask?.cancel(); wordsTask = nil
         turn += 1
         phase = .thinking
         send(["type": "input.audio.end", "turn": turn])
@@ -170,6 +192,46 @@ import SwiftUI
         audio.resetDetection()
         heard = ""
         phase = .listening
+        resume()
+    }
+
+    /// Pauses the reply while the child may be talking; `confirmInterrupt` or `resume` follows.
+    private func hold() {
+        heldTurn = turn
+        playbackToken += 1 // completions of what was playing no longer count
+        waitTask?.cancel(); waitTask = nil
+        audio.stopPlayback()
+        audio.strict = false
+        outstanding = 0
+        caption = ""
+    }
+
+    /// Words were heard: the held reply is cancelled, as a tap on the bear would.
+    private func confirmInterrupt() {
+        guard heldTurn != nil else { return }
+        heldTurn = nil
+        interruptIfNeeded()
+    }
+
+    /// Nothing was said after all: the bear repeats the segment it was on and goes on with the reply.
+    private func resume() {
+        guard heldTurn != nil else { return }
+        heldTurn = nil
+        guard let index = presenting, let segment = segments[index] else {
+            phase = .thinking
+            presentNextIfReady()
+            return
+        }
+        audio.strict = true
+        segments[index]?.played = false
+        segments[index]?.waiting = false
+        segments[index]?.waited = false
+        segments[index]?.chunks.removeAll()
+        phase = .speaking
+        caption = segment.speech
+        awaitingAnswer = segment.awaits
+        for chunk in segment.all { schedule(chunk, segment: index) }
+        finishIfPlayed()
     }
 
     private func captureLost() {
@@ -213,7 +275,8 @@ import SwiftUI
         let responseId = (event["response"] as? NSNumber)?.intValue
         let eventTurn = (event["turn"] as? NSNumber)?.intValue
         /// This event is about the latest sentence, and the child has not interrupted or started talking since.
-        let wanted = eventTurn == turn && turn >= minTurn && phase != .hearing
+        let wanted = (eventTurn == turn && turn >= minTurn && phase != .hearing)
+            || (heldTurn != nil && eventTurn == heldTurn) // the reply on hold keeps arriving
         switch type {
         case "session.ready":
             let audioInfo = event["audio"] as? [String: Any]
@@ -221,22 +284,33 @@ import SwiftUI
             voiceInput = audioInfo?["input"] is [String: Any]
             Task { await startAudio(outputRate: (output?["sample_rate"] as? NSNumber)?.doubleValue ?? 24_000) }
         case "input.transcript.partial":
-            if phase == .hearing { heard = event["text"] as? String ?? heard }
+            guard phase == .hearing, let text = event["text"] as? String else { return }
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { confirmInterrupt() }
+            heard = text
+        case "input.speech_end":
+            // The recognizer heard the sentence end, often before the mic level drops (a noisy room, a quiet voice).
+            guard phase == .hearing else { return }
+            audio.resetDetection()
+            speechEnded()
         case "input.transcript.final":
-            guard wanted else { return }
+            if heldTurn != nil, eventTurn == turn { confirmInterrupt() } // words, though no partial came first
+            guard eventTurn == turn, turn >= minTurn, phase != .hearing else { return }
             heard = event["text"] as? String ?? heard
             phase = .thinking
         case "input.transcript.empty":
-            if eventTurn == turn, phase == .thinking { phase = .listening }
+            guard eventTurn == turn, phase == .thinking else { return }
+            if heldTurn != nil { resume() } else { phase = .listening }
         case "response.start":
             guard let responseId else { return }
             guard wanted else { send(["type": "response.cancel", "response": responseId, "played": 0]); return }
+            if heldTurn != nil { response = responseId; return } // keep the reply, but the child is still talking
             resetPresentation()
             response = responseId
             phase = .thinking
         case "segment":
             guard let responseId, responseId == response, let index = (event["index"] as? NSNumber)?.intValue else { return }
-            segments[index] = Segment(speech: event["speech"] as? String ?? "", ops: event["board"] as? [[String: Any]] ?? [], awaits: event["await"] as? Bool ?? false)
+            segments[index] = Segment(speech: event["speech"] as? String ?? "", ops: event["board"] as? [[String: Any]] ?? [],
+                                      awaits: event["await"] as? Bool ?? false, ends: event["end"] as? Bool ?? false)
             presentNextIfReady()
         case "segment.audio.done":
             guard let responseId, responseId == response, let index = (event["index"] as? NSNumber)?.intValue, segments[index] != nil else { return }
@@ -261,7 +335,8 @@ import SwiftUI
         let index = Int(data[data.startIndex + 2]) << 8 | Int(data[data.startIndex + 3])
         guard response >= 0, responseId == response & 0xffff, segments[index] != nil else { return }
         let pcm = data.subdata(in: (data.startIndex + 4)..<data.endIndex)
-        if presenting == index { schedule(pcm, segment: index) } else { segments[index]?.chunks.append(pcm) }
+        segments[index]?.all.append(pcm)
+        if presenting == index, heldTurn == nil { schedule(pcm, segment: index) } else { segments[index]?.chunks.append(pcm) }
     }
 
     private func handleError(_ code: String) {
@@ -320,7 +395,7 @@ import SwiftUI
     // MARK: Presentation
 
     private func presentNextIfReady() {
-        guard presenting == nil else { return }
+        guard presenting == nil, heldTurn == nil else { return }
         guard let segment = segments[nextIndex] else {
             if responseDone {
                 response = -1
@@ -360,7 +435,7 @@ import SwiftUI
     }
 
     private func finishIfPlayed() {
-        guard let index = presenting, let segment = segments[index], segment.audioDone, outstanding == 0 else { return }
+        guard heldTurn == nil, let index = presenting, let segment = segments[index], segment.audioDone, outstanding == 0 else { return }
         if !(segment.hasAudio && segment.played), !segment.waited {
             // Nothing was heard for this segment (no TTS, or the speaker is unavailable): leave it up long enough to read.
             guard !segment.waiting else { return }
@@ -378,6 +453,11 @@ import SwiftUI
         segments[index] = nil
         presenting = nil
         nextIndex = index + 1
+        if segment.ends { // the goodbye has been heard: the conversation is over
+            stop()
+            finished = true
+            return
+        }
         presentNextIfReady()
     }
 
@@ -393,6 +473,7 @@ import SwiftUI
         outstanding = 0
         responseDone = false
         started = 0
+        heldTurn = nil
         awaitingAnswer = false
     }
 

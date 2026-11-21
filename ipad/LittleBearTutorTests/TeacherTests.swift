@@ -61,6 +61,30 @@ final class TeacherTests: XCTestCase {
         XCTAssertEqual(line.kind, .numberLine(from: 0, to: 20, step: 1, marks: [8], jumps: [.init(from: 8, to: 13, label: "+5")]))
     }
 
+    func testChineseAndEnglishElementsParse() {
+        let poem = BoardElement(json: ["id": "p1", "type": "pinyin", "title": "静夜思",
+                                       "lines": [["text": "床前明月光，", "pinyin": "chuáng qián míng yuè guāng"]]])
+        XCTAssertEqual(poem?.kind, .pinyin(title: "静夜思", lines: [.init(text: "床前明月光，", pinyin: ["chuáng", "qián", "míng", "yuè", "guāng"])]))
+        let card = BoardElement(json: ["id": "h1", "type": "hanzi", "char": "晴", "pinyin": "qíng", "parts": ["日", "青"], "words": ["晴天"]])
+        XCTAssertEqual(card?.kind, .hanzi(char: "晴", pinyin: "qíng", parts: ["日", "青"], words: ["晴天"], note: ""))
+        let word = BoardElement(json: ["id": "w1", "type": "word", "word": "apple", "meaning": "苹果"])
+        XCTAssertEqual(word?.kind, .word(word: "apple", syllables: "", meaning: "苹果", example: ""))
+        XCTAssertNil(BoardElement(json: ["id": "w2", "type": "word"]))
+    }
+
+    func testVoiceActivityDetectorEndsInANoisyRoom() {
+        var vad = VoiceActivityDetector()
+        for _ in 0..<25 { _ = vad.process(level: -62, ms: 40, strict: false) } // quiet room before the air conditioner
+        var started = false
+        for _ in 0..<10 where !started { started = vad.process(level: -25, ms: 40, strict: false) == .start }
+        XCTAssertTrue(started)
+        for _ in 0..<20 { XCTAssertNil(vad.process(level: -26, ms: 40, strict: false)) }
+        var endedAfter: Int?
+        for i in 0..<30 where endedAfter == nil { if vad.process(level: -50, ms: 40, strict: false) == .end { endedAfter = i * 40 } }
+        XCTAssertNotNil(endedAfter, "the hum is 12 dB above the floor, but the voice dropped 18 dB")
+        XCTAssertLessThanOrEqual(endedAfter ?? .max, 1_000)
+    }
+
     func testVoiceActivityDetector() {
         var vad = VoiceActivityDetector()
         for _ in 0..<50 { XCTAssertNil(vad.process(level: -62, ms: 20, strict: false)) }

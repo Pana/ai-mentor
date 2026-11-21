@@ -97,3 +97,16 @@ test('teacher web page is served with a CSP, and the WebSocket accepts a device 
   await assert.rejects(open(['littlebear.teacher.v1', 'littlebear.token.not-a-real-token-0000000000000000']));
   await assert.rejects(open(['littlebear.teacher.v1']));
 });
+
+test('vad: a sentence ends in a noisy room, where the level never falls back to the floor', () => {
+  const vad = new VoiceActivityDetector();
+  for (let i = 0; i < 25; i++) vad.process(-62, 40); // quiet room learned before the air conditioner kicks in
+  let event = null;
+  for (let i = 0; i < 10 && event !== 'start'; i++) event = vad.process(-25, 40);
+  assert.equal(event, 'start');
+  for (let i = 0; i < 20; i++) assert.equal(vad.process(-26, 40), null, 'still talking');
+  const ends = [];
+  for (let i = 0; i < 30; i++) { const e = vad.process(-50, 40); if (e) ends.push([e, i]); } // the hum is 12 dB above the floor
+  assert.equal(ends[0]?.[0], 'end', 'the voice dropped 18 dB: the sentence is over');
+  assert.ok(ends[0][1] * 40 <= 1000, `ended after ${ends[0][1] * 40} ms of hum`);
+});
