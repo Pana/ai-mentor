@@ -15,7 +15,7 @@ import { createVolcAsr } from '../src/volc-asr.mjs';
 
 const bootstrapToken = 'parent-bootstrap-token-not-a-secret';
 const tutorToken = 'device-test-token-not-a-secret-12345';
-const model = { apiUrl: 'https://model.example/v1/chat/completions', apiKey: 'test-key', model: 'test-model' };
+const model = { apiUrl: 'https://model.example/v1/chat/completions', apiKey: 'test-key', model: 'test-model', thinking: 'disabled' };
 
 function sse(contents, split = 7) {
   const text = contents.map(content => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`).join('') + 'data: [DONE]\n\n';
@@ -29,6 +29,9 @@ test('board: elements are validated and updates carry the whole element', () => 
   assert.equal(normalizeElement({ id: 'v1', type: 'vertical', a: 12, b: 30, operator: '-' }), null, 'no negative results');
   assert.equal(normalizeElement({ id: 'v1', type: 'vertical', a: 12, b: 13, operator: '×' }), null, 'multiplier is one digit');
   assert.equal(normalizeElement({ id: 'bad id', type: 'text', text: 'x' }), null);
+  assert.deepEqual(normalizeElement({ id: 't1', type: 'title', text: '晴 = 日 + 青' }), { id: 't1', type: 'text', text: '晴 = 日 + 青', style: 'title' },
+    'a style written as the type is a text element');
+  assert.equal(normalizeElement({ id: 'd1', type: 'dots', groups: 3, per: 4, highlight: -1 }).highlight, 0, 'like focus, -1 means none');
   assert.equal(normalizeElement({ id: 'n1', type: 'number_line', from: 0, to: 100, step: 1 }), null, 'at most 20 ticks');
   assert.deepEqual(normalizeElement({ id: 'n1', type: 'number_line', from: 0, to: 20, marks: [8], jumps: [{ from: 8, to: 13, label: '+5' }] }),
     { id: 'n1', type: 'number_line', from: 0, to: 20, step: 1, marks: [8], jumps: [{ from: 8, to: 13, label: '+5' }] });
@@ -186,6 +189,7 @@ test('teacher session: learner context reaches the model, segments arrive with b
   assert.equal(events.find(e => e.type === 'input.transcript.final').turn, 7);
   assert.equal(events.find(e => e.type === 'response.start').turn, 7);
   assert.equal(modelRequest.stream, true);
+  assert.deepEqual(modelRequest.thinking, { type: 'disabled' });
   assert.match(modelRequest.messages[1].content, /林林，2年级/);
   assert.match(modelRequest.messages[1].content, /口算本第 12 页（还没做）/);
   assert.match(modelRequest.messages.at(-1).content, /孩子说：三十八加二十七怎么算/);
@@ -205,7 +209,11 @@ test('teacher session: learner context reaches the model, segments arrive with b
   send({ type: 'input.text', text: '十五' });
   await until(e => e.type === 'response.done' && e.response === segments[0].response + 1);
   assert.equal(modelRequest.messages[2].content, '三十八加二十七怎么算');
-  assert.equal(modelRequest.messages[3].content, '我们来算三十八加二十七。个位八加七等于几？');
+  const told = modelRequest.messages[3].content.split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(told.map(line => line.speech), ['我们来算三十八加二十七。', '个位八加七等于几？']);
+  assert.deepEqual(told[0].board.map(op => op.op), ['clear', 'add'], 'the history keeps what was drawn, as the model wrote it');
+  assert.deepEqual(told[1].board, [{ op: 'update', id: 'v1', set: { focus: 0 } }], 'only the ops that applied');
+  assert.equal(told[1].await, true);
   assert.match(modelRequest.messages.at(-1).content, /"id":"v1"/);
 });
 
@@ -276,7 +284,10 @@ test('teacher session: an interrupted reply keeps only what was heard and puts t
   send({ type: 'input.text', text: '等一下', turn: 2 });
   await until(e => e.type === 'response.done' && e.response !== done.response);
   const second = requests[1].messages;
-  assert.equal(second.at(-2).content, '先列竖式。个位写五。（说到这里被孩子打断了）');
+  const heard = second.at(-2).content.split('\n');
+  assert.equal(heard.at(-1), '（说到这里被孩子打断了）');
+  assert.deepEqual(heard.slice(0, -1).map(line => JSON.parse(line).speech), ['先列竖式。', '个位写五。']);
+  assert.deepEqual(JSON.parse(heard[1]).board, [{ op: 'update', id: 'v1', set: { reveal: 1 } }], 'what was drawn, up to where it stopped');
   assert.match(second.at(-1).content, /"reveal":1/, 'the board is what the child saw, not what was generated');
 
   // A reply that never started playing leaves no words and no drawing behind.

@@ -310,10 +310,21 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     for (const r of q('SELECT id FROM routines WHERE child_id = ?').all(child.id)) record(familyId, 'routine', r.id, 'DELETE');
     q('DELETE FROM routines WHERE child_id = ?').run(child.id);
     q('DELETE FROM reward_ledger WHERE child_id = ?').run(child.id);
+    q('DELETE FROM teacher_memory WHERE child_id = ?').run(child.id);
     q('DELETE FROM children WHERE id = ?').run(child.id);
     record(familyId, 'child', child.id, 'DELETE');
     return { ok: true };
   }));
+
+  // What the voice teacher remembers about a child (see `saveTeacherMemory`). The parent can read it and clear it.
+  route('GET', '/v1/children/:id/teacher-memory', PARENT, ({ familyId, params }) => {
+    const row = q('SELECT * FROM teacher_memory WHERE child_id = ?').get(childIn(familyId, params.id).id);
+    return { card: row?.card ?? '', sessions: row?.sessions ?? 0, updatedAt: row?.updated_at ?? null };
+  });
+  route('DELETE', '/v1/children/:id/teacher-memory', PARENT, ({ familyId, params }) => {
+    q('DELETE FROM teacher_memory WHERE child_id = ?').run(childIn(familyId, params.id).id);
+    return { ok: true };
+  });
 
   route('POST', '/v1/homework/parse', PARENT, async ({ body, familyId, signal }) => {
     const input = { text: text(body.text, 5000, true), date: body.date == null ? today(familyId).date : day(body.date) };
@@ -673,7 +684,20 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
       return { date: h.date, dueDate: h.due_date, subject: h.subject, content: h.content.slice(0, 300), status: h.status,
         ...(review ? { review: { grade: review.grade, comment: review.comment.slice(0, 200), requireCorrection: !!review.require_correction } } : {}) };
     });
-    return { child: { id: row.id, name: row.name, grade: row.grade }, today: date, homework };
+    const memory = q('SELECT card FROM teacher_memory WHERE child_id = ?').get(row.id)?.card ?? '';
+    return { child: { id: row.id, name: row.name, grade: row.grade }, today: date, homework, memory };
+  }
+
+  /**
+   * Replaces the teacher's notes about a child after a conversation. Only this card is kept: no audio, no transcript.
+   * Returns false when the child is gone (deleted during the conversation).
+   */
+  function saveTeacherMemory(familyId, childId, card) {
+    if (closed || !q('SELECT 1 FROM children WHERE id = ? AND family_id = ?').get(childId, familyId)) return false;
+    q(`INSERT INTO teacher_memory (child_id, family_id, card, sessions, updated_at) VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT (child_id) DO UPDATE SET card = excluded.card, sessions = sessions + 1, updated_at = excluded.updated_at`)
+      .run(childId, familyId, card, iso());
+    return true;
   }
 
   let closed = false;
@@ -684,5 +708,5 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     db.close();
   }
 
-  return { handle, db, deviceFor, learnerContext, close };
+  return { handle, db, deviceFor, learnerContext, saveTeacherMemory, close };
 }

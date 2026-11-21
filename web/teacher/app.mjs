@@ -44,7 +44,12 @@ function uuid() {
 
 // ---------- setup: device, child ----------
 
-let token = store.get('token'), role = '', children = [], child = null;
+/**
+ * Inside the Android app the page runs in a WebView that already has this device's credential and knows which
+ * child is using it: `window.LittleBearHost` hands them over (no pairing, no picking) and closes the screen at the end.
+ */
+const host = (() => { try { return window.LittleBearHost?.token?.() ? window.LittleBearHost : null; } catch { return null; } })();
+let token = host ? host.token() : store.get('token'), role = '', children = [], child = null;
 const steps = ['loading', 'pair', 'add-child', 'pick', 'start'];
 
 function show(step, error = '') {
@@ -56,6 +61,7 @@ function show(step, error = '') {
 }
 
 async function boot() {
+  if (host) $('settings').hidden = true; // the app owns the device and the child
   if (!token) return show('pair');
   show('loading');
   let me;
@@ -66,6 +72,10 @@ async function boot() {
   }
   role = me.device.role; children = me.children;
   if (!children.length) return role === 'parent' ? show('add-child') : show('pair', '家里还没有添加孩子，请家长先在家长端添加。');
+  if (host) {
+    const given = children.find(c => c.id === host.childId());
+    if (given) return choose(given);
+  }
   const remembered = children.find(c => c.id === store.get('child'));
   if (remembered || children.length === 1) return choose(remembered ?? children[0]);
   pick();
@@ -158,6 +168,12 @@ function render(state) {
 session.onChange = render;
 session.onBoard = ops => board.apply(ops);
 session.onLevel = level => $('orb').style.setProperty('--level', level.toFixed(2));
+// The child said goodbye: leave the last words up for a moment, then go back to “开始”.
+session.onEnded = () => setTimeout(() => {
+  if (session.state.phase !== 'ended') return;
+  if (host) { try { host.close(); return; } catch { /* fall back to the start screen */ } }
+  board.clear(); show('start');
+}, 1500);
 
 async function keepAwake() {
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* not allowed right now */ }
@@ -214,15 +230,18 @@ $('disconnect').addEventListener('click', () => {
 });
 
 // The on-screen keyboard covers the bottom of the page on iPad; keep the whole app in the part that is visible.
+// Set from the start too: in an Android WebView 100vh can come out as 0 when the view was laid out empty first.
 const viewport = window.visualViewport;
-if (viewport) {
-  const fit = () => {
-    if (Math.abs(viewport.scale - 1) > 0.01) return; // pinch-zoomed: leave the page alone
-    document.documentElement.style.setProperty('--app-height', `${viewport.height}px`);
-    scrollTo(0, 0);
-  };
-  viewport.addEventListener('resize', fit);
-}
+const fit = () => {
+  if (viewport && Math.abs(viewport.scale - 1) > 0.01) return; // pinch-zoomed: leave the page alone
+  const height = viewport?.height || innerHeight;
+  if (!height) return;
+  document.documentElement.style.setProperty('--app-height', `${height}px`);
+  scrollTo(0, 0);
+};
+viewport?.addEventListener('resize', fit);
+addEventListener('resize', fit);
+fit();
 
 addEventListener('pagehide', () => session.stop());
 render(session.state);

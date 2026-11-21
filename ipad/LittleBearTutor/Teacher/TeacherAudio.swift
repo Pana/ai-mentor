@@ -5,16 +5,20 @@ import UIKit
 /// Decides when the child starts and stops talking from the level of each mic chunk.
 /// The noise floor adapts to the room; while the teacher is speaking the start threshold is raised,
 /// so echo the voice processor did not remove does not count as the child barging in.
+/// The end is relative to the voice as well as the room: a pause is `endDrop` dB below how loud this child was
+/// just now, so a fan or a quiet voice cannot keep the sentence open (the server's recognizer also ends it).
 struct VoiceActivityDetector: Equatable {
     enum Event: Equatable { case start, end }
 
     var noiseFloor: Float = -60
     private(set) var speaking = false
     private var aboveMs = 0, belowMs = 0, speechMs = 0
+    private var voice: Float = -100
 
     var startMargin: Float = 14
     var strictExtra: Float = 8
     var endMargin: Float = 8
+    var endDrop: Float = 18
     var startAfterMs = 180
     var endAfterMs = 800
     var maxSpeechMs = 30_000
@@ -23,7 +27,10 @@ struct VoiceActivityDetector: Equatable {
     mutating func process(level: Float, ms: Int, strict: Bool) -> Event? {
         if speaking {
             speechMs += ms
-            belowMs = level < noiseFloor + endMargin ? belowMs + ms : 0
+            // How loud the voice is: rises quickly with loud chunks, sinks slowly with softer speech, and ignores pauses.
+            let quiet = max(noiseFloor + endMargin, voice - endDrop)
+            if level > voice { voice = voice * 0.6 + level * 0.4 } else if level >= quiet { voice = voice * 0.95 + level * 0.05 }
+            belowMs = level < quiet ? belowMs + ms : 0
             if belowMs >= endAfterMs || speechMs >= maxSpeechMs { reset(); return .end }
             return nil
         }
@@ -32,7 +39,7 @@ struct VoiceActivityDetector: Equatable {
         noiseFloor = min(-30, max(-80, noiseFloor))
         let threshold = max(noiseFloor + startMargin, -48) + (strict ? strictExtra : 0)
         aboveMs = level > threshold ? aboveMs + ms : 0
-        if aboveMs >= startAfterMs { speaking = true; aboveMs = 0; belowMs = 0; speechMs = 0; return .start }
+        if aboveMs >= startAfterMs { speaking = true; aboveMs = 0; belowMs = 0; speechMs = 0; voice = level; return .start }
         return nil
     }
 
@@ -102,7 +109,13 @@ final class TeacherAudio: @unchecked Sendable {
         self.outputRate = outputRate
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+            if capture {
+                try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+            } else {
+                // Without the mic (no permission, typing only) ask for playback alone: a record category with input
+                // denied deadlocked the I/O unit's setup in the simulator (RPC timeout, abort), and is louder too.
+                try session.setCategory(.playback, mode: .spokenAudio)
+            }
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             sessionActive = true
             if capture {

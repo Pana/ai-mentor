@@ -2,6 +2,8 @@
  * Decides when the child starts and stops talking from the level of each mic chunk.
  * The noise floor adapts to the room; while the teacher is speaking the start threshold is raised,
  * so echo the browser did not cancel does not count as the child barging in.
+ * The end is relative to the voice as well as the room: a pause is `endDrop` dB below how loud this child was
+ * just now, so a fan or a quiet voice cannot keep the sentence open (the server's recognizer also ends it).
  */
 export class VoiceActivityDetector {
   noiseFloor = -60;
@@ -9,16 +11,21 @@ export class VoiceActivityDetector {
   startMargin = 14;
   strictExtra = 8;
   endMargin = 8;
+  endDrop = 18;
   startAfterMs = 180;
   endAfterMs = 800;
   maxSpeechMs = 30_000;
-  #aboveMs = 0; #belowMs = 0; #speechMs = 0;
+  #aboveMs = 0; #belowMs = 0; #speechMs = 0; #voice = -100;
 
   /** `level` in dBFS for a chunk lasting `ms`; `strict` while the teacher is talking. Returns 'start', 'end' or null. */
   process(level, ms, strict = false) {
     if (this.speaking) {
       this.#speechMs += ms;
-      this.#belowMs = level < this.noiseFloor + this.endMargin ? this.#belowMs + ms : 0;
+      // How loud the voice is: rises quickly with loud chunks, sinks slowly with softer speech, and ignores pauses.
+      const quiet = Math.max(this.noiseFloor + this.endMargin, this.#voice - this.endDrop);
+      if (level > this.#voice) this.#voice = this.#voice * 0.6 + level * 0.4;
+      else if (level >= quiet) this.#voice = this.#voice * 0.95 + level * 0.05;
+      this.#belowMs = level < quiet ? this.#belowMs + ms : 0;
       if (this.#belowMs >= this.endAfterMs || this.#speechMs >= this.maxSpeechMs) { this.reset(); return 'end'; }
       return null;
     }
@@ -27,7 +34,7 @@ export class VoiceActivityDetector {
     this.noiseFloor = Math.min(-30, Math.max(-80, this.noiseFloor));
     const threshold = Math.max(this.noiseFloor + this.startMargin, -48) + (strict ? this.strictExtra : 0);
     this.#aboveMs = level > threshold ? this.#aboveMs + ms : 0;
-    if (this.#aboveMs >= this.startAfterMs) { this.speaking = true; this.#aboveMs = 0; this.#belowMs = 0; this.#speechMs = 0; return 'start'; }
+    if (this.#aboveMs >= this.startAfterMs) { this.speaking = true; this.#aboveMs = 0; this.#belowMs = 0; this.#speechMs = 0; this.#voice = level; return 'start'; }
     return null;
   }
 

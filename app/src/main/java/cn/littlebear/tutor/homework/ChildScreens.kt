@@ -71,6 +71,7 @@ private fun prefs(context: Context) = context.getSharedPreferences("phase1.child
 sealed interface ChildRoute {
     data class Homework(val id: String) : ChildRoute
     data class Submit(val id: String) : ChildRoute
+    data object Teacher : ChildRoute
 }
 
 enum class ChildTab(val label: String) { TODAY("今天"), ALL("全部作业"), REWARD("奖励时间") }
@@ -138,8 +139,9 @@ enum class ChildTab(val label: String) { TODAY("今天"), ALL("全部作业"), R
         when (val route = stack.lastOrNull()) {
             is ChildRoute.Homework -> ChildHomeworkView(route.id, back = { stack.removeAt(stack.lastIndex) }, submit = { stack.add(ChildRoute.Submit(route.id)) })
             is ChildRoute.Submit -> SubmitPhotosView(route.id, back = { stack.removeAt(stack.lastIndex) }) { stack.clear(); stack.add(ChildRoute.Homework(route.id)) }
+            ChildRoute.Teacher -> TeacherScreen(child) { if (stack.lastOrNull() == ChildRoute.Teacher) stack.removeAt(stack.lastIndex) }
             null -> Column(Modifier.fillMaxSize()) {
-                TopBar(child, tab, { tab = it }, switchChild) { settings = true }
+                TopBar(child, tab, { tab = it }, switchChild, openTeacher = { stack.add(ChildRoute.Teacher) }) { settings = true }
                 Box(Modifier.weight(1f)) {
                     when (tab) {
                         ChildTab.TODAY -> TodayView(child, open) { tab = ChildTab.REWARD }
@@ -153,7 +155,7 @@ enum class ChildTab(val label: String) { TODAY("今天"), ALL("全部作业"), R
     if (settings) ChildSettings { settings = false }
 }
 
-@Composable private fun TopBar(child: RemoteChild, tab: ChildTab, onTab: (ChildTab) -> Unit, switchChild: () -> Unit, openSettings: () -> Unit) {
+@Composable private fun TopBar(child: RemoteChild, tab: ChildTab, onTab: (ChildTab) -> Unit, switchChild: () -> Unit, openTeacher: () -> Unit, openSettings: () -> Unit) {
     val wide = isWide()
     val who = @Composable {
         Surface(onClick = switchChild, shape = CircleShape, color = Palette.card, border = BorderStroke(1.dp, Palette.line)) {
@@ -173,10 +175,17 @@ enum class ChildTab(val label: String) { TODAY("今天"), ALL("全部作业"), R
             }
         }
     }
+    val teacher = @Composable {
+        Surface(onClick = openTeacher, shape = CircleShape, color = Color(0xFFFDF0D8), border = BorderStroke(1.dp, Color(0xFFF0C987))) {
+            Row(Modifier.padding(start = 6.dp, end = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BearView(32.dp); Text("小熊老师", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Palette.ink)
+            }
+        }
+    }
     if (wide) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        who(); Spacer(Modifier.weight(1f)); tabs(Modifier); Spacer(Modifier.weight(1f)); ParentLockButton(openSettings)
+        who(); Spacer(Modifier.weight(1f)); tabs(Modifier); Spacer(Modifier.weight(1f)); teacher(); Spacer(Modifier.width(12.dp)); ParentLockButton(openSettings)
     } else Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { who(); Spacer(Modifier.weight(1f)); ParentLockButton(openSettings) }
+        Row(verticalAlignment = Alignment.CenterVertically) { who(); Spacer(Modifier.weight(1f)); teacher(); Spacer(Modifier.width(8.dp)); ParentLockButton(openSettings) }
         tabs(Modifier.fillMaxWidth())
     }
 }
