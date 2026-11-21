@@ -8,6 +8,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -223,6 +224,25 @@ class HomeworkStore(
         } finally {
             _state.update { it.copy(syncing = false) }
             syncLock.unlock()
+        }
+    }
+
+    /**
+     * Returns once the server has something new for this family, or after about 25 s with nothing new,
+     * so the sync that follows picks up the other device's change within a second. Mirrors `waitForChanges` in Store.swift.
+     */
+    suspend fun waitForChanges() {
+        val api = client
+        if (api == null || current.signedOut || cursor == 0) { delay(20_000); return }
+        val started = now()
+        try {
+            val feed = api.waitForChanges(cursor, 25)
+            // A server without long-polling answers an empty feed at once: fall back to polling every 20 s.
+            if (feed.changes.isEmpty() && now() - started < 2_000) delay(20_000)
+        } catch (e: CancellationException) { throw e }
+        catch (_: ApiException) {
+            // Offline or the server restarted: retry soon without spinning.
+            delay(5_000)
         }
     }
 
