@@ -67,4 +67,4 @@ scripts/teacher-web.sh       # Chromium 端到端：假麦克风说一句话，�
 
 ## 在 Android App 里
 
-Android 孩子端顶栏的“小熊老师”用 WebView 打开这个页面（`app/…/homework/TeacherScreen.kt`）。App 通过 `window.LittleBearHost` 把设备凭证（`token()`）和当前孩子（`childId()`）交给页面，所以不用再配对、选孩子，家长设置按钮也隐藏；孩子道别后页面调用 `close()` 回到 App。WebView 只能停留在家里服务器这一个网址上。调试版可以用 `chrome://inspect` 看页面。
+Android 孩子端顶栏的“小熊老师”用 WebView 打开这个页面（`app/…/homework/TeacherScreen.kt`）。App 通过 `window.LittleBearHost` 把设备凭证（`token()`）和当前孩子（`childId()`）交给页面，所以不用再配对、选孩子，家长设置按钮也隐藏。页面左上角有“结束”（和 iPad 原生的位置一样，替换掉小熊图标），开始前的页面上有“返回”，点了都调用 `close()` 回到 App；孩子道别后也一样。系统返回手势同样能退出。WebView 只能停留在家里服务器这一个网址上。调试版可以用 `chrome://inspect` 看页面。

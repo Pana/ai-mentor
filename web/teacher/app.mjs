@@ -191,6 +191,17 @@ function start() {
 }
 $('start').addEventListener('click', start);
 $('retry').addEventListener('click', start);
+
+// Inside the Android app nothing but the system back gesture would leave the page: “结束” in the top bar (where the
+// iPad app has it) and “返回” on the start screen close it.
+function leave() {
+  session.stop();
+  try { host.close(); } catch { /* the back gesture still closes the screen */ }
+}
+if (host) {
+  document.body.classList.add('hosted');
+  for (const id of ['leave', 'sheet-leave']) { $(id).hidden = false; $(id).addEventListener('click', leave); }
+}
 $('orb').addEventListener('click', () => session.interrupt());
 $('mute').addEventListener('click', () => session.setMuted(!session.state.muted));
 $('suggestions').addEventListener('click', event => {

@@ -35,6 +35,13 @@ p, h1, h2 { margin: 0; }
 .brand-text strong { font: 800 24px/1.2 var(--rounded); }
 .brand-text span { font-size: 15px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .actions { display: flex; gap: 12px; }
+/* “结束”, inside the Android app only: where the iPad app has it, in place of the small bear */
+.leave {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 20px 0 16px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink); font-weight: 700; font-size: 19px;
+}
+.leave svg { width: 20px; height: 20px; }
+.hosted .brand-bear { display: none; }
 .round {
   width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line); background: var(--card);
   display: grid; place-items: center; padding: 0; color: var(--ink);
@@ -117,6 +124,7 @@ p, h1, h2 { margin: 0; }
   .brand-bear { width: 36px; height: 36px; }
   .brand-text strong { font-size: 20px; }
   .round { width: 46px; height: 46px; }
+  .leave { height: 46px; padding: 0 14px 0 12px; font-size: 17px; }
   .actions { gap: 8px; }
   .board-content { padding: 20px 16px; gap: 22px; }
   .orb { --size: 96px; }
