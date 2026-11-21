@@ -26,11 +26,14 @@
     <symbol id="icon-mic-off" viewBox="0 0 24 24"><path fill="currentColor" opacity=".4" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6-3.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H8.5a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2H13v-2.59a6 6 0 0 0 5-5.91Z"/><path d="M4 3.5 20 20.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
     <symbol id="icon-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1.5M9.5 10H11M13 10h1.5M16.5 10H18M8 14h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="icon-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="2.95 2.94"/><circle cx="12" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2" fill="currentColor"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
   </svg>
 
   <div class="app" id="app">
     <header class="top">
       <div class="brand">
+        <!-- Only inside the Android app, which has no browser around the page (the iPad app has the same button). -->
+        <button class="leave" id="leave" type="button" hidden><svg aria-hidden="true"><use href="#icon-close"/></svg>结束</button>
         <svg class="brand-bear" aria-hidden="true"><use href="#bear"/></svg>
         <div class="brand-text"><strong>小熊老师</strong><span id="who"></span></div>
       </div>
@@ -132,6 +135,7 @@
       </section>
 
       <p class="sheet-error" id="sheet-error" role="alert" hidden></p>
+      <button class="secondary" id="sheet-leave" type="button" hidden>返回</button>
     </div>
   </div>
 

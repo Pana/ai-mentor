@@ -38,6 +38,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+    // Video homework: 480p H.264 compression before upload, and playback streamed with the device credential.
+    implementation("androidx.media3:media3-transformer:1.9.4")
+    implementation("androidx.media3:media3-effect:1.9.4")
+    implementation("androidx.media3:media3-exoplayer:1.9.4")
+    implementation("androidx.media3:media3-ui:1.9.4")
+    implementation("androidx.media3:media3-datasource-okhttp:1.9.4")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.robolectric:robolectric:4.14.1")

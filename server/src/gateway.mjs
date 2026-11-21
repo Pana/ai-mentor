@@ -163,7 +163,9 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
     } catch (error) { send(error instanceof Problem ? error.status : 502, { error: error instanceof Problem ? error.message : 'model_unavailable' }); }
     finally { clearTimeout(timer); active--; }
   });
-  server.requestTimeout = 20_000;
+  // Long enough to upload a 30-minute homework video (a few hundred MB) on a slow home connection; headers
+  // still have to arrive within 10 s.
+  server.requestTimeout = 30 * 60_000;
   server.headersTimeout = 10_000;
   attachVoice(server, { ...config.voice, token: config.token,
     respondText: config.voice?.respondText ?? voiceResponder(config, fetchImpl) });

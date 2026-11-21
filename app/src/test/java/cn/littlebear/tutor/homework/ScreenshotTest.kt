@@ -96,6 +96,9 @@ class ScreenshotTest {
             hw(8, "OTHER", "科学：观察一片树叶并画下来", status = "REVIEWED", date = yesterday,
                 submissions = listOf(Submission("c0000000-0000-4000-8000-000000000008", 1, listOf(p3), submittedAt = iso, receivedAt = iso, onTime = true,
                     review = Review("d0000000-0000-4000-8000-000000000008", "EXCELLENT", "画得很仔细", false, emptyList(), iso)))),
+            hw(9, "OTHER", "跳绳 1 分钟，录像给家长看", "ONLINE", "VIDEO"),
+            hw(10, "ENGLISH", "英语课文表演，录像交给家长", "ONLINE", "VIDEO", "SUBMITTED",
+                submissions = listOf(Submission("c0000000-0000-4000-8000-000000000010", 1, listOf("a0000000-0000-4000-8000-0000000000bb"), submittedAt = iso, receivedAt = iso, onTime = true))),
         )
         val routines = listOf(
             Routine("e0000000-0000-4000-8000-000000000001", ming.id, "英语朗读 5 分钟", "ENGLISH", "ONLINE", "TIMER", 5, null, (0..6).toList(), true, 0),
@@ -152,6 +155,20 @@ class ScreenshotTest {
         tap("手动填写"); shot("phone-parent-5b-entry-manual")
         tap("每天坚持"); shot("phone-parent-6-routines")
         tap("奖励"); shot("phone-parent-7-rewards")
+    }
+
+    /** Video homework: the parent's review page with the player, the 录像 choice, and the child's task page. */
+    @Test @Config(qualifiers = "w411dp-h891dp-port-xhdpi")
+    fun phoneVideo() {
+        show(seed("parent"))
+        tap("英语课文表演"); shot("phone-parent-8-video-detail")
+        tap("开始批改"); shot("phone-parent-9-video-grade")
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp-port-xhdpi")
+    fun phoneChildVideo() {
+        show(seed("child"))
+        tap("跳绳 1 分钟"); shot("phone-child-5-video-task")
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp-port-xhdpi")

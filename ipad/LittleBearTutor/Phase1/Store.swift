@@ -99,6 +99,7 @@ enum Day {
 
 // MARK: - Offline submission queue (child iPad)
 
+/// A file waiting in `outbox/`; only its name is queued (never its bytes), so a 200 MB video costs nothing in the cache.
 struct PendingFile: Codable, Hashable, Sendable { var fileId: UUID; var localName: String; var mime: String }
 struct PendingSubmission: Codable, Identifiable, Hashable, Sendable {
     var id: UUID              // submission id; the server treats a retry with the same id as the same submission
@@ -132,6 +133,10 @@ private struct Cache: Codable {
     @Published private(set) var rules = RewardRules()
     @Published private(set) var rewards: [UUID: RewardSummary] = [:]
     @Published private(set) var outbox: [PendingSubmission] = []
+    /// Homework id → fraction of its queued files uploaded, while a submission is being sent.
+    @Published private(set) var uploadProgress: [UUID: Double] = [:]
+    /// Homework id → whether its video also went into the iPad's photo library (for 钉钉打卡). Only for this run of the app.
+    @Published private(set) var albumSaves: [UUID: Bool] = [:]
     @Published private(set) var syncing = false
     @Published private(set) var lastSynced: Date?
     @Published var errorMessage: String?
@@ -142,22 +147,25 @@ private struct Cache: Codable {
     private let directory: URL
     private let sessions: SessionStore
     private let transport: HTTPTransport
+    private let uploadTransport: UploadTransport
     private var syncAgain = false
 
-    init(directory: URL? = nil, sessions: SessionStore = SessionStore(), transport: @escaping HTTPTransport = APIClient.urlSession) {
+    init(directory: URL? = nil, sessions: SessionStore = SessionStore(), transport: @escaping HTTPTransport = APIClient.urlSession,
+         uploadTransport: @escaping UploadTransport = APIClient.urlSessionUpload) {
         let base = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("homework", isDirectory: true)
         try? FileManager.default.createDirectory(at: base.appendingPathComponent("outbox"), withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: base.appendingPathComponent("files"), withIntermediateDirectories: true)
         self.directory = base
         self.sessions = sessions
         self.transport = transport
+        self.uploadTransport = uploadTransport
         session = sessions.load()
         loadCache()
     }
 
     var client: APIClient? {
         guard let session, let url = try? APIClient.validate(session.server) else { return nil }
-        return APIClient(baseURL: url, token: session.token, transport: transport)
+        return APIClient(baseURL: url, token: session.token, transport: transport, uploadTransport: uploadTransport)
     }
 
     var timeZone: TimeZone { TimeZone(identifier: family?.timezone ?? "Asia/Shanghai") ?? .current }
@@ -210,6 +218,8 @@ private struct Cache: Codable {
         cursor = 0; family = nil; children = []; homework = [:]; routines = []; rules = RewardRules(); rewards = [:]
         for item in outbox { removeLocalFiles(item) }
         outbox = []
+        uploadProgress = [:]
+        albumSaves = [:]
         lastSynced = nil
         saveCache()
     }
@@ -319,10 +329,15 @@ private struct Cache: Codable {
 
     // MARK: Child: submissions (queued, so a submission made offline is sent later)
 
-    func submit(_ item: RemoteHomework, pages: [Data] = [], audio: Data? = nil, durationSeconds: Int? = nil) async {
+    /// `video` is a compressed `.mp4` on disk; it is moved into the queue, never read into memory.
+    func submit(_ item: RemoteHomework, pages: [Data] = [], audio: Data? = nil, video: URL? = nil, durationSeconds: Int? = nil) async {
         var files: [PendingFile] = []
         for page in pages { files.append(storeOutboxFile(page, mime: "image/jpeg", ext: "jpg")) }
         if let audio { files.append(storeOutboxFile(audio, mime: "audio/mp4", ext: "m4a")) }
+        if let video {
+            guard let file = moveIntoOutbox(video, mime: "video/mp4", ext: "mp4") else { return }
+            files.append(file)
+        }
         let pending = PendingSubmission(id: UUID(), homeworkId: item.id, files: files, submittedAt: Date(), durationSeconds: durationSeconds)
         outbox.append(pending)
         // Shown as handed in right away; the server's answer replaces this on the next sync.
@@ -340,6 +355,21 @@ private struct Cache: Codable {
         return PendingFile(fileId: id, localName: name, mime: mime)
     }
 
+    private func moveIntoOutbox(_ source: URL, mime: String, ext: String) -> PendingFile? {
+        let id = UUID()
+        let name = "\(id.uuidString).\(ext)"
+        let target = directory.appendingPathComponent("outbox").appendingPathComponent(name)
+        do { try FileManager.default.moveItem(at: source, to: target) } catch {
+            errorMessage = "视频没保存好，请重新录一次。"
+            return nil
+        }
+        try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: target.path)
+        return PendingFile(fileId: id, localName: name, mime: mime)
+    }
+
+    /// Records whether a submitted video was also saved to the photo library, so the waiting screen can say so.
+    func noteAlbumSave(_ homeworkId: UUID, saved: Bool) { albumSaves[homeworkId] = saved }
+
     private func removeLocalFiles(_ item: PendingSubmission) {
         for file in item.files { try? FileManager.default.removeItem(at: directory.appendingPathComponent("outbox").appendingPathComponent(file.localName)) }
     }
@@ -347,12 +377,26 @@ private struct Cache: Codable {
     private func flushOutbox(_ api: APIClient) async throws {
         struct Body: Encodable { var id: UUID; var fileIds: [UUID]; var submittedAt: String; var durationSeconds: Int? }
         for item in outbox {
+            defer { uploadProgress[item.homeworkId] = nil }
             do {
-                for file in item.files {
-                    let url = directory.appendingPathComponent("outbox").appendingPathComponent(file.localName)
-                    guard let data = try? Data(contentsOf: url) else { throw APIError.rejected("invalid_file") }
-                    try await api.upload(fileId: file.fileId, data: data, mime: file.mime)
-                    try? FileManager.default.copyItem(at: url, to: cachedFileURL(file.fileId))
+                let sizes = item.files.map { Double(fileSize(outboxFileURL($0))) }
+                let total = max(1, sizes.reduce(0, +))
+                var done = 0.0
+                for (index, file) in item.files.enumerated() {
+                    let url = outboxFileURL(file)
+                    guard FileManager.default.fileExists(atPath: url.path) else { throw APIError.rejected("invalid_file") }
+                    let before = done, size = sizes[index], homeworkId = item.homeworkId
+                    uploadProgress[homeworkId] = before / total
+                    try await api.upload(fileId: file.fileId, file: url, mime: file.mime) { [weak self] fraction in
+                        Task { @MainActor in
+                            guard let self, self.uploadProgress[homeworkId] != nil else { return }
+                            self.uploadProgress[homeworkId] = (before + fraction * size) / total
+                        }
+                    }
+                    done += size
+                    // Photos and recordings stay cached for viewing offline; a video is streamed from the server instead of
+                    // keeping 200 MB per day on the iPad (the child's own copy is in the photo library).
+                    if !file.mime.hasPrefix("video/") { cacheUploaded(url, as: file.fileId) }
                 }
                 let body = Body(id: item.id, fileIds: item.files.map(\.fileId), submittedAt: ISO8601DateFormatter().string(from: item.submittedAt), durationSeconds: item.durationSeconds)
                 let updated: RemoteHomework = try await api.send("POST", "v1/homework/\(item.homeworkId.uuidString.lowercased())/submissions", json: body)
@@ -365,6 +409,17 @@ private struct Cache: Codable {
                 if let fresh = try? await api.homework(id: item.homeworkId) { homework[fresh.id] = fresh } else { homework[item.homeworkId] = nil }
             }
         }
+    }
+
+    private func fileSize(_ url: URL) -> Int64 {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+    }
+
+    /// A hard link costs no extra space and outlives the outbox copy; copy when linking is not possible.
+    private func cacheUploaded(_ url: URL, as id: UUID) {
+        let target = cachedFileURL(id)
+        guard !FileManager.default.fileExists(atPath: target.path) else { return }
+        do { try FileManager.default.linkItem(at: url, to: target) } catch { try? FileManager.default.copyItem(at: url, to: target) }
     }
 
     private func finish(_ item: PendingSubmission) {

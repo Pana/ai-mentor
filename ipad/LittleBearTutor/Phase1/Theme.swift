@@ -52,6 +52,7 @@ enum GradeStyle {
 func modeLabel(_ item: RemoteHomework) -> String {
     if item.isOffline { return "本子上写 · 拍照交" }
     if item.isRecording { return "在 iPad 上录音" }
+    if item.isVideo { return "在 iPad 上录像" }
     if let minutes = item.durationMinutes { return "在 iPad 上计时 \(minutes) 分钟" }
     return "在 iPad 上做"
 }

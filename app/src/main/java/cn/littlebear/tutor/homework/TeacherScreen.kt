@@ -46,7 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
  * 小熊老师 on Android: the server's web teacher (`/teacher/`) in a WebView. The page gets this device's credential
  * and the child from [TeacherHost] instead of pairing again, and calls `close()` when the child says goodbye.
  * Like any browser, the WebView only opens the microphone on an HTTPS server: on a plain-HTTP dev server the
- * child types (the teacher still talks).
+ * child types (the teacher still talks). It also needs MODIFY_AUDIO_SETTINGS in the manifest besides RECORD_AUDIO,
+ * or it finds no input device.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable fun TeacherScreen(child: RemoteChild, close: () -> Unit) {

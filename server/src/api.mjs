@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
-import { createReadStream, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { once } from 'node:events';
 import { join } from 'node:path';
 import { openDatabase, transaction } from './db.mjs';
 import { homeworkSubjects, parseBody, validateParseReply } from './parse.mjs';
@@ -63,12 +64,16 @@ const fileKinds = {
   'image/jpeg': { kind: 'IMAGE', max: 2_000_000, check: b => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
   'image/png': { kind: 'PNG', max: 4_000_000, check: b => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
   'audio/mp4': { kind: 'AUDIO', max: 10_000_000, check: b => b.subarray(4, 8).toString('latin1') === 'ftyp' },
+  // Up to 30 minutes, which the apps compress to 480p at about 0.8 Mbps (about 200 MB) before uploading.
+  'video/mp4': { kind: 'VIDEO', max: 300_000_000, check: b => b.subarray(4, 8).toString('latin1') === 'ftyp' },
   'application/octet-stream': { kind: 'DATA', max: 1_000_000, check: () => true }
 };
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const json = value => JSON.stringify(value);
 const list = value => JSON.parse(value || '[]');
+
+const onlineKinds = ['TIMER', 'RECORDING', 'VIDEO'];
 
 async function readBody(req, max) {
   if (Number(req.headers?.['content-length']) > max) fail(413, 'body_too_large');
@@ -349,7 +354,7 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     if (dueDate && dueDate < date) fail(400, 'invalid_due_date');
     return {
       subject: oneOf(merged.subject, homeworkSubjects), date, dueDate, content: text(merged.content, 2000, true),
-      mode, onlineKind: mode === 'ONLINE' ? oneOf(merged.onlineKind, ['TIMER', 'RECORDING']) : null,
+      mode, onlineKind: mode === 'ONLINE' ? oneOf(merged.onlineKind, onlineKinds) : null,
       durationMinutes: optionalInteger(merged.durationMinutes, 1, 120), parentTodo: text(merged.parentTodo, 500),
       attachmentIds: filesIn(familyId, uuidList(merged.attachmentIds ?? [], 9), ['IMAGE'])
     };
@@ -423,7 +428,7 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     const mode = oneOf(body.mode, ['OFFLINE', 'ONLINE']);
     const weekdays = Array.isArray(body.weekdays) && body.weekdays.length ? [...new Set(body.weekdays.map(d => integer(d, 0, 6)))].sort() : fail(400, 'invalid_input');
     const r = { title: text(body.title, 40, true), subject: oneOf(body.subject, homeworkSubjects), mode,
-      onlineKind: mode === 'ONLINE' ? oneOf(body.onlineKind, ['TIMER', 'RECORDING']) : null,
+      onlineKind: mode === 'ONLINE' ? oneOf(body.onlineKind, onlineKinds) : null,
       durationMinutes: optionalInteger(body.durationMinutes, 1, 120), quantity: optionalInteger(body.quantity, 1, 200),
       active: body.active == null ? true : bool(body.active), sortOrder: body.sortOrder == null ? 0 : integer(body.sortOrder, 0, 1000) };
     if (r.active) {
@@ -467,6 +472,10 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     if (hw.online_kind === 'RECORDING') {
       if (fileIds.length !== 1) fail(400, 'recording_required');
       filesIn(familyId, fileIds, ['AUDIO']);
+    }
+    if (hw.online_kind === 'VIDEO') {
+      if (fileIds.length !== 1) fail(400, 'video_required');
+      filesIn(familyId, fileIds, ['VIDEO']);
     }
     if (hw.online_kind === 'TIMER') {
       if (fileIds.length) fail(400, 'invalid_input');
@@ -579,26 +588,60 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
   async function putFile(req, ctx, id) {
     const type = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
     const spec = fileKinds[type] ?? fail(415, 'unsupported_file_type');
-    const bytes = await readBody(req, spec.max);
-    if (!bytes.length || !spec.check(bytes)) fail(400, 'invalid_file');
-    const sha = hash(bytes);
+    if (Number(req.headers?.['content-length']) > spec.max) fail(413, 'body_too_large');
+    // Streamed to disk as it arrives: a video can be a few hundred MB.
+    const dir = join(dataDir, 'files', ctx.familyId);
+    mkdirSync(dir, { recursive: true });
+    const part = join(dir, `${id}.${randomUUID()}.part`);
+    const digest = createHash('sha256');
+    let size = 0, head = Buffer.alloc(0);
+    const out = createWriteStream(part);
+    try {
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > spec.max) fail(413, 'body_too_large');
+        if (head.length < 16) head = Buffer.concat([head, chunk.subarray(0, 16 - head.length)]);
+        digest.update(chunk);
+        if (!out.write(chunk)) await once(out, 'drain');
+      }
+      await new Promise((resolve, reject) => out.end(error => (error ? reject(error) : resolve())));
+      if (!size || !spec.check(head)) fail(400, 'invalid_file');
+    } catch (error) {
+      out.destroy();
+      rmSync(part, { force: true });
+      throw error;
+    }
+    const sha = digest.digest('hex');
     const existing = q('SELECT * FROM files WHERE id = ?').get(id);
     if (existing) {
+      rmSync(part, { force: true });
       if (existing.family_id !== ctx.familyId || existing.sha256 !== sha) fail(409, 'id_conflict');
       return { id, kind: existing.kind, bytes: existing.bytes };
     }
-    const dir = join(dataDir, 'files', ctx.familyId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `${id}.part`), bytes);
-    renameSync(join(dir, `${id}.part`), join(dir, id));
-    q('INSERT INTO files (id, family_id, kind, mime, bytes, sha256, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, ctx.familyId, spec.kind, type, bytes.length, sha, iso());
-    return { id, kind: spec.kind, bytes: bytes.length };
+    renameSync(part, join(dir, id));
+    q('INSERT INTO files (id, family_id, kind, mime, bytes, sha256, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, ctx.familyId, spec.kind, type, size, sha, iso());
+    return { id, kind: spec.kind, bytes: size };
   }
 
-  function getFile(res, ctx, id) {
+  /** Supports a single byte range, so a video can play while it downloads. */
+  function getFile(req, res, ctx, id) {
     const row = q('SELECT * FROM files WHERE id = ? AND family_id = ?').get(id, ctx.familyId) ?? fail(404, 'file_not_found');
-    res.writeHead(200, { 'Content-Type': row.mime, 'Content-Length': row.bytes, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
-    createReadStream(join(dataDir, 'files', ctx.familyId, row.id)).pipe(res);
+    const path = join(dataDir, 'files', ctx.familyId, row.id);
+    const headers = { 'Content-Type': row.mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' };
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+    if (range && (range[1] || range[2])) {
+      const last = row.bytes - 1;
+      const start = range[1] ? Number(range[1]) : Math.max(0, row.bytes - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), last) : last;
+      if (start > end || start > last) {
+        res.writeHead(416, { 'Content-Range': `bytes */${row.bytes}` });
+        return res.end();
+      }
+      res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${row.bytes}`, 'Content-Length': end - start + 1 });
+      return createReadStream(path, { start, end }).pipe(res);
+    }
+    res.writeHead(200, { ...headers, 'Content-Length': row.bytes });
+    createReadStream(path).pipe(res);
   }
 
   function authenticate(req) {
@@ -632,7 +675,7 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
         const ctx = authenticate(req);
         const id = uuid(file[1]);
         if (req.method === 'PUT') return send(200, await putFile(req, ctx, id));
-        if (req.method === 'GET') return getFile(res, ctx, id);
+        if (req.method === 'GET') return getFile(req, res, ctx, id);
         fail(405, 'method_not_allowed');
       }
       let matched = null, params = {};

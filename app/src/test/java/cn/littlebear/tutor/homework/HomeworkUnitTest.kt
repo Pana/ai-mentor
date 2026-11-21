@@ -1,8 +1,11 @@
 package cn.littlebear.tutor.homework
 
+import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import okhttp3.Request
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -109,5 +112,153 @@ class HomeworkUnitTest {
         assertNull(items[0].dueDate); assertNull(items[0].durationMinutes); assertEquals("OFFLINE", items[0].mode)
         // A due date before the assigned day is moved up to it.
         assertEquals("2026-11-16", items[1].dueDate); assertEquals(15, items[1].durationMinutes); assertEquals("TIMER", items[1].onlineKind)
+    }
+
+    // ---------- Video homework ----------
+
+    private fun homework(kind: String?, mode: String = "ONLINE") =
+        RemoteHomework(id = newId(), childId = "c", subject = "OTHER", date = "2026-11-21", content = "跳绳", mode = mode, onlineKind = kind, status = "NOT_STARTED")
+
+    @Test fun videoIsAKindNextToRecordingAndTimer() {
+        assertEquals(listOf("本子上写，拍照交", "在线计时", "在线录音", "在线录像"), DoneBy.entries.map { it.label })
+        assertEquals(DoneBy.VIDEO, DoneBy.of("ONLINE", "VIDEO"))
+        assertEquals("ONLINE" to "VIDEO", DoneBy.VIDEO.mode to DoneBy.VIDEO.onlineKind)
+        assertFalse(DoneBy.VIDEO.usesDuration)
+        assertEquals(DoneBy.RECORDING, DoneBy.of("ONLINE", "SOMETHING_NEW"))
+        assertEquals(DoneBy.PHOTO, DoneBy.of("OFFLINE", "VIDEO"))
+        assertTrue(homework("VIDEO").isVideo); assertFalse(homework("RECORDING").isVideo)
+        assertEquals("在线录像", modeLabel(homework("VIDEO")))
+        assertEquals("在线录音", modeLabel(homework("RECORDING")))
+        val routine = RoutineDraft(childId = "c", title = "跳绳", kind = DoneBy.VIDEO, weekdays = (1..5).toSet())
+        assertEquals("周一到周五 · 在线录像", routine.summary)
+        assertEquals("VIDEO", routine.input.onlineKind); assertNull(routine.input.durationMinutes)
+        assertEquals(DoneBy.VIDEO, RoutineDraft.from(Routine("r", "c", "跳绳", "OTHER", "ONLINE", "VIDEO")).kind)
+        val item = newHomework(listOf(DraftItem.blank("2026-11-21").copy(content = "跳绳", kind = DoneBy.VIDEO)), listOf(RemoteChild("c", "小明", 2)), setOf("c"), "", emptyList()).single()
+        assertEquals("ONLINE" to "VIDEO", item.mode to item.onlineKind)
+    }
+
+    @Test fun aiReviewUsesTheParsedOnlineKind() {
+        val json = """{"items":[{"subject":"OTHER","content":"跳绳 1 分钟录视频","mode":"ONLINE","onlineKind":"VIDEO"},
+            {"subject":"CHINESE","content":"朗读","mode":"ONLINE","onlineKind":null},{"subject":"ENGLISH","content":"听读 10 分钟","mode":"ONLINE","onlineKind":"TIMER"},
+            {"subject":"MATH","content":"口算","mode":"OFFLINE","onlineKind":null},{"subject":"CHINESE","content":"背诵","mode":"ONLINE"}],"message":""}"""
+        val parsed = wireJson.decodeFromString(ParseResult.serializer(), json).items
+        assertEquals("VIDEO", parsed[0].onlineKind)
+        assertEquals(listOf(DoneBy.VIDEO, DoneBy.RECORDING, DoneBy.TIMER, DoneBy.PHOTO, DoneBy.RECORDING),
+            parsed.map { DraftItem.from(it, "2026-11-21", attachImages = false).kind })
+    }
+
+    @Test fun videosAreScaledToA480ShortSideKeepingTheAspect() {
+        assertEquals(854 to 480, VideoRules.targetSize(1920, 1080))
+        assertEquals(480 to 854, VideoRules.targetSize(1920, 1080, rotation = 90))   // a phone held upright
+        assertEquals(854 to 480, VideoRules.targetSize(1080, 1920, rotation = 270))
+        assertEquals(480 to 854, VideoRules.targetSize(720, 1280))
+        assertEquals(640 to 480, VideoRules.targetSize(1440, 1080))                  // 4:3 tablet camera
+        assertEquals(480 to 640, VideoRules.targetSize(3024, 4032))
+        assertEquals(640 to 480, VideoRules.targetSize(640, 480))                    // never scaled up
+        assertEquals(320 to 240, VideoRules.targetSize(320, 240))
+        assertEquals(322 to 242, VideoRules.targetSize(321, 241))                    // but always even
+        assertEquals(854 to 480, VideoRules.targetSize(0, 0))
+    }
+
+    @Test fun videosLongerThanThirtyMinutesAreRefused() {
+        assertNull(VideoRules.lengthProblem(65_000))
+        assertNull(VideoRules.lengthProblem(1_800_000))
+        assertNull("a camera stopped at the limit may run a little over", VideoRules.lengthProblem(1_800_700))
+        assertEquals("这个视频有 31 分钟，超过 30 分钟了。请录短一点再交。", VideoRules.lengthProblem(1_801_000))
+        assertEquals("这个视频有 45 分钟，超过 30 分钟了。请录短一点再交。", VideoRules.lengthProblem(45 * 60_000L))
+        assertEquals("视频太短了，再录一次吧。", VideoRules.lengthProblem(400))
+        assertEquals("这个视频读不出来，换一个试试吧。", VideoRules.lengthProblem(null))
+        assertEquals("3 分 25 秒", VideoRules.lengthLabel(205_000))
+        assertEquals("42 秒", VideoRules.lengthLabel(41_600))
+        val at = java.time.Instant.parse("2026-11-21T11:30:05Z").toEpochMilli()
+        assertEquals("小熊伴学_数学_20261121_193005.mp4", VideoRules.galleryName("MATH", at, "Asia/Shanghai"))
+    }
+
+    private fun mp4(dir: File, size: Int = 300_000): File =
+        File(dir, "compressed.mp4").apply { writeBytes(byteArrayOf(0, 0, 0, 0x18) + "ftypisom".toByteArray() + ByteArray(size) { (it % 251).toByte() }) }
+
+    /** The queue keeps a path to the video on disk: the compressed file is moved into the outbox, never read into memory. */
+    @Test fun aQueuedVideoIsAFileInTheOutbox() = runBlocking {
+        val dir = Files.createTempDirectory("hw-video").toFile()
+        val session = DeviceSession("http://127.0.0.1:9", "d", "child", "f", "t".repeat(64))
+        val offline = HttpTransport { _: Request -> throw java.io.IOException("offline") }
+        val store = HomeworkStore(File(dir, "store"), MemorySessionStorage(session), transport = offline, debug = true)
+        val video = mp4(dir)
+        val bytes = video.readBytes()
+        val item = homework("VIDEO")
+        store.submit(item, video = video)
+        assertFalse("moved, not copied", video.exists())
+        val pending = store.state.value.outbox.single().files.single()
+        assertTrue(pending.isVideo); assertEquals("video/mp4", pending.mime); assertTrue(pending.localName.endsWith(".mp4"))
+        assertEquals("SUBMITTED", store.state.value.homework.getValue(item.id).status)
+        assertTrue(store.uploads.value.isEmpty())
+        val reopened = HomeworkStore(File(dir, "store"), MemorySessionStorage(session), transport = offline, debug = true)
+        assertTrue(bytes.contentEquals(reopened.outboxFile(reopened.state.value.outbox.single().files.single()).readBytes()))
+    }
+
+    @Test fun videoUploadsStreamFromDiskAsMp4WithLongTimeouts() {
+        val dir = Files.createTempDirectory("hw-upload").toFile()
+        val video = mp4(dir)
+        val api = ApiClient("https://hw.example.cn", "tok", HttpTransport { _: Request -> 200 to ByteArray(0) })
+        val sent = mutableListOf<Long>()
+        val request = api.uploadRequest("ABC-1", video, VIDEO_MIME) { done, total -> assertEquals(video.length(), total); sent += done }
+        assertEquals("PUT", request.method)
+        assertEquals("/v1/files/abc-1", request.url.encodedPath)
+        assertEquals("Bearer tok", request.header("Authorization"))
+        val body = request.body as FileBody
+        assertEquals("video/mp4", body.contentType().toString())
+        assertEquals(video.length(), body.contentLength())
+        assertEquals(video, body.file)
+        assertEquals(LongTransfer, request.tag(LongTransfer::class.java))
+        val out = Buffer().also { body.writeTo(it) }
+        assertTrue(video.readBytes().contentEquals(out.readByteArray()))
+        assertEquals(video.length(), sent.last()); assertTrue(sent.size > 1)
+        // Photos keep the normal timeouts.
+        assertNull(api.uploadRequest("p", video, "image/jpeg").tag(LongTransfer::class.java))
+        val slow = OkHttpTransport.longTransferClient()
+        assertEquals(0, slow.callTimeoutMillis); assertEquals(TimeUnit.MINUTES.toMillis(2).toInt(), slow.writeTimeoutMillis)
+        assertFalse("never forwards the credential", slow.followRedirects)
+        assertEquals("https://hw.example.cn/v1/files/abc-1", api.fileUrl("ABC-1"))
+    }
+
+    /** Back online: the video goes up as `video/mp4` from the outbox file, then the submission names exactly that one file. */
+    @Test fun aQueuedVideoIsUploadedThenSubmitted() = runBlocking {
+        val dir = Files.createTempDirectory("hw-flush").toFile()
+        val session = DeviceSession("http://127.0.0.1:9", "d", "child", "f", "t".repeat(64))
+        val item = homework("VIDEO")
+        var online = false
+        val seen = mutableListOf<String>()
+        var uploadedType: String? = null; var uploadedLength = -1L; var submitted = ""
+        val server = HttpTransport { request: Request ->
+            if (!online) throw java.io.IOException("offline")
+            val path = request.url.encodedPath
+            seen += "${request.method} $path"
+            when {
+                request.method == "PUT" -> { uploadedType = request.body?.contentType()?.toString(); uploadedLength = request.body!!.contentLength(); 200 to "{}".toByteArray() }
+                path.endsWith("/submissions") -> {
+                    submitted = Buffer().also { request.body!!.writeTo(it) }.readUtf8()
+                    200 to wireJson.encodeToString(RemoteHomework.serializer(), item.copy(status = "SUBMITTED")).toByteArray()
+                }
+                path == "/v1/me" -> 200 to """{"cursor":1,"device":{"id":"d","role":"child"},"family":{"id":"f","timezone":"Asia/Shanghai"},"children":[]}""".toByteArray()
+                path == "/v1/homework" -> 200 to """{"items":[]}""".toByteArray()
+                path == "/v1/routines" -> 200 to """{"routines":[]}""".toByteArray()
+                else -> 404 to "{}".toByteArray()
+            }
+        }
+        val store = HomeworkStore(dir, MemorySessionStorage(session), transport = server, debug = true)
+        val video = mp4(Files.createTempDirectory("hw-src").toFile(), 50_000)
+        val length = video.length()
+        store.submit(item, video = video)
+        val outboxFile = store.outboxFile(store.state.value.outbox.single().files.single())
+        online = true
+        store.sync()
+        assertTrue(store.state.value.outbox.isEmpty())
+        assertEquals("video/mp4", uploadedType); assertEquals(length, uploadedLength)
+        val fileId = seen.first { it.startsWith("PUT") }.substringAfterLast('/')
+        assertTrue(submitted, submitted.contains("\"fileIds\":[\"$fileId\"]"))
+        assertFalse("the outbox copy is gone once handed in", outboxFile.exists())
+        assertFalse("a video is not kept in the file cache", store.cachedFile(fileId).exists())
+        assertTrue(store.uploads.value.isEmpty())
+        assertNull(store.error.value)
     }
 }

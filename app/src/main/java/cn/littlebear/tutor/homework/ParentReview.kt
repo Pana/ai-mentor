@@ -182,6 +182,7 @@ class AnnotationModel {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { SubjectTag(item.subject, 13.sp); Text(item.content, maxLines = 2) }
         if (!item.isRoutine) Text(if (submission.onTime) "按时交（${rules.finishTime} 前）" else "晚于 ${rules.finishTime} 交", fontSize = 13.sp, color = if (submission.onTime) Palette.pine else Palette.warn)
         if (item.isRecording) submission.fileIds.firstOrNull()?.let { AudioPlayerButton(it) }
+        if (item.isVideo) submission.fileIds.firstOrNull()?.let { VideoPlayerBox(it, Modifier.fillMaxWidth().height(if (isWide()) 400.dp else 260.dp)) }
         if (item.isOffline) Text(if (marks.isEmpty) "没有批注" else "已批注", fontSize = 13.sp, color = Palette.ink3)
     }
     FormSection("评分") {

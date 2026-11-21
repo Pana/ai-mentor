@@ -327,6 +327,36 @@ try {
     if (name.startsWith('06')) check(layout.types === 9, `九种白板元素都画出来了（${layout.types}）`);
     await view.context().close();
   }
+  // 4b. Inside the Android app (window.LittleBearHost): no pairing or settings, and “返回” / “结束” close the screen.
+  console.log('在 App 里');
+  check(!(await page.locator('#leave').isVisible()), '浏览器里打开时没有“结束”按钮');
+  for (const [name, viewport] of [['11-App平板', { width: 1180, height: 820 }], ['12-App手机', { width: 390, height: 844 }]]) {
+    const hosted = await newPage(browser, viewport);
+    await hosted.addInitScript(([deviceToken, childId]) => {
+      window.hostClosed = 0;
+      window.LittleBearHost = { token: () => deviceToken, childId: () => childId, close: () => { window.hostClosed += 1; } };
+    }, [token, me.children[0].id]);
+    await hosted.goto(`${base}/teacher/`);
+    await hosted.locator('#step-start').waitFor();
+    check(await hosted.locator('#sheet-leave').isVisible() && await hosted.locator('#settings').isHidden(), `${name.slice(3)}：开始前有“返回”，没有家长设置`);
+    await hosted.locator('#sheet-leave').click();
+    check(await hosted.evaluate(() => window.hostClosed) === 1, `${name.slice(3)}：点“返回”关掉这一屏`);
+    await hosted.locator('#start').click();
+    await hosted.locator('#status', { hasText: '我在听' }).waitFor({ timeout: 10_000 });
+    await hosted.locator('#mute').click(); // the fake mic would start a sentence of its own
+    const bar = await hosted.evaluate(() => {
+      const leave = document.getElementById('leave').getBoundingClientRect();
+      const buttons = [...document.querySelectorAll('.actions button')].filter(b => !b.hidden).map(b => b.getBoundingClientRect());
+      return { left: Math.round(leave.left), top: Math.round(leave.top), clear: buttons.every(b => b.left >= leave.right + 8), title: document.querySelector('.brand-text').getBoundingClientRect().width };
+    });
+    check(await hosted.locator('#leave').isVisible() && bar.left < 40 && bar.top < 30 && bar.clear && bar.title > 60, `${name.slice(3)}：左上角有“结束”，和右边的按钮、标题都不挤`, bar);
+    check(await overflow(hosted) <= 0, `${name.slice(3)}没有横向溢出`);
+    await shot(hosted, name);
+    await hosted.locator('#leave').click();
+    check(await hosted.evaluate(() => window.hostClosed) === 2, `${name.slice(3)}：点“结束”关掉这一屏`);
+    await hosted.context().close();
+  }
+
   // 5. The server goes away mid-conversation.
   console.log('断线');
   expectedErrors.push('WebSocket', 'ERR_CONNECTION');

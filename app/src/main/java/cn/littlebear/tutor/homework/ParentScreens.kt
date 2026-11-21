@@ -275,7 +275,7 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
         }
     }
     if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("删除这项作业？") },
-        text = { Text("会同时删除孩子提交的照片、录音和批改，奖励记录保留。") },
+        text = { Text("会同时删除孩子提交的照片、录音、视频和批改，奖励记录保留。") },
         confirmButton = { TextButton({ confirmDelete = false; store.launch({ if (it) onBack?.invoke() }) { delete(id) } }) { Text("删除", color = Palette.redPen) } },
         dismissButton = { TextButton({ confirmDelete = false }) { Text("取消") } })
 }
@@ -294,6 +294,7 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
         }
         submission.durationSeconds?.let { Text("计时 ${it / 60} 分 ${it % 60} 秒", color = Palette.ink2) }
         if (item.isRecording) submission.fileIds.firstOrNull()?.let { AudioPlayerButton(it) }
+        if (item.isVideo) submission.fileIds.firstOrNull()?.let { VideoPlayerBox(it, Modifier.fillMaxWidth().height(240.dp)) }
         if (item.isOffline) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             submission.fileIds.forEachIndexed { i, file -> Thumb(Modifier.size(120.dp, 160.dp)) { AnnotatedPage(file, overlayFile(submission, i), Modifier.fillMaxSize()) } }
         }
@@ -313,9 +314,18 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
 
 /** How a homework item gets done. */
 enum class DoneBy(val label: String, val mode: String, val onlineKind: String?) {
-    PHOTO("本子上写，拍照交", "OFFLINE", null), TIMER("在线计时", "ONLINE", "TIMER"), RECORDING("在线录音", "ONLINE", "RECORDING");
+    PHOTO("本子上写，拍照交", "OFFLINE", null), TIMER("在线计时", "ONLINE", "TIMER"), RECORDING("在线录音", "ONLINE", "RECORDING"),
+    VIDEO("在线录像", "ONLINE", "VIDEO");
     val usesDuration get() = this == TIMER
-    companion object { fun of(mode: String, onlineKind: String?) = if (mode == "OFFLINE") PHOTO else if (onlineKind == "TIMER") TIMER else RECORDING }
+    companion object {
+        /** An online kind this version does not know (or none) is treated as a recording, as before. */
+        fun of(mode: String, onlineKind: String?) = when {
+            mode == "OFFLINE" -> PHOTO
+            onlineKind == "TIMER" -> TIMER
+            onlineKind == "VIDEO" -> VIDEO
+            else -> RECORDING
+        }
+    }
 }
 
 data class DraftItem(
@@ -325,7 +335,7 @@ data class DraftItem(
 ) {
     companion object {
         fun from(parsed: ParsedItem, date: String, attachImages: Boolean) = DraftItem(subject = parsed.subject, content = parsed.content, date = date,
-            hasDue = parsed.dueDate != null, dueDate = parsed.dueDate ?: Day.add(date, 1), kind = if (parsed.mode == "OFFLINE") DoneBy.PHOTO else DoneBy.RECORDING,
+            hasDue = parsed.dueDate != null, dueDate = parsed.dueDate ?: Day.add(date, 1), kind = DoneBy.of(parsed.mode, parsed.onlineKind),
             parentTodo = parsed.parentTodo, attachImages = attachImages)
         fun from(item: RemoteHomework) = DraftItem(subject = item.subject, content = item.content, date = item.date, hasDue = item.dueDate != null,
             dueDate = item.dueDate ?: Day.add(item.date, 1), kind = DoneBy.of(item.mode, item.onlineKind), minutes = item.durationMinutes ?: 10, parentTodo = item.parentTodo)
@@ -333,8 +343,10 @@ data class DraftItem(
     }
 }
 
+/** Wraps onto a second line on a phone, so every choice (e.g. the fourth kind, 在线录像) stays visible. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable fun ChoiceRow(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { (value, label) -> FilterChip(value == selected, { onSelect(value) }, label = { Text(label) }) }
     }
 }
@@ -785,7 +797,7 @@ fun rewardReason(entry: RewardEntry, state: HomeworkState): String {
     }
     if (adding || editing != null) ChildEditor(editing) { adding = false; editing = null }
     deleting?.let { c ->
-        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("删除${c.name}的全部数据？") }, text = { Text("会删除这个孩子的作业、照片、录音、批改和奖励，不能恢复。") },
+        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("删除${c.name}的全部数据？") }, text = { Text("会删除这个孩子的作业、照片、录音、视频、批改和奖励，不能恢复。") },
             confirmButton = { TextButton({ deleting = null; store.launch { deleteChild(c.id) } }) { Text("删除", color = Palette.redPen) } },
             dismissButton = { TextButton({ deleting = null }) { Text("取消") } })
     }
