@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -25,14 +25,14 @@ async function setup(t, { model = {}, fetchImpl } = {}) {
   await once(server, 'listening');
   t.after(() => new Promise(resolve => { server.close(() => { api.close(); rmSync(dataDir, { recursive: true, force: true }); resolve(); }); server.closeAllConnections(); }));
   const base = `http://127.0.0.1:${server.address().port}`;
-  async function call(method, path, { token, body, raw, type } = {}) {
-    const headers = {};
+  async function call(method, path, { token, body, raw, type, headers: extra } = {}) {
+    const headers = { ...extra };
     if (token) headers.Authorization = `Bearer ${token}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (raw) headers['Content-Type'] = type;
     const response = await fetch(base + path, { method, headers, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)) });
     const isJson = response.headers.get('content-type')?.startsWith('application/json');
-    return { status: response.status, body: isJson ? await response.json() : Buffer.from(await response.arrayBuffer()) };
+    return { status: response.status, headers: response.headers, body: isJson ? await response.json() : Buffer.from(await response.arrayBuffer()) };
   }
   const parent = (await call('POST', '/v1/devices/bootstrap', { body: { token: bootstrapToken, deviceId: randomUUID(), name: '妈妈的 iPhone' } })).body.deviceToken;
   const { code } = (await call('POST', '/v1/devices/pairing-codes', { token: parent, body: {} })).body;
@@ -149,6 +149,20 @@ test('online homework: recordings need audio, timers need the full duration and 
   assert.equal(done.body.submissions[0].durationSeconds, 300);
 });
 
+test('online homework: videos need exactly one video file', async t => {
+  const { upload, addHomework, submit } = await setup(t);
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(8)]);
+  const video = await addHomework({ subject: 'OTHER', content: '体育：跳绳 1 分钟，拍视频', mode: 'ONLINE', onlineKind: 'VIDEO' });
+  assert.equal(video.onlineKind, 'VIDEO');
+  assert.equal((await submit(video, { fileIds: [] })).body.error, 'video_required');
+  assert.equal((await submit(video)).status, 400, 'a photo is not a video');
+  assert.equal((await submit(video, { fileIds: [await upload(m4a, 'audio/mp4')] })).status, 400, 'a recording is not a video');
+  const ok = await submit(video, { fileIds: [await upload(mp4, 'video/mp4')] });
+  assert.equal(ok.body.status, 'SUBMITTED', 'a parent watches and grades it');
+  const recording = await addHomework({ subject: 'CHINESE', content: '背诵《咏柳》', mode: 'ONLINE', onlineKind: 'RECORDING' });
+  assert.equal((await submit(recording, { fileIds: [await upload(mp4, 'video/mp4')] })).status, 400, 'a video is not a recording');
+});
+
 test('routines: at most five active, generated for today only, check-in and seven-day streak rewards', async t => {
   const { call, clock, parent, child, childId, submit, balance } = await setup(t);
   const routine = id => ({ childId, title: `朗读 5 分钟 ${id.slice(0, 4)}`, subject: 'ENGLISH', mode: 'ONLINE', onlineKind: 'TIMER', durationMinutes: 5, weekdays: [0, 1, 2, 3, 4, 5, 6] });
@@ -218,6 +232,28 @@ test('files: type checks, downloads, and deletion with their homework', async t 
   await call('DELETE', `/v1/homework/${hw.id}`, { token: parent });
   assert.equal((await call('GET', `/v1/files/${attachment}`, { token: child })).status, 404);
   assert.ok(!existsSync(join(dataDir, 'files', familyDir, photo)));
+});
+
+test('files: big uploads stream to disk, and downloads serve byte ranges for video playback', async t => {
+  const { call, child, upload, dataDir } = await setup(t);
+  const familyDir = (await call('GET', '/v1/me', { token: child })).body.family.id;
+  const video = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(3_000_000, 7)]);
+  const id = await upload(video, 'video/mp4');
+  const whole = await call('GET', `/v1/files/${id}`, { token: child });
+  assert.deepEqual(whole.body, video, 'what was streamed in comes back byte for byte');
+  assert.equal(whole.headers.get('accept-ranges'), 'bytes');
+  const part = await call('GET', `/v1/files/${id}`, { token: child, headers: { Range: 'bytes=4-11' } });
+  assert.equal(part.status, 206);
+  assert.equal(part.headers.get('content-range'), `bytes 4-11/${video.length}`);
+  assert.equal(part.body.toString('latin1'), 'ftypisom');
+  const tail = await call('GET', `/v1/files/${id}`, { token: child, headers: { Range: 'bytes=-3' } });
+  assert.deepEqual([tail.status, [...tail.body]], [206, [7, 7, 7]]);
+  const open = await call('GET', `/v1/files/${id}`, { token: child, headers: { Range: `bytes=${video.length - 2}-` } });
+  assert.equal(open.body.length, 2);
+  assert.equal((await call('GET', `/v1/files/${id}`, { token: child, headers: { Range: `bytes=${video.length}-` } })).status, 416);
+  const bad = await call('PUT', `/v1/files/${randomUUID()}`, { token: child, raw: Buffer.alloc(2_000_000), type: 'video/mp4' });
+  assert.equal(bad.status, 400, 'not an MP4');
+  assert.deepEqual(readdirSync(join(dataDir, 'files', familyDir)).filter(name => name.endsWith('.part')), [], 'a rejected upload leaves nothing behind');
 });
 
 test('change feed lists what to re-fetch, in order', async t => {
@@ -295,4 +331,10 @@ test('AI parse: model missing is explicit and malformed replies are rejected', a
   const kept = validateParseReply('```json\n' + JSON.stringify({ items: [{ subject: 'OTHER', content: '科学：观察月亮', mode: 'OFFLINE', due_date: '2026-11-01' }] }) + '\n```', input);
   assert.equal(kept.items[0].dueDate, null, 'a due date before the assigned date is dropped');
   assert.equal(kept.items[0].parentTodo, '');
+  assert.equal(kept.items[0].onlineKind, null);
+  const kinds = validateParseReply(JSON.stringify({ items: [
+    { subject: 'OTHER', content: '体育：跳绳 1 分钟', mode: 'ONLINE', online_kind: 'VIDEO' },
+    { subject: 'CHINESE', content: '背诵《咏柳》', mode: 'ONLINE', online_kind: 'SINGING' },
+    { subject: 'MATH', content: '口算本第 12 页', mode: 'OFFLINE', online_kind: 'VIDEO' }] }), input);
+  assert.deepEqual(kinds.items.map(i => i.onlineKind), ['VIDEO', null, null], 'an unknown kind, or any kind on offline homework, is dropped');
 });

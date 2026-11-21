@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -390,6 +391,7 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
                 item.status == "SUBMITTED" -> WaitingView(item, uploading = false)
                 item.isOffline -> OfflineTaskView(item, submit)
                 item.isTimer -> TimerTaskView(item)
+                item.isVideo -> VideoTaskView(item)
                 else -> RecordingTaskView(item)
             }
         }
@@ -428,11 +430,20 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
 }
 
 @Composable private fun WaitingView(item: RemoteHomework, uploading: Boolean) {
+    val uploads by LocalStore.current.uploads.collectAsStateWithLifecycle()
+    KeepScreenOn(uploading && item.id in uploads)
     Column(Modifier.fillMaxSize().background(Palette.card, RoundedCornerShape(28.dp)).verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically)) {
         BearView(96.dp)
         Text(if (uploading) "交上了，等网络好了就发给家长" else if (item.isTimer) "打卡完成！" else "交上了，等家长批改", fontSize = 28.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
         Text(item.content, fontSize = 18.sp, color = Palette.ink2, textAlign = TextAlign.Center)
+        if (uploading) uploads[item.id]?.let { sent ->
+            Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LinearProgressIndicator({ sent }, Modifier.fillMaxWidth().height(10.dp).clip(CircleShape), color = Palette.pine, trackColor = Palette.chip)
+                Text("正在上传视频 ${(sent * 100).toInt()}%", fontSize = 16.sp, color = Palette.ink2)
+                Text("视频比较大，要等一会儿。中途离开也没关系，回到小熊伴学会继续上传。", fontSize = 14.sp, color = Palette.ink3, textAlign = TextAlign.Center)
+            }
+        }
         val latest = item.latest
         if (latest != null && item.isOffline && !uploading) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             latest.fileIds.forEach { Thumb(Modifier.size(120.dp, 160.dp)) { RemoteImage(it, Modifier.fillMaxSize(), ContentScale.Crop, 500) } }
@@ -455,6 +466,10 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
                 }
                 item.isRecording && submission?.fileIds?.firstOrNull() != null -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     BearView(90.dp); Text(item.content, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center); AudioPlayerButton(submission.fileIds.first())
+                }
+                item.isVideo && submission?.fileIds?.firstOrNull() != null -> Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(item.content, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    VideoPlayerBox(submission.fileIds.first(), Modifier.fillMaxWidth().weight(1f))
                 }
                 else -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     BearView(90.dp); Text(item.content, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -481,7 +496,8 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
             }
             if (item.status == "NEEDS_CORRECTION") {
                 if (item.isOffline) PrimaryButton("订正好了，拍照再交", Modifier.fillMaxWidth(), height = 60.dp, onClick = redo)
-                else if (item.isTimer) Box(Modifier.height(380.dp)) { TimerTaskView(item) } else Box(Modifier.height(320.dp)) { RecordingTaskView(item) }
+                else if (item.isTimer) Box(Modifier.height(380.dp)) { TimerTaskView(item) }
+                else if (item.isVideo) Box(Modifier.height(360.dp)) { VideoTaskView(item) } else Box(Modifier.height(320.dp)) { RecordingTaskView(item) }
             }
         }
     }
@@ -656,6 +672,85 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
                         StoreHolder.scope.launch { store.submit(item, audio = f.readBytes()); f.delete(); sending = false }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ---------- Online: video (a performance, a sports check-in; up to 30 minutes) ----------
+
+/** Compressing or uploading a long video takes minutes; the screen going dark would slow it down or stop it. */
+@Composable private fun KeepScreenOn(on: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(view, on) { view.keepScreenOn = on; onDispose { view.keepScreenOn = false } }
+}
+
+@Composable private fun VideoTaskView(item: RemoteHomework) {
+    val store = LocalStore.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val jobs by VideoPrep.jobs.collectAsStateWithLifecycle()
+    val job = jobs[item.id]
+    KeepScreenOn(job != null)
+    var captureFile by rememberSaveable { mutableStateOf<String?>(null) }
+    // The chosen video, waiting for “交给家长看”: its Uri, the capture file to clean up afterwards, and what it is.
+    var chosen by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var chosenFile by rememberSaveable { mutableStateOf<String?>(null) }
+    var info by remember { mutableStateOf<VideoInfo?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    fun choose(uri: Uri, file: File?) = scope.launch {
+        checking = true
+        val probed = Videos.probe(context, uri)
+        checking = false
+        val problem = VideoRules.lengthProblem(probed?.durationMs)
+        if (probed == null || problem != null) { store.reportError(problem ?: "这个视频读不出来，换一个试试吧。"); file?.delete(); return@launch }
+        chosen = uri; chosenFile = file?.absolutePath; info = probed
+    }
+    // After the screen is recreated only the Uri is left: look at the video again (or forget it if it is gone).
+    LaunchedEffect(chosen) { val uri = chosen; if (uri != null && info == null) { info = Videos.probe(context, uri); if (info == null) chosen = null } }
+    fun handIn() {
+        val uri = chosen ?: return
+        val probed = info ?: return
+        VideoPrep.start(context, store, item, uri, probed, chosenFile?.let(::File))
+        chosen = null; chosenFile = null; info = null
+    }
+    // Android 8–9 ask for storage once, to save the video to the gallery; handing in goes ahead either way.
+    val storage = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { handIn() }
+    val camera = rememberLauncherForActivityResult(CaptureVideo()) { returned ->
+        val file = captureFile?.let(::File)
+        captureFile = null
+        when {
+            returned == null -> file?.delete()
+            file != null && file.length() > 0 -> choose(Uri.fromFile(file), file)
+            returned != Uri.EMPTY && returned.authority != "${context.packageName}.files" -> { file?.delete(); choose(returned, null) }
+            else -> { file?.delete(); store.reportError("没拿到录好的视频，再录一次吧。") }
+        }
+    }
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { choose(it, null) } }
+    fun record() {
+        val f = Videos.captureFile(context, keep = chosenFile); captureFile = f.absolutePath
+        try { camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", f)) } catch (_: Exception) { captureFile = null; store.reportError("无法打开相机，可以从相册选视频。") }
+    }
+    Column(Modifier.fillMaxSize().background(Palette.card, RoundedCornerShape(28.dp)).verticalScroll(rememberScrollState()).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically)) {
+        Text(item.content, fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        when {
+            job != null -> Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val progress = job.progress
+                if (progress != null) LinearProgressIndicator({ progress }, Modifier.fillMaxWidth().height(10.dp).clip(CircleShape), color = Palette.pine, trackColor = Palette.chip)
+                else LinearProgressIndicator(Modifier.fillMaxWidth().height(10.dp).clip(CircleShape), color = Palette.pine, trackColor = Palette.chip)
+                Text(job.step + (progress?.let { " ${(it * 100).toInt()}%" } ?: "…"), fontSize = 18.sp, color = Palette.ink2)
+                Text("弄好后会自动交给家长，还会存一份到相册。", fontSize = 14.sp, color = Palette.ink3, textAlign = TextAlign.Center)
+            }
+            checking -> Text("正在看看这个视频…", fontSize = 18.sp, color = Palette.ink2)
+            chosen != null -> Text(info?.durationMs?.let { "录好了，视频 ${VideoRules.lengthLabel(it)}" } ?: "录好了", fontSize = 18.sp, color = Palette.ink2)
+            else -> Text("准备好就点“开始录像”，最长 30 分钟。也可以从相册选一段。", fontSize = 18.sp, color = Palette.ink2, textAlign = TextAlign.Center)
+        }
+        if (job == null && !checking) FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SecondaryButton(if (chosen == null) "● 开始录像" else "重新录", height = 58.dp) { record() }
+            SecondaryButton(if (chosen == null) "从相册选视频" else "换一个", height = 58.dp) { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }
+            if (chosen != null) PrimaryButton("交给家长看", height = 58.dp, enabled = info != null) {
+                if (Videos.needsStoragePermission(context)) storage.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) else handIn()
             }
         }
     }

@@ -8,6 +8,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -64,7 +65,12 @@ object Day {
 
 // ---------- Offline submission queue (child device) ----------
 
-@Serializable data class PendingFile(val fileId: String, val localName: String, val mime: String)
+/** A file waiting in the outbox: only its name in the outbox folder is kept here, the bytes stay on disk. */
+@Serializable data class PendingFile(val fileId: String, val localName: String, val mime: String) {
+    val isVideo: Boolean get() = mime == VIDEO_MIME
+}
+
+const val VIDEO_MIME = "video/mp4"
 
 @Serializable data class PendingSubmission(
     /** Submission id; the server treats a retry with the same id as the same submission. */
@@ -135,6 +141,8 @@ class HomeworkStore(
     val state: StateFlow<HomeworkState> = _state.asStateFlow()
     /** One message at a time, shown once by the UI. */
     val error = MutableStateFlow<String?>(null)
+    /** Share of a queued video already sent (0…1), by homework id; only while it is uploading. */
+    val uploads = MutableStateFlow<Map<String, Float>>(emptyMap())
 
     private var cursor = 0
     private val syncLock = Mutex()
@@ -309,24 +317,41 @@ class HomeworkStore(
 
     // ---------- Child: submissions (queued, so a submission made offline is sent later) ----------
 
-    suspend fun submit(item: RemoteHomework, pages: List<ByteArray> = emptyList(), audio: ByteArray? = null, durationSeconds: Int? = null) {
+    suspend fun submit(item: RemoteHomework, pages: List<ByteArray> = emptyList(), audio: ByteArray? = null, durationSeconds: Int? = null, video: File? = null) {
+        queue(item, pages, audio, durationSeconds, video)
+        sync()
+    }
+
+    /**
+     * Puts a submission in the outbox and shows it as handed in, without sending it yet. A [video] file is moved
+     * into the outbox (not read into memory: it can be 200 MB).
+     */
+    suspend fun queue(item: RemoteHomework, pages: List<ByteArray> = emptyList(), audio: ByteArray? = null, durationSeconds: Int? = null, video: File? = null) {
         val files = mutableListOf<PendingFile>()
         withContext(io) {
             pages.forEach { files += storeOutboxFile(it, "image/jpeg", "jpg") }
             audio?.let { files += storeOutboxFile(it, "audio/mp4", "m4a") }
+            video?.let { files += moveToOutbox(it, VIDEO_MIME, "mp4") }
         }
         val pending = PendingSubmission(newId(), item.id, files, Instant.ofEpochMilli(now()).toString(), durationSeconds)
         // Shown as handed in right away; the server's answer replaces this on the next sync.
         val local = item.copy(status = if (item.isTimer) "REVIEWED" else "SUBMITTED")
         _state.update { it.copy(outbox = it.outbox + pending, homework = it.homework + (item.id to local)) }
         saveCache()
-        sync()
     }
 
     private fun storeOutboxFile(data: ByteArray, mime: String, ext: String): PendingFile {
         val id = newId()
         val name = "$id.$ext"
         File(outboxDir, name).writeBytes(data)
+        return PendingFile(id, name, mime)
+    }
+
+    private fun moveToOutbox(file: File, mime: String, ext: String): PendingFile {
+        val id = newId()
+        val name = "$id.$ext"
+        val target = File(outboxDir, name)
+        if (!file.renameTo(target)) { file.copyTo(target, overwrite = true); file.delete() }
         return PendingFile(id, name, mime)
     }
 
@@ -339,16 +364,8 @@ class HomeworkStore(
     private suspend fun flushOutbox(api: ApiClient) {
         for (item in current.outbox) {
             try {
-                for (file in item.files) {
-                    val local = File(outboxDir, file.localName)
-                    val data = withContext(io) { if (local.exists()) local.readBytes() else null } ?: throw ApiException.Rejected("invalid_file")
-                    api.upload(file.fileId, data, file.mime)
-                    withContext(io) { local.copyTo(cachedFile(file.fileId), overwrite = true) }
-                }
-                val updated: RemoteHomework = api.call("POST", "v1/homework/${item.homeworkId.lowercase()}/submissions",
-                    SubmissionBody(item.id, item.files.map { it.fileId }, item.submittedAt, item.durationSeconds))
-                _state.update { it.copy(homework = it.homework + (updated.id to updated)) }
-                finish(item)
+                // A video takes minutes to send: leaving the app (which stops the foreground sync loop) must not abort it.
+                if (item.files.any { it.isVideo }) withContext(NonCancellable) { send(api, item) } else send(api, item)
             } catch (e: ApiException) {
                 if (e is ApiException.Network || e is ApiException.Unauthorized || e is ApiException.Server) throw e
                 // The server refused it for good (e.g. the homework was deleted); drop it and say why.
@@ -357,6 +374,29 @@ class HomeworkStore(
                 val fresh = try { api.homework(item.homeworkId) } catch (e2: CancellationException) { throw e2 } catch (_: Exception) { null }
                 _state.update { it.copy(homework = if (fresh != null) it.homework + (fresh.id to fresh) else it.homework - item.homeworkId) }
             }
+        }
+    }
+
+    private suspend fun send(api: ApiClient, item: PendingSubmission) {
+        try {
+            for (file in item.files) {
+                val local = File(outboxDir, file.localName)
+                if (!withContext(io) { local.exists() }) throw ApiException.Rejected("invalid_file")
+                if (file.isVideo) {
+                    uploads.update { it + (item.homeworkId to 0f) }
+                    api.upload(file.fileId, local, file.mime) { sent, total -> if (total > 0) uploads.update { it + (item.homeworkId to sent.toFloat() / total) } }
+                } else {
+                    api.upload(file.fileId, local, file.mime)
+                    // Photos and recordings stay on the device so they show without downloading; a video is in the gallery already.
+                    withContext(io) { local.copyTo(cachedFile(file.fileId), overwrite = true) }
+                }
+            }
+            val updated: RemoteHomework = api.call("POST", "v1/homework/${item.homeworkId.lowercase()}/submissions",
+                SubmissionBody(item.id, item.files.map { it.fileId }, item.submittedAt, item.durationSeconds))
+            _state.update { it.copy(homework = it.homework + (updated.id to updated)) }
+            finish(item)
+        } finally {
+            uploads.update { it - item.homeworkId }
         }
     }
 

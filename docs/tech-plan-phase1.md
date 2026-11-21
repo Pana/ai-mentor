@@ -52,13 +52,13 @@ iPad（孩子）────┘    （数据 + 文件）    └── APNs（推
 | `families` | id, name, timezone（Asia/Shanghai） |
 | `children` | id, familyId, name, grade, avatar |
 | `devices` | id, familyId, role, childId?, tokenHash, apnsToken?, lastSeenAt, revokedAt? |
-| `homework` | id, childId, subject（CHINESE / MATH / ENGLISH / OTHER）, date（显示在哪一天）, dueDate?（老师的截止日期）, content, rawText?, mode（OFFLINE / ONLINE）, onlineKind?（TIMER / RECORDING）, durationMinutes?, parentTodo?, status, source（PASTE / MANUAL / ROUTINE）, routineId?, attachmentIds[] |
+| `homework` | id, childId, subject（CHINESE / MATH / ENGLISH / OTHER）, date（显示在哪一天）, dueDate?（老师的截止日期）, content, rawText?, mode（OFFLINE / ONLINE）, onlineKind?（TIMER / RECORDING / VIDEO）, durationMinutes?, parentTodo?, status, source（PASTE / MANUAL / ROUTINE）, routineId?, attachmentIds[] |
 | `routines` | id, childId, title, subject, mode, onlineKind?, durationMinutes?, quantity?, weekdays[], active, sortOrder |
 | `submissions` | id, homeworkId, attempt（第几次提交）, fileIds[], submittedAt（设备时间）, receivedAt（服务端时间）, onTime |
 | `reviews` | id, submissionId, grade（EXCELLENT / GOOD / FAIR / TRY_AGAIN）, comment, requireCorrection, annotations（每页一层）, reviewedAt |
 | `reward_rules` | familyId, finishTime（每天完成时间，默认 19:30）, onTime, gradeExcellent, gradeGood, gradeFair, checkin, streak7, dailyCap, windowStart, windowEnd, requireAllSubmitted |
 | `reward_ledger` | id, childId, minutes（正为获得，负为使用）, reason, refId, createdAt；`(reason, refId)` 唯一，保证不重复入账 |
-| `files` | id, familyId, kind（IMAGE / AUDIO / ANNOTATION）, mime, bytes, sha256, createdAt |
+| `files` | id, familyId, kind（IMAGE / AUDIO / VIDEO / ANNOTATION）, mime, bytes, sha256, createdAt |
 | `changes` | seq（自增）, familyId, entity, entityId, op（UPSERT / DELETE） |
 
 - **每天坚持**不预先生成多天的作业，而是在孩子当天第一次请求时，按 `routines` 生成当天的 `homework`（`source = ROUTINE`，同一天同一项只生成一次），这样暂停和修改只影响以后的日子。
@@ -106,8 +106,8 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 | `PATCH /homework/:id`、`DELETE /homework/:id` | parent | 修改、删除 |
 | `GET /homework?childId&from&to` | 全部 | 按日期范围查询，孩子设备只能查到自己家的孩子 |
 | `GET/POST/PATCH/DELETE /routines` | parent（读：全部） | 每天坚持 |
-| `PUT /files/:id` | 全部 | 上传一个文件，`Content-Type` 为 `image/jpeg`、`audio/mp4` 或 `application/octet-stream`（批注） |
-| `GET /files/:id` | 全部 | 下载文件，只能下载自己家庭的 |
+| `PUT /files/:id` | 全部 | 上传一个文件，`Content-Type` 为 `image/jpeg`、`audio/mp4`、`video/mp4` 或 `application/octet-stream`（批注）；边收边写盘 |
+| `GET /files/:id` | 全部 | 下载文件，只能下载自己家庭的；支持 `Range`，视频可以边下边播 |
 | `POST /homework/:id/submissions` | child | 提交，引用已上传的文件 ID |
 | `POST /submissions/:id/review` | parent | 批改：评分、评语、批注文件、是否要求订正 |
 | `GET/PUT /reward-rules` | parent（读：全部） | 奖励规则 |
@@ -115,7 +115,7 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 | `POST /rewards/sessions` | child | 开始使用奖励时间，服务端检查规则后扣减并返回可用分钟数 |
 | `GET /changes?since=<seq>` | 全部 | 增量同步，见 2.8 |
 
-上传大小限制：照片单张 2MB（JPEG，客户端缩放压缩），录音单条 10MB，单次提交最多 6 页。
+上传大小限制：照片单张 2MB（JPEG，客户端缩放压缩），录音单条 10MB，视频单个 300MB（客户端压缩到 480p、约 0.8 Mbps，30 分钟约 200MB），单次提交最多 6 页。为了能传完大视频，服务端整个请求的超时是 30 分钟（请求头仍须 10 秒内到齐）。
 
 ### 2.7 AI 整理作业：`POST /homework/parse`
 

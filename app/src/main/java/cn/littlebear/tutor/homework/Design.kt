@@ -104,6 +104,7 @@ object GradeStyle {
 fun modeLabel(item: RemoteHomework): String = when {
     item.isOffline -> "本子上写 · 拍照交"
     item.isRecording -> "在线录音"
+    item.isVideo -> "在线录像"
     item.durationMinutes != null -> "在线计时 ${item.durationMinutes} 分钟"
     else -> "在线完成"
 }

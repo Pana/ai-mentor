@@ -1,5 +1,6 @@
 import AVFoundation
 import Combine
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -392,6 +393,7 @@ struct ChildHomeworkView: View {
     @ViewBuilder private func work(_ item: RemoteHomework) -> some View {
         if item.isOffline { OfflineTaskView(item: item, submit: submit) }
         else if item.isTimer { TimerTaskView(item: item) }
+        else if item.isVideo { VideoTaskView(item: item) }
         else { RecordingTaskView(item: item) }
     }
 
@@ -448,13 +450,28 @@ struct OfflineTaskView: View {
 }
 
 struct WaitingView: View {
+    @EnvironmentObject private var store: HomeworkStore
     let item: RemoteHomework
     let uploading: Bool
     var body: some View {
         VStack(spacing: 20) {
             BearView(size: 96)
-            Text(uploading ? "交上了，等网络好了就发给家长" : (item.isTimer ? "打卡完成！" : "交上了，等家长批改")).font(.system(size: 30, weight: .black))
+            let progress = uploading ? store.uploadProgress[item.id] : nil
+            Text(progress != nil ? "交上了，正在发给家长" : uploading ? "交上了，等网络好了就发给家长" : (item.isTimer ? "打卡完成！" : "交上了，等家长批改")).font(.system(size: 30, weight: .black))
             Text(item.content).font(.title3).foregroundStyle(Color.ink2).multilineTextAlignment(.center)
+            if let progress {
+                VStack(spacing: 8) {
+                    ProgressView(value: progress).tint(.pine)
+                    Text("正在上传 \(Int(progress * 100))%").font(.headline.monospacedDigit()).foregroundStyle(Color.ink2)
+                }
+                .frame(maxWidth: 360)
+            }
+            if item.isVideo, let saved = store.albumSaves[item.id] {
+                Label(saved ? VideoAlbum.savedMessage : VideoAlbum.failedMessage, systemImage: saved ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 18, weight: .medium)).foregroundStyle(saved ? Color.pine : Color(hex: 0xA04A06))
+                    .padding(.horizontal, 18).padding(.vertical, 12).frame(maxWidth: 560)
+                    .background(saved ? Color.pineSoft : Color(hex: 0xFDEBDC), in: RoundedRectangle(cornerRadius: 16))
+            }
             if let latest = item.latest, item.isOffline {
                 HStack { ForEach(latest.fileIds, id: \.self) { RemoteImage(fileId: $0, contentMode: .fill).frame(width: 120, height: 160).clipShape(RoundedRectangle(cornerRadius: 12)) } }
             }
@@ -480,6 +497,8 @@ struct FeedbackView: View {
                         ForEach(Array(submission.fileIds.enumerated()), id: \.offset) { i, file in AnnotatedPage(photo: file, overlay: overlayFile(submission, i)).padding(16).tag(i) }
                     }
                     .tabViewStyle(.page(indexDisplayMode: submission.fileIds.count > 1 ? .always : .never))
+                } else if item.isVideo, let video = submission?.fileIds.first {
+                    RemoteVideoPlayer(fileId: video).clipShape(RoundedRectangle(cornerRadius: 20)).padding(16)
                 } else if item.isRecording, let audio = submission?.fileIds.first {
                     VStack(spacing: 16) { BearView(size: 90); Text(item.content).font(.title2.bold()); AudioPlayerButton(fileId: audio) }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -513,7 +532,9 @@ struct FeedbackView: View {
                 if let redo, item.isOffline {
                     Button(action: redo) { Label("订正好了，拍照再交", systemImage: "camera") }.buttonStyle(PrimaryButtonStyle(height: 64)).frame(maxWidth: .infinity)
                 } else if item.status == "NEEDS_CORRECTION" {
-                    if item.isTimer { TimerTaskView(item: item).frame(height: 300) } else { RecordingTaskView(item: item).frame(height: 300) }
+                    if item.isTimer { TimerTaskView(item: item).frame(height: 300) }
+                    else if item.isVideo { VideoTaskView(item: item, compact: true).frame(minHeight: 300, maxHeight: 440) }
+                    else { RecordingTaskView(item: item).frame(height: 300) }
                 }
             }
             .frame(width: 380)
@@ -742,6 +763,129 @@ struct RecordingTaskView: View {
     private func send(_ data: Data) {
         sending = true
         Task { await store.submit(item, audio: data); sending = false }
+    }
+}
+
+// MARK: - Online: video (jump rope, sports, crafts, experiments)
+
+struct VideoTaskView: View {
+    @EnvironmentObject private var store: HomeworkStore
+    let item: RemoteHomework
+    /// Inside the feedback column when redoing: no title, buttons stacked.
+    var compact = false
+    @State private var clip: URL?
+    @State private var clipSeconds = 0
+    @State private var camera = false
+    @State private var pickerItem: PhotosPickerItem?
+    @State private var loading = false
+    @State private var step: String?
+    @State private var progress = 0.0
+    @State private var problem: String?
+
+    private var busy: Bool { loading || step != nil }
+
+    var body: some View {
+        VStack(spacing: compact ? 14 : 20) {
+            if !compact { Text(item.content).font(.system(size: 24, weight: .bold)).multilineTextAlignment(.center) }
+            if let clip { LocalVideoPlayer(url: clip).frame(maxWidth: .infinity, maxHeight: .infinity).clipShape(RoundedRectangle(cornerRadius: 18)) }
+            if let step {
+                VStack(spacing: 8) {
+                    ProgressView(value: progress).tint(.pine)
+                    Text(progress < 1 ? "\(step) \(Int(progress * 100))%" : step).font(.title3.monospacedDigit()).foregroundStyle(Color.ink2)
+                    Text("请不要锁屏或切到别的 App").font(.subheadline).foregroundStyle(Color.ink3)
+                }
+                .frame(maxWidth: 420)
+            } else if loading {
+                ProgressView("正在读取视频…").font(.title3)
+            } else if clip != nil {
+                Text("录好了 \(clipSeconds / 60):\(String(format: "%02d", clipSeconds % 60))，可以先看一遍").font(.title3).foregroundStyle(Color.ink2)
+            } else {
+                Text(VideoCamera.isAvailable ? "准备好就点“开始录像”，最长 30 分钟" : "从相册选一段录好的视频，最长 30 分钟").font(.title3).foregroundStyle(Color.ink2).multilineTextAlignment(.center)
+            }
+            if let problem { Text(problem).foregroundStyle(Color(hex: 0xA04A06)).multilineTextAlignment(.center) }
+            if compact { VStack(spacing: 12) { buttons } } else { HStack(spacing: 16) { buttons } }
+        }
+        .padding(compact ? 20 : 28).frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.card, in: RoundedRectangle(cornerRadius: 28))
+        .fullScreenCover(isPresented: $camera) {
+            VideoCamera(onVideo: { url in camera = false; Task { await use(url) } }, onCancel: { camera = false }).ignoresSafeArea()
+        }
+        .task(id: pickerItem) {
+            guard let picked = pickerItem else { return }
+            loading = true
+            do {
+                if let movie = try await picked.loadTransferable(type: PickedMovie.self) { await use(movie.url) }
+                else { problem = "没读到这段视频，请换一段。" }
+            } catch { problem = "没读到这段视频，请换一段。" }
+            loading = false
+            pickerItem = nil
+        }
+        // A clip nobody handed in is only a temporary file; the camera cover also hides this view, so keep it then.
+        .onDisappear { if step == nil, !camera, let clip { try? FileManager.default.removeItem(at: clip) } }
+    }
+
+    @ViewBuilder private var buttons: some View {
+        if VideoCamera.isAvailable {
+            Button { problem = nil; camera = true } label: { Label(clip == nil ? "开始录像" : "重新录", systemImage: "video.fill") }
+                .buttonStyle(SecondaryButtonStyle(height: 60)).disabled(busy)
+        }
+        // `.current` hands over the original file; the default re-export is slow for a long clip and we compress anyway.
+        PhotosPicker(selection: $pickerItem, matching: .videos, preferredItemEncoding: .current) { Label("从相册选视频", systemImage: "photo.on.rectangle") }
+            .buttonStyle(SecondaryButtonStyle(height: 60)).disabled(busy)
+        if clip != nil {
+            Button { send() } label: { Text(step == nil ? "交给家长看" : "正在交…") }.buttonStyle(PrimaryButtonStyle(height: 60)).disabled(busy)
+        }
+    }
+
+    private func use(_ url: URL) async {
+        guard let seconds = await VideoCompressor.duration(of: url) else {
+            problem = "这段视频打不开，请换一段。"
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        if let message = VideoSpec.problem(duration: seconds) {
+            problem = message
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        if let old = clip, old != url { try? FileManager.default.removeItem(at: old) }
+        clip = url
+        clipSeconds = Int(seconds.rounded())
+        problem = nil
+    }
+
+    /// Compress → save to the photo library (for 钉钉打卡) → queue the upload. Saving failing never blocks handing in.
+    private func send() {
+        guard let source = clip, step == nil else { return }
+        problem = nil
+        progress = 0
+        step = "正在压缩视频"
+        UIApplication.shared.isIdleTimerDisabled = true
+        let seconds = clipSeconds
+        Task {
+            defer { UIApplication.shared.isIdleTimerDisabled = false }
+            let output = VideoFiles.temporary(ext: "mp4")
+            do {
+                try await VideoCompressor.compress(source, to: output) { p in Task { @MainActor in progress = p } }
+            } catch {
+                step = nil
+                problem = "视频压缩没成功（锁屏或切到别的 App 会打断）。请再点一次“交给家长看”。"
+                return
+            }
+            let bytes = ((try? FileManager.default.attributesOfItem(atPath: output.path))?[.size] as? NSNumber)?.int64Value ?? 0
+            guard bytes <= VideoSpec.serverLimit else {
+                try? FileManager.default.removeItem(at: output)
+                step = nil
+                problem = "这段视频压缩后还是太大，交不了。请录短一点再交。"
+                return
+            }
+            step = "正在存到相册"
+            let saved = await VideoAlbum.save(output)
+            store.noteAlbumSave(item.id, saved: saved)
+            try? FileManager.default.removeItem(at: source)
+            clip = nil
+            step = nil
+            await store.submit(item, video: output, durationSeconds: seconds)
+        }
     }
 }
 

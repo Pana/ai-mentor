@@ -35,8 +35,8 @@
 | `GET /v1/homework?childId&from&to` | 全部 | 按日期查询（最多 62 天），含每次提交与批改；范围包含今天时先生成今天的每天坚持 |
 | `GET/PATCH/DELETE /v1/homework/:id` | 读：全部；写：家长 | 单项作业；删除会删掉相关文件 |
 | `GET /v1/routines?childId`、`PUT/DELETE /v1/routines/:id` | 读：全部；写：家长 | 每天坚持，每个孩子启用中的最多 5 项（超出返回 409 `routine_limit`） |
-| `PUT /v1/files/:id`、`GET /v1/files/:id` | 全部 | 原始字节上传下载：`image/jpeg` ≤2MB、`image/png` ≤4MB（批注图）、`audio/mp4` ≤10MB、`application/octet-stream` ≤1MB（批注笔迹） |
-| `POST /v1/homework/:id/submissions` | 全部 | `{id, fileIds, submittedAt, durationSeconds?}`：线下作业需要照片，录音作业需要一个音频，计时作业需要计满时长 |
+| `PUT /v1/files/:id`、`GET /v1/files/:id` | 全部 | 原始字节上传下载：`image/jpeg` ≤2MB、`image/png` ≤4MB（批注图）、`audio/mp4` ≤10MB、`video/mp4` ≤300MB（录像作业，边收边写盘；下载支持 `Range`）、`application/octet-stream` ≤1MB（批注笔迹） |
+| `POST /v1/homework/:id/submissions` | 全部 | `{id, fileIds, submittedAt, durationSeconds?}`：线下作业需要照片，录音作业需要一个音频，录像作业需要一个视频，计时作业需要计满时长 |
 | `POST /v1/submissions/:id/review` | 家长 | `{grade: EXCELLENT/GOOD/FAIR/TRY_AGAIN, comment, requireCorrection, annotationFileIds}` |
 | `GET/PUT /v1/reward-rules` | 读：全部；写：家长 | 奖励规则，含每天完成时间 `finishTime` |
 | `GET /v1/rewards?childId` | 全部 | 余额、今天获得和使用的分钟数、最近 50 条明细 |
@@ -52,6 +52,19 @@
 - 作业文字、照片、录音、批改和奖励记录保存在服务端，用于两台设备同步。
 - 只有“AI 整理作业”会把家长粘贴的文字发给模型供应商；孩子提交的内容不发给模型。
 - 服务端不记录请求体、凭证或文件内容；错误日志只记录错误类型。
+
+### 反向代理
+
+录像作业的视频最大 300MB，30 分钟的视频约 200MB，在家里网络上要传几分钟。用 Nginx 时在转发 `/v1/` 的 `location` 里加：
+
+```nginx
+client_max_body_size 300m;
+proxy_request_buffering off;   # 边收边转给网关，不先存到 Nginx 的临时文件
+proxy_read_timeout 1800s;
+proxy_send_timeout 1800s;
+```
+
+Caddy 默认不限制请求大小，不用改。
 
 ## 汉字笔顺字典（小熊写字）
 
@@ -82,6 +95,7 @@
 - 发给模型：孩子说的话、最近 8 轮对话、当前白板，以及学情摘要（孩子姓名年级、最近 7 天到明天的作业内容、状态、家长评分和评语）。
 - 发给火山：孩子说话的音频（识别）和小熊要说的话（合成）。服务端不保存音频和对话。
 - 反向代理要转发 WebSocket 升级请求和 `Sec-WebSocket-Protocol` 头（Caddy 默认会）。iPad 上用麦克风需要 HTTPS。
+- 小熊老师的对话安静时没有数据往来。Nginx 默认 60 秒没数据就断开 WebSocket，转发 `/v1/teacher` 时把 `proxy_read_timeout`、`proxy_send_timeout` 调大（如 `3600s`）。
 - 只配置了模型、没配语音时：没有 ASR，孩子端只能打字；没有 TTS，每段字幕停留一段时间后再显示下一段。`VOICE_MOCK=true` 且没有模型时，回复固定的竖式演示，便于在模拟器里调界面。
 
 ## 辅导网关

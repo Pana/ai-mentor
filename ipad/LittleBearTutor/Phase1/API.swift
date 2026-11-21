@@ -54,6 +54,7 @@ struct RemoteHomework: Codable, Identifiable, Hashable, Sendable {
     var isOffline: Bool { mode == "OFFLINE" }
     var isTimer: Bool { onlineKind == "TIMER" }
     var isRecording: Bool { onlineKind == "RECORDING" }
+    var isVideo: Bool { onlineKind == "VIDEO" }
     var isRoutine: Bool { source == "ROUTINE" }
     var needsWork: Bool { status == "NOT_STARTED" || status == "NEEDS_CORRECTION" }
     var awaitingReview: Bool { status == "SUBMITTED" }
@@ -129,6 +130,8 @@ struct ParsedItem: Codable, Hashable, Sendable {
     var subject: String
     var content: String
     var mode: String
+    /// "RECORDING" | "VIDEO" | "TIMER" for ONLINE items; nil when the AI could not tell (or from an older server).
+    var onlineKind: String?
     var dueText: String
     var dueDate: String?
     var parentTodo: String
@@ -217,6 +220,7 @@ enum APIError: LocalizedError, Equatable {
         "insufficient_balance": "攒的时间还不够。",
         "photo_required": "要先拍一张作业照片。",
         "recording_required": "要先录一段音。",
+        "video_required": "要先录一段视频。",
         "invalid_code": "配对码不对或已过期，请家长重新生成。",
         "model_not_configured": "服务器还没有配置 AI 模型，可以先手动填写。",
         "invalid_model_reply": "AI 这次没整理好，请再试一次或手动填写。",
@@ -231,6 +235,8 @@ enum APIError: LocalizedError, Equatable {
 // MARK: - Client
 
 typealias HTTPTransport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
+/// Sends a file from disk as the request body, reporting the fraction sent, so a 200 MB video never sits in memory.
+typealias UploadTransport = @Sendable (URLRequest, URL, @escaping @Sendable (Double) -> Void) async throws -> (Data, HTTPURLResponse)
 
 /// Refuses redirects so a device credential is never forwarded to another host.
 private final class RefuseRedirects: NSObject, URLSessionTaskDelegate, Sendable {
@@ -238,16 +244,39 @@ private final class RefuseRedirects: NSObject, URLSessionTaskDelegate, Sendable 
                     newRequest request: URLRequest) async -> URLRequest? { nil }
 }
 
+/// Same redirect refusal, plus upload progress for a body sent from a file.
+private final class UploadProgress: NSObject, URLSessionTaskDelegate, Sendable {
+    let report: @Sendable (Double) -> Void
+    init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? { nil }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        report(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
+    }
+}
+
 struct APIClient: Sendable {
     let baseURL: URL
     var token: String?
     var transport: HTTPTransport = APIClient.urlSession
+    var uploadTransport: UploadTransport = APIClient.urlSessionUpload
 
     static let urlSession: HTTPTransport = { request in
         let (data, response) = try await URLSession.shared.data(for: request, delegate: RefuseRedirects())
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         return (data, http)
     }
+
+    /// Streams the body from disk. `timeoutInterval` is the idle time between packets, not a limit on the whole upload.
+    static let urlSessionUpload: UploadTransport = { request, file, progress in
+        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: file, delegate: UploadProgress(progress))
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        return (data, http)
+    }
+
+    /// Seconds a file upload may sit without any bytes moving, generous for a slow home uplink.
+    static let uploadIdleTimeout: TimeInterval = 120
 
     /// Accepts an HTTPS root URL, or loopback / home-network HTTP in Debug builds.
     static func validate(_ text: String) throws -> URL {
@@ -276,9 +305,11 @@ struct APIClient: Sendable {
         return request
     }
 
-    func raw(_ request: URLRequest) async throws -> Data {
+    func raw(_ request: URLRequest) async throws -> Data { try await checked { try await transport(request) } }
+
+    private func checked(_ exchange: () async throws -> (Data, HTTPURLResponse)) async throws -> Data {
         let data: Data, response: HTTPURLResponse
-        do { (data, response) = try await transport(request) }
+        do { (data, response) = try await exchange() }
         catch let error as URLError where error.code == .cancelled { throw CancellationError() }
         catch is CancellationError { throw CancellationError() }
         catch let error as APIError { throw error }
@@ -332,7 +363,16 @@ struct APIClient: Sendable {
     func upload(fileId: UUID, data: Data, mime: String) async throws {
         _ = try await raw(request("PUT", "v1/files/\(fileId.uuidString.lowercased())", body: data, contentType: mime))
     }
+    /// Uploads straight from a file on disk (used for every queued submission file, and needed for video).
+    func upload(fileId: UUID, file: URL, mime: String, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+        var request = try request("PUT", "v1/files/\(fileId.uuidString.lowercased())", timeout: Self.uploadIdleTimeout)
+        request.setValue(mime, forHTTPHeaderField: "Content-Type")
+        _ = try await checked { try await uploadTransport(request, file, progress) }
+    }
     func download(fileId: UUID) async throws -> Data {
         try await raw(request("GET", "v1/files/\(fileId.uuidString.lowercased())"))
     }
+    /// Where a player streams a file from (the server answers `Range` requests); send `authorizationHeader` with it.
+    func fileURL(_ fileId: UUID) -> URL { baseURL.appendingPathComponent("v1/files/\(fileId.uuidString.lowercased())") }
+    var authorizationHeader: [String: String] { token.map { ["Authorization": "Bearer \($0)"] } ?? [:] }
 }

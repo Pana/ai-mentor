@@ -5,11 +5,26 @@ import XCTest
 final class FakeServer: @unchecked Sendable {
     private let lock = NSLock()
     private var _requests: [URLRequest] = []
+    private var _uploads: [(request: URLRequest, file: URL, bytes: Int)] = []
     var offline = false
     var handler: (URLRequest) -> (Int, Any) = { _ in (404, ["error": "not_found"]) }
 
     var requests: [URLRequest] { lock.withLock { _requests } }
     func paths(_ method: String) -> [String] { requests.filter { $0.httpMethod == method }.compactMap { $0.url?.path } }
+    /// Bodies sent from a file: the request, the file it streamed from, and that file's size at the time.
+    var uploads: [(request: URLRequest, file: URL, bytes: Int)] { lock.withLock { _uploads } }
+
+    var uploadTransport: UploadTransport {
+        { [self] request, file, progress in
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? -1
+            lock.withLock { _requests.append(request); _uploads.append((request, file, bytes)) }
+            if lock.withLock({ offline }) { throw URLError(.notConnectedToInternet) }
+            progress(0.5); progress(1)
+            let (status, body) = lock.withLock { handler(request) }
+            let data = try JSONSerialization.data(withJSONObject: body)
+            return (data, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!)
+        }
+    }
 
     var transport: HTTPTransport {
         { [self] request in
@@ -34,9 +49,10 @@ final class FakeServer: @unchecked Sendable {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func homework(_ id: UUID, status: String = "NOT_STARTED", content: String = "口算本第 12 页", date: String = "2026-11-09") -> [String: Any] {
+    private func homework(_ id: UUID, status: String = "NOT_STARTED", content: String = "口算本第 12 页", date: String = "2026-11-09",
+                          mode: String = "OFFLINE", onlineKind: String? = nil) -> [String: Any] {
         ["id": id.uuidString, "childId": childId.uuidString, "subject": "MATH", "date": date, "dueDate": NSNull(), "content": content, "rawText": "",
-         "mode": "OFFLINE", "onlineKind": NSNull(), "durationMinutes": NSNull(), "parentTodo": "", "status": status, "source": "PASTE",
+         "mode": mode, "onlineKind": onlineKind ?? NSNull(), "durationMinutes": NSNull(), "parentTodo": "", "status": status, "source": "PASTE",
          "routineId": NSNull(), "attachmentIds": [], "version": 1, "submissions": []]
     }
     private var me: [String: Any] {
@@ -49,7 +65,7 @@ final class FakeServer: @unchecked Sendable {
     private var rewards: [String: Any] { ["childId": childId.uuidString, "balance": 0, "earnedToday": 0, "usedToday": 0, "entries": []] }
 
     private func connectedStore(_ server: FakeServer) async throws -> HomeworkStore {
-        let store = HomeworkStore(directory: directory, transport: server.transport)
+        let store = HomeworkStore(directory: directory, transport: server.transport, uploadTransport: server.uploadTransport)
         try store.begin(DeviceSession(server: "https://homework.example", deviceId: deviceId, role: "child", familyId: familyId, token: String(repeating: "t", count: 64)))
         await store.sync()
         return store
@@ -137,7 +153,7 @@ final class FakeServer: @unchecked Sendable {
         XCTAssertNil(store.errorMessage, "being offline is not an error")
 
         // A restart keeps the queue.
-        let reopened = HomeworkStore(directory: directory, transport: server.transport)
+        let reopened = HomeworkStore(directory: directory, transport: server.transport, uploadTransport: server.uploadTransport)
         XCTAssertEqual(reopened.outbox.count, 1)
 
         server.offline = false
@@ -148,6 +164,72 @@ final class FakeServer: @unchecked Sendable {
         XCTAssertEqual(Set(server.paths("PUT")).count, 1, "the retry reuses the file id")
         await reopened.sync()
         XCTAssertEqual(submitted, 1, "never sent twice")
+    }
+
+    func testVideoIsQueuedAsAFilePathAndUploadedFromDisk() async throws {
+        let id = UUID()
+        let server = FakeServer()
+        var submitted = 0
+        var submittedBody: [String: Any] = [:]
+        server.handler = { request in
+            let video = { (status: String) in self.homework(id, status: status, content: "跳绳 1 分钟，拍视频", mode: "ONLINE", onlineKind: "VIDEO") }
+            switch (request.httpMethod!, request.url!.path) {
+            case ("GET", "/v1/me"): return (200, self.me)
+            case ("GET", "/v1/homework"): return (200, ["items": [video(submitted > 0 ? "SUBMITTED" : "NOT_STARTED")]])
+            case ("GET", "/v1/routines"): return (200, ["routines": []])
+            case ("GET", "/v1/rewards"): return (200, self.rewards)
+            case ("GET", "/v1/changes"): return (200, ["changes": [], "next": 7, "hasMore": false])
+            case ("PUT", _): return (200, ["id": "x", "kind": "VIDEO", "bytes": 4])
+            case ("POST", "/v1/homework/\(id.uuidString.lowercased())/submissions"):
+                submitted += 1
+                submittedBody = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any] ?? [:]
+                return (200, video("SUBMITTED"))
+            default: return (404, ["error": "not_found"])
+            }
+        }
+        let store = try await connectedStore(server)
+        let item = try XCTUnwrap(store.homework[id])
+        XCTAssertTrue(item.isVideo)
+
+        // A compressed clip on disk (an MP4 header plus padding), handed in while offline.
+        let clip = FileManager.default.temporaryDirectory.appendingPathComponent("clip-\(UUID().uuidString).mp4")
+        var bytes = Data([0, 0, 0, 0x18]) + Data("ftypmp42".utf8)
+        bytes.append(Data(count: 2_000_000))
+        try bytes.write(to: clip)
+        server.offline = true
+        await store.submit(item, video: clip, durationSeconds: 75)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: clip.path), "moved into the queue, not copied")
+        let pending = try XCTUnwrap(store.outbox.first)
+        let file = try XCTUnwrap(pending.files.first)
+        XCTAssertEqual(pending.files.count, 1)
+        XCTAssertEqual(file.mime, "video/mp4")
+        XCTAssertTrue(file.localName.hasSuffix(".mp4"))
+        XCTAssertEqual(pending.durationSeconds, 75)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.outboxFileURL(file).path))
+        let cache = try Data(contentsOf: directory.appendingPathComponent("cache.json"))
+        XCTAssertLessThan(cache.count, 20_000, "the queue stores a file name, never the video bytes")
+        XCTAssertNotNil(String(data: cache, encoding: .utf8)?.range(of: file.localName))
+        XCTAssertEqual(store.homework[id]?.status, "SUBMITTED")
+
+        // After a restart the queued video is uploaded from its file.
+        let reopened = HomeworkStore(directory: directory, transport: server.transport, uploadTransport: server.uploadTransport)
+        server.offline = false
+        await reopened.sync()
+        XCTAssertTrue(reopened.outbox.isEmpty)
+        XCTAssertEqual(submitted, 1)
+        let upload = try XCTUnwrap(server.uploads.last)
+        XCTAssertEqual(upload.file.lastPathComponent, file.localName)
+        XCTAssertEqual(upload.bytes, bytes.count)
+        XCTAssertNil(upload.request.httpBody, "streamed from disk, not loaded into the request")
+        XCTAssertEqual(upload.request.value(forHTTPHeaderField: "Content-Type"), "video/mp4")
+        XCTAssertEqual(upload.request.url?.path, "/v1/files/\(file.fileId.uuidString.lowercased())")
+        XCTAssertGreaterThanOrEqual(upload.request.timeoutInterval, 120)
+        XCTAssertEqual(submittedBody["fileIds"] as? [String], [file.fileId.uuidString])
+        XCTAssertEqual(submittedBody["durationSeconds"] as? Int, 75)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: reopened.outboxFileURL(file).path), "the queued copy is removed once sent")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: reopened.cachedFileURL(file.fileId).path), "videos are streamed later, not kept on the iPad")
+        XCTAssertTrue(reopened.uploadProgress.isEmpty)
     }
 
     func testRejectedCredentialSignsTheDeviceOut() async throws {

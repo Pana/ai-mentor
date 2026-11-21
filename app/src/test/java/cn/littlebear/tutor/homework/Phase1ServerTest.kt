@@ -67,6 +67,67 @@ class Phase1ServerTest {
         }
     }
 
+    /** A video is handed in from a file (as `video/mp4`), streamed back with a Range request, and graded like a recording. */
+    @Test fun childHandsInAVideoAndTheParentGradesIt() = runBlocking {
+        assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
+        val parent = HomeworkStore(tempDir("video-parent"), MemorySessionStorage(), debug = true)
+        parent.connectParent(server!!, secret!!, "录像家长")
+        parent.saveChild(name = "录像", grade = 2)
+        val child = parent.state.value.children.single { it.name == "录像" }
+        // Removed again at the end so the full-loop test still sees only its own child.
+        try {
+            val net = Switchable()
+            val kid = HomeworkStore(tempDir("video-child"), MemorySessionStorage(), transport = net, debug = true)
+            kid.pairChild(server, parent.pairingCode().code, "录像平板")
+            parent.create(listOf(NewHomework(childId = child.id, subject = "OTHER", date = parent.today, content = "跳绳 1 分钟录像", mode = "ONLINE", onlineKind = "VIDEO")))
+            kid.sync()
+            val item = kid.state.value.items(child.id).single()
+            assertTrue(item.isVideo)
+
+            // The server refuses a video hand-in without the video.
+            val missing = runCatching { kid.submit(item) }
+            assertTrue(missing.isSuccess)
+            assertEquals("要先录一段视频。", kid.error.value)
+            kid.error.value = null
+            kid.sync()
+
+            // Offline first: it waits in the outbox as a file, then goes up when the network is back.
+            val video = File(tempDir("video-src"), "v.mp4").apply { writeBytes(byteArrayOf(0, 0, 0, 0x18) + "ftypisom".toByteArray() + ByteArray(2_000_000) { (it % 253).toByte() }) }
+            val size = video.length()
+            net.offline = true
+            kid.submit(kid.state.value.homework.getValue(item.id), video = video)
+            assertTrue("moved into the outbox", !video.exists())
+            assertEquals(1, kid.state.value.outbox.size)
+            net.offline = false
+            kid.sync()
+            assertTrue(kid.state.value.outbox.isEmpty())
+            val handedIn = kid.state.value.homework.getValue(item.id)
+            assertEquals("SUBMITTED", handedIn.status)
+            val fileId = handedIn.latest!!.fileIds.single()
+
+            // What the player does: stream with the device credential, a byte range at a time.
+            val api = parent.client!!
+            val ranged = OkHttpTransport.defaultClient.newCall(Request.Builder().url(api.fileUrl(fileId))
+                .header("Authorization", "Bearer ${api.token}").header("Range", "bytes=0-15").build()).execute()
+            ranged.use {
+                assertEquals(206, it.code)
+                assertEquals("video/mp4", it.header("Content-Type"))
+                assertEquals("bytes 0-15/$size", it.header("Content-Range"))
+                assertEquals("ftypisom", it.body!!.bytes().copyOfRange(4, 12).decodeToString())
+            }
+
+            parent.sync()
+            val waiting = parent.state.value.homework.getValue(item.id)
+            parent.review(waiting.latest!!, waiting, "GOOD", "跳得很有节奏", requireCorrection = false, overlays = emptyList())
+            kid.sync()
+            val graded = kid.state.value.homework.getValue(item.id)
+            assertEquals("REVIEWED", graded.status)
+            assertEquals("跳得很有节奏", graded.latestReview!!.comment)
+        } finally {
+            parent.deleteChild(child.id)
+        }
+    }
+
     @Test fun parentAndChildRunThePhase1LoopThroughTheServer() = runBlocking {
         assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
 

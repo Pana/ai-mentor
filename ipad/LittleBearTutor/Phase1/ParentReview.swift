@@ -214,6 +214,9 @@ struct GradeForm: View {
                 }
                 if !item.isRoutine { Text(submission.onTime ? "按时交（\(store.rules.finishTime) 前）" : "晚于 \(store.rules.finishTime) 交").font(.footnote).foregroundStyle(submission.onTime ? Color.pine : Color(hex: 0xA04A06)) }
                 if item.isRecording, let audio = submission.fileIds.first { AudioPlayerButton(fileId: audio) }
+                if item.isVideo, let video = submission.fileIds.first {
+                    RemoteVideoPlayer(fileId: video).frame(height: 240).clipShape(RoundedRectangle(cornerRadius: 12))
+                }
                 if item.isOffline { Text(marks.isEmpty ? "没有批注" : "已批注").font(.footnote).foregroundStyle(Color.ink3) }
             }
             Section("评分") {

@@ -1,5 +1,6 @@
 package cn.littlebear.tutor.homework
 
+import java.io.File
 import java.io.IOException
 import java.net.URI
 import java.util.concurrent.TimeUnit
@@ -23,6 +24,8 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okio.BufferedSink
+import okio.source
 
 // Wire types for the phase-1 homework API (`server/src/api.mjs`), matching the iOS client.
 // Enumerations stay as strings on the wire so a newer server value never breaks decoding; views use the helpers.
@@ -51,6 +54,7 @@ import okhttp3.Response
     val isOffline: Boolean get() = mode == "OFFLINE"
     val isTimer: Boolean get() = onlineKind == "TIMER"
     val isRecording: Boolean get() = onlineKind == "RECORDING"
+    val isVideo: Boolean get() = onlineKind == "VIDEO"
     val isRoutine: Boolean get() = source == "ROUTINE"
     val needsWork: Boolean get() = status == "NOT_STARTED" || status == "NEEDS_CORRECTION"
     val awaitingReview: Boolean get() = status == "SUBMITTED"
@@ -82,7 +86,8 @@ import okhttp3.Response
 @Serializable data class DeviceGrant(val deviceId: String, val deviceToken: String, val role: String, val familyId: String)
 @Serializable data class PairingCode(val code: String, val expiresAt: String)
 @Serializable data class DeviceRecord(val id: String, val role: String, val name: String = "", val createdAt: String = "", val lastSeenAt: String? = null, @SerialName("self") val isSelf: Boolean = false)
-@Serializable data class ParsedItem(val subject: String, val content: String, val mode: String = "OFFLINE", val dueText: String = "", val dueDate: String? = null, val parentTodo: String = "")
+/** `onlineKind` ("RECORDING" / "VIDEO" / "TIMER") is the AI's guess for an ONLINE item; null when it could not tell. */
+@Serializable data class ParsedItem(val subject: String, val content: String, val mode: String = "OFFLINE", val onlineKind: String? = null, val dueText: String = "", val dueDate: String? = null, val parentTodo: String = "")
 @Serializable data class ParseResult(val items: List<ParsedItem> = emptyList(), val message: String = "")
 @Serializable data class RewardSession(val id: String, val minutes: Int, val endsAt: String)
 
@@ -137,6 +142,7 @@ sealed class ApiException(val code: String? = null) : Exception() {
             "insufficient_balance" to "攒的时间还不够。",
             "photo_required" to "要先拍一张作业照片。",
             "recording_required" to "要先录一段音。",
+            "video_required" to "要先录一段视频。",
             "invalid_code" to "配对码不对或已过期，请家长重新生成。",
             "model_not_configured" to "服务器还没有配置 AI 模型，可以先手动填写。",
             "invalid_model_reply" to "AI 这次没整理好，请再试一次或手动填写。",
@@ -156,10 +162,15 @@ fun interface HttpTransport {
     suspend fun execute(request: Request): Pair<Int, ByteArray>
 }
 
+/** Tags a request that may take many minutes (a video upload), so the transport gives it long timeouts. */
+object LongTransfer
+
 /** OkHttp transport that refuses redirects, so a device credential is never forwarded to another host. */
 class OkHttpTransport(private val client: OkHttpClient = defaultClient) : HttpTransport {
+    private val slowClient by lazy { longTransferClient(client) }
+
     override suspend fun execute(request: Request): Pair<Int, ByteArray> = suspendCancellableCoroutine { continuation ->
-        val call = client.newCall(request)
+        val call = (if (request.tag(LongTransfer::class.java) != null) slowClient else client).newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -180,6 +191,32 @@ class OkHttpTransport(private val client: OkHttpClient = defaultClient) : HttpTr
         val defaultClient: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS).readTimeout(75, TimeUnit.SECONDS).callTimeout(90, TimeUnit.SECONDS)
             .followRedirects(false).followSslRedirects(false).build()
+
+        /**
+         * For a video of up to 300 MB on a slow home uplink (about 25 min at 1 Mbit/s): no limit on the whole call,
+         * but a stalled connection still fails after two minutes without progress.
+         */
+        fun longTransferClient(base: OkHttpClient = defaultClient): OkHttpClient = base.newBuilder()
+            .writeTimeout(2, TimeUnit.MINUTES).readTimeout(2, TimeUnit.MINUTES).callTimeout(0, TimeUnit.MILLISECONDS).build()
+    }
+}
+
+/** Streams a file from disk (never all in memory) and reports bytes sent; a retried request starts counting again. */
+class FileBody(val file: File, private val type: String, private val onProgress: (sent: Long, total: Long) -> Unit = { _, _ -> }) : RequestBody() {
+    override fun contentType() = type.toMediaType()
+    override fun contentLength() = file.length()
+    override fun writeTo(sink: BufferedSink) {
+        val total = contentLength()
+        var sent = 0L
+        file.source().use { source ->
+            while (true) {
+                val read = source.read(sink.buffer, 64 * 1024L)
+                if (read == -1L) break
+                sink.emit()
+                sent += read
+                onProgress(sent, total)
+            }
+        }
     }
 }
 
@@ -267,5 +304,15 @@ class ApiClient(val baseUrl: String, val token: String?, private val transport: 
     suspend fun upload(fileId: String, data: ByteArray, mime: String) {
         raw(request("PUT", "v1/files/${fileId.lowercase()}", body = data.toRequestBody(mime.toMediaType())))
     }
+    /** Uploads straight from disk; a video (up to 300 MB) gets the long timeouts. */
+    fun uploadRequest(fileId: String, file: File, mime: String, onProgress: (Long, Long) -> Unit = { _, _ -> }): Request {
+        val put = request("PUT", "v1/files/${fileId.lowercase()}", body = FileBody(file, mime, onProgress))
+        return if (mime.startsWith("video/")) put.newBuilder().tag(LongTransfer::class.java, LongTransfer).build() else put
+    }
+    suspend fun upload(fileId: String, file: File, mime: String, onProgress: (Long, Long) -> Unit = { _, _ -> }) {
+        raw(uploadRequest(fileId, file, mime, onProgress))
+    }
     suspend fun download(fileId: String): ByteArray = raw(request("GET", "v1/files/${fileId.lowercase()}"))
+    /** Where a player streams a file from (with [token] as a Bearer header; the server answers Range requests). */
+    fun fileUrl(fileId: String): String = baseUrl.trimEnd('/') + "/v1/files/${fileId.lowercase()}"
 }

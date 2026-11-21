@@ -179,7 +179,7 @@ struct ParentHomeworkDetail: View {
                         .confirmationDialog("删除这项作业？", isPresented: $confirmingDelete, titleVisibility: .visible) {
                             Button("删除", role: .destructive) { Task { await perform(store) { try await store.delete(id); dismiss() } } }
                             Button("取消", role: .cancel) {}
-                        } message: { Text("会同时删除孩子提交的照片、录音和批改，奖励记录保留。") }
+                        } message: { Text("会同时删除孩子提交的照片、录音、录像和批改，奖励记录保留。") }
                 }
             }
             .navigationTitle(SubjectStyle.label(item.subject))
@@ -202,8 +202,9 @@ struct SubmissionSummary: View {
                 Text(submitTime(submission)).font(.subheadline)
                 if !item.isRoutine { Chip(text: submission.onTime ? "按时" : "晚交", fg: submission.onTime ? .pine : Color(hex: 0xA04A06), bg: submission.onTime ? .pineSoft : Color(hex: 0xFDEBDC), size: 12) }
             }
-            if let seconds = submission.durationSeconds { Text("计时 \(seconds / 60) 分 \(seconds % 60) 秒").foregroundStyle(Color.ink2) }
+            if let seconds = submission.durationSeconds { Text("\(item.isVideo ? "录像" : "计时") \(seconds / 60) 分 \(seconds % 60) 秒").foregroundStyle(Color.ink2) }
             if item.isRecording, let audio = submission.fileIds.first { AudioPlayerButton(fileId: audio) }
+            if item.isVideo, let video = submission.fileIds.first { RemoteVideoPlayer(fileId: video).frame(height: 220).clipShape(RoundedRectangle(cornerRadius: 10)) }
             if item.isOffline {
                 ScrollView(.horizontal) {
                     HStack {
@@ -278,14 +279,19 @@ struct EditHomeworkView: View {
 
 /// How a homework item gets done.
 enum DoneBy: String, CaseIterable, Identifiable {
-    case photo, timer, recording
+    case photo, timer, recording, video
     var id: String { rawValue }
-    var label: String { switch self { case .photo: "本子上写，拍照交"; case .timer: "在 iPad 上计时"; case .recording: "在 iPad 上录音" } }
+    var label: String { switch self { case .photo: "本子上写，拍照交"; case .timer: "在 iPad 上计时"; case .recording: "在 iPad 上录音"; case .video: "在 iPad 上录像" } }
     var mode: String { self == .photo ? "OFFLINE" : "ONLINE" }
-    var onlineKind: String? { switch self { case .photo: nil; case .timer: "TIMER"; case .recording: "RECORDING" } }
+    var onlineKind: String? { switch self { case .photo: nil; case .timer: "TIMER"; case .recording: "RECORDING"; case .video: "VIDEO" } }
     var usesDuration: Bool { self == .timer }
     init(mode: String, onlineKind: String?) {
-        self = mode == "OFFLINE" ? .photo : (onlineKind == "TIMER" ? .timer : .recording)
+        if mode == "OFFLINE" { self = .photo; return }
+        switch onlineKind { case "TIMER": self = .timer; case "VIDEO": self = .video; default: self = .recording }
+    }
+    /// Default for an AI-parsed item: the kind the AI suggested for online work, otherwise a recording as before.
+    init(parsedMode mode: String, onlineKind: String?) {
+        self = mode == "OFFLINE" ? .photo : DoneBy(mode: mode, onlineKind: onlineKind ?? "RECORDING")
     }
 }
 
@@ -305,7 +311,7 @@ struct DraftItem: Identifiable {
     init(_ parsed: ParsedItem, date: String, attachImages: Bool) {
         subject = parsed.subject; content = parsed.content; self.date = date
         hasDue = parsed.dueDate != nil; dueDate = parsed.dueDate ?? Day.add(date, 1)
-        kind = parsed.mode == "OFFLINE" ? .photo : .recording
+        kind = DoneBy(parsedMode: parsed.mode, onlineKind: parsed.onlineKind)
         parentTodo = parsed.parentTodo; self.attachImages = attachImages
     }
     init(_ item: RemoteHomework) {
@@ -846,7 +852,7 @@ struct ParentSettings: View {
             .alert("删除\(deletingChild?.name ?? "")的全部数据？", isPresented: Binding(get: { deletingChild != nil }, set: { if !$0 { deletingChild = nil } })) {
                 Button("删除", role: .destructive) { if let child = deletingChild { Task { await perform(store) { try await store.deleteChild(child.id) } } } }
                 Button("取消", role: .cancel) {}
-            } message: { Text("会删除这个孩子的作业、照片、录音、批改和奖励，不能恢复。") }
+            } message: { Text("会删除这个孩子的作业、照片、录音、录像、批改和奖励，不能恢复。") }
         }
     }
 }

@@ -5,12 +5,15 @@
     <!-- The WebView (小熊老师) only records with both RECORD_AUDIO and this one; without it getUserMedia finds no
          input device ("Requires MODIFY_AUDIO_SETTINGS and RECORD_AUDIO"). A normal permission: granted at install. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Saving a video homework to the gallery (for the DingTalk check-in). Android 10+ uses MediaStore and needs no permission. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <queries>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <intent><action android:name="android.speech.tts.engine" /></intent>
         <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
+        <intent><action android:name="android.media.action.VIDEO_CAPTURE" /></intent>
     </queries>
     <application
         android:allowBackup="false"
