@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No policies: device admin is only used so the child can't uninstall the app (RewardLockAdmin). -->
+<device-admin>
+    <uses-policies />
+</device-admin>

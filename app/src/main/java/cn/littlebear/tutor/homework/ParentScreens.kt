@@ -725,7 +725,7 @@ data class RoutineDraft(
                 saving = true
                 store.launch({ saving = false }) { saveRules(rules) }
             }
-            Text("安卓版暂不锁定其他 App：奖励时间照常记账和倒计时，到点提醒孩子休息。", fontSize = 13.sp, color = Palette.ink3)
+            Text("安卓平板可以锁住动画和游戏 App，平时打不开，用奖励时间才放开：在孩子平板的“家长 → 奖励时间锁定”里设置。", fontSize = 13.sp, color = Palette.ink3)
             if (summary != null && summary.entries.isNotEmpty()) FormSection("最近明细") {
                 summary.entries.take(20).forEach { e ->
                     Row { Text(rewardReason(e, state), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
