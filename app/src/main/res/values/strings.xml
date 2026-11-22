@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reward_lock_description">家长选好的动画和游戏 App 平时锁住，孩子用攒到的奖励时间才能打开，时间到了自动锁上。小熊伴学只查看前台是哪个 App，在系统设置里找和小熊伴学有关的页面，不读取、不上传其他 App 里的内容。</string>
+</resources>

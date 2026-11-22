@@ -254,7 +254,7 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
 
   route('GET', '/v1/devices', PARENT, ({ familyId, device }) => ({
     devices: q('SELECT * FROM devices WHERE family_id = ? AND revoked_at IS NULL ORDER BY created_at').all(familyId)
-      .map(d => ({ id: d.id, role: d.role, name: d.name, createdAt: d.created_at, lastSeenAt: d.last_seen_at, self: d.id === device.id }))
+      .map(d => ({ id: d.id, role: d.role, name: d.name, createdAt: d.created_at, lastSeenAt: d.last_seen_at, self: d.id === device.id, lock: lockStatus(d) }))
   }));
 
   route('DELETE', '/v1/devices/:id', PARENT, ({ familyId, params }) => {
@@ -269,6 +269,33 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     return { ok: true };
   });
 
+  // ---------- reward-time lock heartbeat (Android child tablets) ----------
+  // A tablet whose parent picked apps to lock reports whether the lock is running. `problem` is what the parent should
+  // hear about: the service is off, the system paused it, or the tablet has not reported for a day (checked on read).
+  const LOCK_SILENT_MS = 24 * 3_600_000;
+  function lockStatus(row) {
+    if (!row.lock_state) return null;
+    const s = JSON.parse(row.lock_state);
+    if (!s.lockedApps) return null;
+    const problem = !s.enabled ? 'off' : s.stalled ? 'paused' : now() - Date.parse(row.lock_reported_at) > LOCK_SILENT_MS ? 'silent' : null;
+    return { deviceId: row.id, name: row.name, enabled: s.enabled, lockedApps: s.lockedApps, stalled: s.stalled,
+      adminActive: s.adminActive, reportedAt: row.lock_reported_at, problem };
+  }
+  const familyLocks = familyId => q("SELECT * FROM devices WHERE family_id = ? AND role = 'child' AND revoked_at IS NULL ORDER BY created_at")
+    .all(familyId).map(lockStatus).filter(Boolean);
+
+  route('PUT', '/v1/devices/self/lock', ['child'], ({ familyId, device, body }) => {
+    const state = { enabled: body.enabled === true, lockedApps: integer(body.lockedApps, 0, 500), stalled: body.stalled === true,
+      adminActive: body.adminActive === true };
+    const at = iso();
+    const before = lockStatus(device), after = lockStatus({ ...device, lock_state: json(state), lock_reported_at: at });
+    q('UPDATE devices SET lock_state = ?, lock_reported_at = ? WHERE id = ?').run(json(state), at, device.id);
+    // Routine heartbeats change nothing the parent sees; only a change in what is shown goes into the feed.
+    if ((before === null) !== (after === null) || before?.problem !== after?.problem || before?.lockedApps !== after?.lockedApps)
+      record(familyId, 'device', device.id);
+    return { ok: true };
+  });
+
   route('GET', '/v1/me', ANY, ({ familyId, device }) => {
     const f = family(familyId);
     // `cursor` is the latest change seq: a client doing a full refresh starts its change feed here.
@@ -276,7 +303,7 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     return { cursor, device: { id: device.id, role: device.role, name: device.name },
       family: { id: f.id, name: f.name, timezone: f.timezone, today: today(familyId).date },
       children: q('SELECT * FROM children WHERE family_id = ? ORDER BY created_at').all(familyId).map(serializeChild),
-      rules: rulesFor(familyId) };
+      rules: rulesFor(familyId), locks: device.role === 'parent' ? familyLocks(familyId) : [] };
   });
 
   route('GET', '/v1/children', ANY, ({ familyId }) => ({

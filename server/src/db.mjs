@@ -55,6 +55,11 @@ const migrations = [`
   CREATE TABLE teacher_memory (
     child_id TEXT PRIMARY KEY, family_id TEXT NOT NULL, card TEXT NOT NULL, sessions INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL);
+`, `
+  -- Reward-time lock heartbeat from a child tablet (Android): JSON with enabled / lockedApps / stalled / adminActive.
+  -- The parent app shows a warning when the lock is off, was paused by the system, or the tablet stopped reporting.
+  ALTER TABLE devices ADD COLUMN lock_state TEXT;
+  ALTER TABLE devices ADD COLUMN lock_reported_at TEXT;
 `];
 
 export function openDatabase(path) {

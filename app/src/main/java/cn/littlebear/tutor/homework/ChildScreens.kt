@@ -62,7 +62,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
-import java.time.Instant
 import java.time.LocalTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -83,6 +82,9 @@ enum class ChildTab(val label: String) { TODAY("今天"), ALL("全部作业"), R
     val state by LocalStore.current.state.collectAsStateWithLifecycle()
     var childId by remember { mutableStateOf(prefs(context).getString("current", null)) }
     fun choose(id: String?) { childId = id; prefs(context).edit().putString("current", id).apply() }
+    // Reward-time lock heartbeat: each time the app comes to the front, and hourly from then on.
+    val resumed = resumeCount()
+    LaunchedEffect(resumed) { if (RewardLock.lockedApps(context).isNotEmpty()) { RewardLock.scheduleHeartbeat(context); RewardLock.report(context) } }
     val child = state.child(childId)
     if (child != null) ChildShell(child) { choose(null) } else ProfilePicker { choose(it.id) }
 }
@@ -762,10 +764,17 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
     val store = LocalStore.current
     val state by store.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var endsAt by remember { mutableLongStateOf(prefs(context).getLong("reward.endsAt.${child.id}", 0)) }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // The session belongs to the tablet, not to one child: the lock opens the apps for whoever is holding it.
+    var remaining by remember { mutableLongStateOf(RewardLock.remainingMillis(context)) }
+    var lockReady by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
+    LaunchedEffect(Unit) {
+        while (true) {
+            remaining = RewardLock.remainingMillis(context)
+            lockReady = RewardLock.isServiceEnabled(context) && RewardLock.lockedApps(context).isNotEmpty()
+            delay(1000)
+        }
+    }
     val summary = state.rewards[child.id]
     val today = store.today
     val openToday = state.items(child.id).count { it.date == today && it.needsWork }
@@ -788,12 +797,12 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
     }
     val use = @Composable { modifier: Modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (endsAt > now) {
-                val left = ((endsAt - now) / 1000).toInt()
+            if (remaining > 0) {
+                val left = ((remaining + 999) / 1000).toInt()
                 Column(Modifier.fillMaxWidth().background(Palette.card, RoundedCornerShape(28.dp)).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("奖励时间进行中", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                     Text("%d:%02d".format(left / 60, left % 60), fontSize = 76.sp, fontWeight = FontWeight.Black, color = Palette.pine)
-                    Text("时间到了要放下设备休息哦。", color = Palette.ink2)
+                    Text(if (lockReady) "现在可以打开动画和游戏了，时间到了会自动锁上。" else "时间到了要放下设备休息哦。", color = Palette.ink2, textAlign = TextAlign.Center)
                 }
             } else {
                 if (state.rules.requireAllSubmitted && openToday > 0) Text("🔒 今天还有 $openToday 项作业没交，全部交完就能用奖励时间", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Palette.warn,
@@ -808,15 +817,15 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
                                 busy = true
                                 store.launch({ busy = false }) {
                                     val session = startReward(child.id, m)
-                                    val end = runCatching { Instant.parse(session.endsAt).toEpochMilli() }.getOrDefault(System.currentTimeMillis() + m * 60_000L)
-                                    endsAt = end
-                                    prefs(context).edit().putLong("reward.endsAt.${child.id}", end).apply()
+                                    // Timed on this tablet's own clock (RewardLock), so changing the date can't stretch it.
+                                    RewardLock.startSession(context, session.minutes)
+                                    remaining = RewardLock.remainingMillis(context)
                                 }
                             }
                         }
                     }
                 }
-                Text("安卓版暂时不会锁住其他 App，时间到了要自觉放下设备哦。", fontSize = 13.sp, color = Palette.ink3, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                if (!lockReady) Text("这台平板还没开启奖励时间锁定，时间到了要自觉放下设备哦。", fontSize = 13.sp, color = Palette.ink3, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -843,21 +852,24 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
         if (intent != null) gate.launch(intent) else unlocked = true
     }
     LaunchedEffect(Unit) { authenticate() }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("家长设置") }, text = {
-        if (unlocked) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // A verified parent can change system settings and open locked apps until this closes (RewardLock caps it at 10 minutes).
+    LaunchedEffect(unlocked) { if (unlocked) RewardLock.allowParent(context) }
+    val close = { RewardLock.endParent(context); onDismiss() }
+    AlertDialog(onDismissRequest = close, title = { Text("家长设置") }, text = {
+        if (unlocked) Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (!isDeviceSecure(context)) Text("这台设备没有设置锁屏密码，任何人都能打开家长设置。建议在系统设置里设一个。", color = Palette.warn, fontSize = 13.sp)
             LabeledRow("服务器", state.session?.server ?: "")
             LabeledRow("孩子", state.children.joinToString("、") { it.name })
             TextButton({ StoreHolder.scope.launch { store.sync() } }) { Text("立即同步") }
-            Text("奖励时间：安卓版只记账和倒计时，暂不锁定其他 App。", fontSize = 13.sp, color = Palette.ink3)
+            RewardLockSection()
             TextButton({ confirmSignOut = true }) { Text("断开这台设备", color = Palette.redPen) }
         } else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Filled.Lock, null, tint = Palette.pine, modifier = Modifier.size(44.dp))
             Text("用这台设备的锁屏密码验证家长身份。", color = Palette.ink2, textAlign = TextAlign.Center)
             Button(::authenticate) { Text("验证家长身份") }
         }
-    }, confirmButton = { TextButton(onDismiss) { Text("完成") } })
+    }, confirmButton = { TextButton(close) { Text("完成") } })
     if (confirmSignOut) AlertDialog(onDismissRequest = { confirmSignOut = false }, title = { Text("断开这台设备？") }, text = { Text("断开后需要家长重新生成配对码。") },
-        confirmButton = { TextButton({ confirmSignOut = false; onDismiss(); store.launch { signOut() } }) { Text("断开", color = Palette.redPen) } },
+        confirmButton = { TextButton({ confirmSignOut = false; close(); store.launch { signOut() } }) { Text("断开", color = Palette.redPen) } },
         dismissButton = { TextButton({ confirmSignOut = false }) { Text("取消") } })
 }

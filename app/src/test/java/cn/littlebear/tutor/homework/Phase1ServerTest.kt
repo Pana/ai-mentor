@@ -128,6 +128,31 @@ class Phase1ServerTest {
         }
     }
 
+    @Test fun parentHearsWhenTheTabletLockIsTurnedOff() = runBlocking {
+        assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
+        val parent = HomeworkStore(tempDir("lock-parent"), MemorySessionStorage(), debug = true)
+        parent.connectParent(server!!, secret!!, "锁定家长")
+        val kid = HomeworkStore(tempDir("lock-child"), MemorySessionStorage(), debug = true)
+        kid.pairChild(server, parent.pairingCode().code, "锁定平板")
+        val tablet = kid.state.value.session!!.deviceId
+        try {
+            parent.sync()
+            kid.reportLock(LockReport(enabled = true, lockedApps = 2, stalled = false, adminActive = true))
+            parent.sync()
+            val ok = parent.state.value.locks.single { it.deviceId.equals(tablet, ignoreCase = true) }
+            assertEquals(null, ok.problem)
+            assertEquals("锁定平板：锁定正常，锁住 2 个 App，${lockTime(ok.reportedAt, parent.state.value.timeZone)} 报告", lockMessage(ok, parent.state.value.timeZone))
+
+            // Turning the service off reaches the parent through the change feed, not only on a full refresh.
+            kid.reportLock(LockReport(enabled = false, lockedApps = 2, stalled = false, adminActive = true))
+            parent.sync()
+            assertEquals("off", parent.state.value.locks.single { it.deviceId.equals(tablet, ignoreCase = true) }.problem)
+            assertTrue(kid.state.value.locks.isEmpty())
+        } finally {
+            parent.revoke(tablet)
+        }
+    }
+
     @Test fun parentAndChildRunThePhase1LoopThroughTheServer() = runBlocking {
         assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
 

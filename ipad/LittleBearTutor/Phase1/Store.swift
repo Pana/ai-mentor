@@ -119,6 +119,7 @@ private struct Cache: Codable {
     var rules = RewardRules()
     var rewards: [RewardSummary] = []
     var outbox: [PendingSubmission] = []
+    var locks: [LockStatus]?
 }
 
 // MARK: - Store
@@ -132,6 +133,8 @@ private struct Cache: Codable {
     @Published private(set) var routines: [Routine] = []
     @Published private(set) var rules = RewardRules()
     @Published private(set) var rewards: [UUID: RewardSummary] = [:]
+    /// Parent only: each child tablet's reward-time lock, from the tablet's heartbeat.
+    @Published private(set) var locks: [LockStatus] = []
     @Published private(set) var outbox: [PendingSubmission] = []
     /// Homework id → fraction of its queued files uploaded, while a submission is being sent.
     @Published private(set) var uploadProgress: [UUID: Double] = [:]
@@ -215,7 +218,7 @@ private struct Cache: Codable {
     }
 
     private func resetData() {
-        cursor = 0; family = nil; children = []; homework = [:]; routines = []; rules = RewardRules(); rewards = [:]
+        cursor = 0; family = nil; children = []; homework = [:]; routines = []; rules = RewardRules(); rewards = [:]; locks = []
         for item in outbox { removeLocalFiles(item) }
         outbox = []
         uploadProgress = [:]
@@ -282,6 +285,7 @@ private struct Cache: Codable {
         family = me.family
         children = me.children
         rules = me.rules
+        locks = me.locks ?? []
     }
 
     private func applyChanges(_ api: APIClient) async throws {
@@ -290,7 +294,7 @@ private struct Cache: Codable {
             let feed = try await api.changes(since: cursor)
             more = feed.hasMore
             var upserts = Set<UUID>(), deletes = Set<UUID>(), rewardChildren = Set<UUID>()
-            var childrenChanged = false, routinesChanged = false, rulesChanged = false
+            var childrenChanged = false, routinesChanged = false, rulesChanged = false, devicesChanged = false
             for change in feed.changes {
                 let id = UUID(uuidString: change.id)
                 switch change.entity {
@@ -301,6 +305,7 @@ private struct Cache: Codable {
                 case "routine": routinesChanged = true
                 case "rules": rulesChanged = true
                 case "reward": if let id { rewardChildren.insert(id) }
+                case "device": devicesChanged = true
                 default: break
                 }
             }
@@ -313,7 +318,7 @@ private struct Cache: Codable {
                     do { homework[id] = try await api.homework(id: id) } catch APIError.notFound { homework[id] = nil }
                 }
             }
-            if childrenChanged || rulesChanged {
+            if childrenChanged || rulesChanged || devicesChanged {
                 let me = try await api.me()
                 apply(me)
                 let known = Set(children.map(\.id))
@@ -559,11 +564,12 @@ private struct Cache: Codable {
         routines = cache.routines; rules = cache.rules
         rewards = Dictionary(cache.rewards.map { ($0.childId, $0) }, uniquingKeysWith: { $1 })
         outbox = cache.outbox
+        locks = cache.locks ?? []
     }
 
     private func saveCache() {
         let cache = Cache(cursor: cursor, family: family, children: children, homework: Array(homework.values), routines: routines,
-                          rules: rules, rewards: Array(rewards.values), outbox: outbox)
+                          rules: rules, rewards: Array(rewards.values), outbox: outbox, locks: locks)
         if let data = try? JSONEncoder().encode(cache) { try? data.write(to: cacheURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
     }
 
