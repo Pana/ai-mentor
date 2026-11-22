@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 import UIKit
 
@@ -178,32 +179,115 @@ struct SecondaryButtonStyle: ButtonStyle {
 }
 
 /// An image stored on the server, cached on the device.
+/// `preview` is for small views (lists, thumbnails): it loads the photo's server thumbnail when there is one and decodes
+/// only as many pixels as the view shows, off the main thread. Without it (full-screen pages) the whole photo is decoded.
 struct RemoteImage: View {
     @EnvironmentObject private var store: HomeworkStore
+    @Environment(\.displayScale) private var displayScale
     let fileId: UUID
     var contentMode: ContentMode = .fit
+    var preview = false
+    /// With `preview`: ask for the photo's thumbnail first. Off for files that have none (red-pen overlays).
+    var thumbnail = true
+    /// Off for a layer drawn over another image (an overlay), so nothing covers the page while it loads.
+    var placeholder = true
     @State private var image: UIImage?
     @State private var failed = false
+
+    private struct Load: Equatable { var fileId: UUID; var width: Int; var height: Int }
+
     var body: some View {
-        Group {
-            if let image { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
-            else if failed { Image(systemName: "photo").font(.title).foregroundStyle(Color.ink3).frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.chip) }
-            else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.chip) }
+        if preview {
+            GeometryReader { geo in
+                content.frame(width: geo.size.width, height: geo.size.height)
+                    .task(id: Load(fileId: fileId, width: Int(geo.size.width.rounded()), height: Int(geo.size.height.rounded()))) { await load(box: geo.size) }
+            }
+        } else {
+            content.task(id: fileId) { await load(box: nil) }
         }
-        .task(id: fileId) {
-            if let data = try? await store.fileData(fileId), let loaded = UIImage(data: data) { image = loaded } else { failed = true }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let image { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
+        else if !placeholder { Color.clear }
+        else if failed { Image(systemName: "photo").font(.title).foregroundStyle(Color.ink3).frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.chip) }
+        else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.chip) }
+    }
+
+    private func load(box: CGSize?) async {
+        guard let box else {
+            guard let data = try? await store.fileData(fileId), let loaded = UIImage(data: data) else { failed = true; return }
+            image = await loaded.byPreparingForDisplay() ?? loaded
+            return
         }
+        guard box.width >= 1, box.height >= 1 else { return }
+        let key = ImageDecoder.key(fileId, box: box, mode: contentMode, scale: displayScale, thumbnail: thumbnail)
+        if let cached = ImageDecoder.cache.object(forKey: key) { image = cached; return }
+        let data = try? await (thumbnail ? store.thumbnailData(fileId) : store.fileData(fileId))
+        guard !Task.isCancelled else { return }
+        guard let data else { if image == nil { failed = true }; return }
+        let mode = contentMode, scale = displayScale
+        guard let decoded = await Task.detached(priority: .userInitiated, operation: { ImageDecoder.downsample(data, box: box, mode: mode, scale: scale) }).value
+        else { if image == nil { failed = true }; return }
+        ImageDecoder.cache.setObject(decoded, forKey: key, cost: decoded.cgImage.map { $0.bytesPerRow * $0.height } ?? 1)
+        image = decoded
+    }
+}
+
+/// Decodes an image at the size it is shown (ImageIO thumbnailing applies the EXIF orientation), with a small memory cache.
+enum ImageDecoder {
+    nonisolated(unsafe) static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.totalCostLimit = 48 * 1024 * 1024
+        return cache
+    }()
+
+    static func key(_ id: UUID, box: CGSize, mode: ContentMode, scale: CGFloat, thumbnail: Bool) -> NSString {
+        "\(id.uuidString)|\(Int(box.width.rounded()))x\(Int(box.height.rounded()))|\(mode == .fit ? "fit" : "fill")|\(scale)|\(thumbnail)" as NSString
+    }
+
+    /// Pixel size as displayed (width and height swapped for EXIF orientations 5–8).
+    static func pixelSize(_ data: Data) -> CGSize? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        let orientation = properties[kCGImagePropertyOrientation] as? UInt32 ?? 1
+        return orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+    }
+
+    /// Long side, in pixels, an image needs to fill `box` points at `scale` without upscaling past its own size.
+    static func maxPixelSize(image: CGSize, box: CGSize, mode: ContentMode, scale: CGFloat) -> Int {
+        let longest = max(image.width, image.height)
+        guard image.width > 0, image.height > 0 else { return max(1, Int((max(box.width, box.height) * scale).rounded(.up))) }
+        let fit = min(box.width / image.width, box.height / image.height), fill = max(box.width / image.width, box.height / image.height)
+        let needed = longest * (mode == .fit ? fit : fill) * scale
+        return max(1, Int(min(needed, longest).rounded(.up)))
+    }
+
+    static func downsample(_ data: Data, box: CGSize, mode: ContentMode, scale: CGFloat) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        let size = pixelSize(data) ?? .zero
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize(image: size, box: box, mode: mode, scale: scale)
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 }
 
 /// A submitted page with the parent's red-pen overlay drawn on top at the same aspect-fit frame.
+/// As a `preview` the page may be its thumbnail: it has the page's aspect ratio, so the overlay still lines up.
 struct AnnotatedPage: View {
     let photo: UUID
     let overlay: UUID?
+    var preview = false
     var body: some View {
         ZStack {
-            RemoteImage(fileId: photo)
-            if let overlay { RemoteImage(fileId: overlay).allowsHitTesting(false) }
+            RemoteImage(fileId: photo, preview: preview)
+            if let overlay { RemoteImage(fileId: overlay, preview: preview, thumbnail: false, placeholder: false).allowsHitTesting(false) }
         }
     }
 }

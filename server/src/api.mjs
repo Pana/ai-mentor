@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
-import { createReadStream, createWriteStream, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { createReadStream, createWriteStream, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { join } from 'node:path';
 import { openDatabase, transaction } from './db.mjs';
@@ -74,6 +74,8 @@ const json = value => JSON.stringify(value);
 const list = value => JSON.parse(value || '[]');
 
 const onlineKinds = ['TIMER', 'RECORDING', 'VIDEO'];
+// A list thumbnail is about 480 px on the long side, 10–40 KB.
+const THUMB_MAX = 300_000;
 
 async function readBody(req, max) {
   if (Number(req.headers?.['content-length']) > max) fail(413, 'body_too_large');
@@ -133,6 +135,7 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     for (const id of ids) {
       q('DELETE FROM files WHERE id = ? AND family_id = ?').run(id, familyId);
       rmSync(join(dataDir, 'files', familyId, id), { force: true });
+      rmSync(join(dataDir, 'files', familyId, `${id}.thumb`), { force: true });
     }
   }
   function credit(familyId, childId, minutes, reason, refId) {
@@ -650,6 +653,33 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     return { id, kind: spec.kind, bytes: size };
   }
 
+  /**
+   * A small JPEG of a photo, made by the app that uploaded it (Node has no image decoder): lists show it instead of
+   * the full page. Optional: a photo from an older app has none, and the client then loads the photo itself.
+   */
+  async function putThumb(req, ctx, id) {
+    const row = q('SELECT * FROM files WHERE id = ? AND family_id = ?').get(id, ctx.familyId) ?? fail(404, 'file_not_found');
+    if (row.kind !== 'IMAGE') fail(400, 'invalid_file_kind');
+    const type = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+    if (type !== 'image/jpeg') fail(415, 'unsupported_file_type');
+    const bytes = await readBody(req, THUMB_MAX);
+    if (!bytes.length || !fileKinds['image/jpeg'].check(bytes)) fail(400, 'invalid_file');
+    const dir = join(dataDir, 'files', ctx.familyId);
+    const part = join(dir, `${id}.${randomUUID()}.part`);
+    writeFileSync(part, bytes);
+    renameSync(part, join(dir, `${id}.thumb`));
+    return { id, bytes: bytes.length };
+  }
+
+  function getThumb(res, ctx, id) {
+    q('SELECT id FROM files WHERE id = ? AND family_id = ?').get(id, ctx.familyId) ?? fail(404, 'file_not_found');
+    const path = join(dataDir, 'files', ctx.familyId, `${id}.thumb`);
+    let size;
+    try { size = statSync(path).size; } catch { fail(404, 'thumb_not_found'); }
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': size, 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+    createReadStream(path).pipe(res);
+  }
+
   /** Supports a single byte range, so a video can play while it downloads. */
   function getFile(req, res, ctx, id) {
     const row = q('SELECT * FROM files WHERE id = ? AND family_id = ?').get(id, ctx.familyId) ?? fail(404, 'file_not_found');
@@ -697,12 +727,17 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     res.on('close', () => { if (!res.writableFinished) controller.abort(); });
     try {
       const url = new URL(req.url, 'http://localhost');
-      const file = url.pathname.match(/^\/v1\/files\/([^/]+)$/);
+      const file = url.pathname.match(/^\/v1\/files\/([^/]+)(\/thumb)?$/);
       if (file) {
         const ctx = authenticate(req);
         const id = uuid(file[1]);
-        if (req.method === 'PUT') return send(200, await putFile(req, ctx, id));
-        if (req.method === 'GET') return getFile(req, res, ctx, id);
+        if (file[2]) {
+          if (req.method === 'PUT') return send(200, await putThumb(req, ctx, id));
+          if (req.method === 'GET') return getThumb(res, ctx, id);
+        } else {
+          if (req.method === 'PUT') return send(200, await putFile(req, ctx, id));
+          if (req.method === 'GET') return getFile(req, res, ctx, id);
+        }
         fail(405, 'method_not_allowed');
       }
       let matched = null, params = {};

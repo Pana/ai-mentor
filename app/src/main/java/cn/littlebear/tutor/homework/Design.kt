@@ -200,20 +200,21 @@ fun decodeBitmap(data: ByteArray, maxSide: Int = 1600): ImageBitmap? {
     return BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
 }
 
-@Composable fun rememberRemoteBitmap(fileId: String, maxSide: Int = 1600): State<Result<ImageBitmap>?> {
+/** [thumbnail]: a small preview, so the photo's list thumbnail is loaded first (the photo itself if there is none). */
+@Composable fun rememberRemoteBitmap(fileId: String, maxSide: Int = 1600, thumbnail: Boolean = false): State<Result<ImageBitmap>?> {
     val store = LocalStore.current
-    val state = remember(fileId) { mutableStateOf<Result<ImageBitmap>?>(null) }
-    LaunchedEffect(fileId) {
+    val state = remember(fileId, thumbnail) { mutableStateOf<Result<ImageBitmap>?>(null) }
+    LaunchedEffect(fileId, thumbnail) {
         state.value = runCatching {
-            val data = store.fileData(fileId)
+            val data = if (thumbnail) store.thumbData(fileId) else store.fileData(fileId)
             withContext(Dispatchers.Default) { decodeBitmap(data, maxSide) } ?: error("bad image")
         }
     }
     return state
 }
 
-@Composable fun RemoteImage(fileId: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Fit, maxSide: Int = 1600) {
-    val result by rememberRemoteBitmap(fileId, maxSide)
+@Composable fun RemoteImage(fileId: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Fit, maxSide: Int = 1600, thumbnail: Boolean = false) {
+    val result by rememberRemoteBitmap(fileId, maxSide, thumbnail)
     Box(modifier, contentAlignment = Alignment.Center) {
         val r = result
         when {
@@ -224,11 +225,15 @@ fun decodeBitmap(data: ByteArray, maxSide: Int = 1600): ImageBitmap? {
     }
 }
 
-/** A submitted page with the parent's red-pen overlay drawn on top at the same aspect-fit frame. */
-@Composable fun AnnotatedPage(photo: String, overlay: String?, modifier: Modifier = Modifier) {
+/**
+ * A submitted page with the parent's red-pen overlay drawn on top at the same aspect-fit frame. A [thumbnail] preview
+ * shows the page's thumbnail, which has the page's aspect ratio, so the overlay (made over the full page) still lines up.
+ */
+@Composable fun AnnotatedPage(photo: String, overlay: String?, modifier: Modifier = Modifier, thumbnail: Boolean = false) {
+    val side = if (thumbnail) 500 else 1600
     Box(modifier) {
-        RemoteImage(photo, Modifier.fillMaxSize())
-        if (overlay != null) RemoteImage(overlay, Modifier.fillMaxSize())
+        RemoteImage(photo, Modifier.fillMaxSize(), maxSide = side, thumbnail = thumbnail)
+        if (overlay != null) RemoteImage(overlay, Modifier.fillMaxSize(), maxSide = side)
     }
 }
 

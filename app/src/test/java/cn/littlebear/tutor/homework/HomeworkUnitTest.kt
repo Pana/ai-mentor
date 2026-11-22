@@ -60,7 +60,7 @@ class HomeworkUnitTest {
         val offline = HttpTransport { _: Request -> throw java.io.IOException("offline") }
         val store = HomeworkStore(dir, MemorySessionStorage(session), transport = offline, debug = true)
         val item = RemoteHomework(id = newId(), childId = "c", subject = "MATH", date = "2026-11-09", content = "口算", mode = "OFFLINE", status = "NOT_STARTED")
-        store.submit(item, pages = listOf(byteArrayOf(1, 2, 3)))
+        store.submit(item, pages = listOf(PreparedPhoto(byteArrayOf(1, 2, 3), null)))
         assertEquals(1, store.state.value.outbox.size)
         assertEquals("SUBMITTED", store.state.value.homework.getValue(item.id).status)
         assertNull("offline is not an error worth an alert", store.error.value)
@@ -83,13 +83,13 @@ class HomeworkUnitTest {
     @Test fun picturesAddedWhileFillingInGoWithTheFirstItem() {
         val form = EntryForm()
         form.manualDrafts.addAll(listOf(DraftItem.blank("2026-11-16"), DraftItem.blank("2026-11-16")))
-        form.addImage(byteArrayOf(1))
+        form.addImage(PreparedPhoto(byteArrayOf(1), null))
         assertEquals(listOf(true, false), form.manualDrafts.map { it.attachImages })
         // The parent's own choice wins after that.
         form.manualDrafts[0] = form.manualDrafts[0].copy(attachImages = false)
-        form.addImage(byteArrayOf(2))
+        form.addImage(PreparedPhoto(byteArrayOf(2), null))
         assertEquals(listOf(false, false), form.manualDrafts.map { it.attachImages })
-        repeat(6) { form.addImage(byteArrayOf(3)) }
+        repeat(6) { form.addImage(PreparedPhoto(byteArrayOf(3), null)) }
         assertEquals(6, form.images.size)
         form.reset()
         assertTrue(form.images.isEmpty())

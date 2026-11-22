@@ -387,6 +387,14 @@ struct APIClient: Sendable {
     func download(fileId: UUID) async throws -> Data {
         try await raw(request("GET", "v1/files/\(fileId.uuidString.lowercased())"))
     }
+    /// A photo's small list JPEG, sent after the photo itself (`404 file_not_found` before that). At most 300 KB.
+    func uploadThumbnail(fileId: UUID, data: Data) async throws {
+        _ = try await raw(request("PUT", "v1/files/\(fileId.uuidString.lowercased())/thumb", body: data, contentType: "image/jpeg"))
+    }
+    /// `APIError.notFound` (`thumb_not_found`) for a photo uploaded by an older app: load the photo instead.
+    func downloadThumbnail(fileId: UUID) async throws -> Data {
+        try await raw(request("GET", "v1/files/\(fileId.uuidString.lowercased())/thumb"))
+    }
     /// Where a player streams a file from (the server answers `Range` requests); send `authorizationHeader` with it.
     func fileURL(_ fileId: UUID) -> URL { baseURL.appendingPathComponent("v1/files/\(fileId.uuidString.lowercased())") }
     var authorizationHeader: [String: String] { token.map { ["Authorization": "Bearer \($0)"] } ?? [:] }

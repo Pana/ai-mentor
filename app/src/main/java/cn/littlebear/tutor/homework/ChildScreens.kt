@@ -448,7 +448,7 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
         }
         val latest = item.latest
         if (latest != null && item.isOffline && !uploading) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            latest.fileIds.forEach { Thumb(Modifier.size(120.dp, 160.dp)) { RemoteImage(it, Modifier.fillMaxSize(), ContentScale.Crop, 500) } }
+            latest.fileIds.forEach { Thumb(Modifier.size(120.dp, 160.dp)) { RemoteImage(it, Modifier.fillMaxSize(), ContentScale.Crop, 500, thumbnail = true) } }
         }
     }
 }
@@ -514,7 +514,7 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
     val state by store.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pages = remember { mutableStateListOf<ByteArray>() }
+    val pages = remember { mutableStateListOf<PreparedPhoto>() }
     var sending by remember { mutableStateOf(false) }
     var cameraFile by rememberSaveable { mutableStateOf<String?>(null) }
     val item = state.homework[id]
@@ -546,9 +546,9 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
                     Text("把写好的这一页放平，拍完整就行", fontSize = 20.sp, color = Palette.ink2, textAlign = TextAlign.Center)
                     Spacer(Modifier.weight(1f))
                 } else LazyVerticalGrid(GridCells.Adaptive(160.dp), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    itemsIndexed(pages) { i, data ->
+                    itemsIndexed(pages) { i, photo ->
                         Box {
-                            val bitmap = remember(data) { decodeBitmap(data, 600) }
+                            val bitmap = remember(photo) { decodeBitmap(photo.data, 600) }
                             Thumb(Modifier.fillMaxWidth().height(220.dp)) { bitmap?.let { Image(it, "第 ${i + 1} 页", Modifier.fillMaxSize()) } }
                             IconButton({ pages.removeAt(i) }, Modifier.align(Alignment.TopEnd).padding(6.dp).size(36.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape)) {
                                 Icon(Icons.Filled.Close, "删除第 ${i + 1} 页", tint = Color.White)
@@ -567,7 +567,7 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
             Column(modifier.background(Palette.card, RoundedCornerShape(28.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(if (pages.isEmpty()) "还没拍" else "已经拍了 ${pages.size} 页", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text("最多 6 页", color = Palette.ink3)
-                val dark = remember(pages.size) { pages.indexOfFirst { Photos.isDark(it) } }
+                val dark = remember(pages.size) { pages.indexOfFirst { Photos.isDark(it.thumb ?: it.data) } }
                 if (dark >= 0) Row(Modifier.background(Palette.honeySoft, RoundedCornerShape(16.dp)).padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     BearView(40.dp); Text("第 ${dark + 1} 页有点暗，靠近台灯再拍一次会更清楚。", fontSize = 16.sp)
                 }

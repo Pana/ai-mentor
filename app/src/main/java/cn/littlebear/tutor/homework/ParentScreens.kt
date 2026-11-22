@@ -258,7 +258,7 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
         }
         if (item.attachmentIds.isNotEmpty()) FormSection("附带图片") {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item.attachmentIds.forEach { Thumb(Modifier.size(96.dp)) { RemoteImage(it, Modifier.fillMaxSize(), ContentScale.Crop, 400) } }
+                item.attachmentIds.forEach { Thumb(Modifier.size(96.dp)) { RemoteImage(it, Modifier.fillMaxSize(), ContentScale.Crop, 400, thumbnail = true) } }
             }
         }
         item.submissions.reversed().forEach { submission ->
@@ -297,7 +297,7 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
         if (item.isRecording) submission.fileIds.firstOrNull()?.let { AudioPlayerButton(it) }
         if (item.isVideo) submission.fileIds.firstOrNull()?.let { VideoPlayerBox(it, Modifier.fillMaxWidth().height(240.dp)) }
         if (item.isOffline) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            submission.fileIds.forEachIndexed { i, file -> Thumb(Modifier.size(120.dp, 160.dp)) { AnnotatedPage(file, overlayFile(submission, i), Modifier.fillMaxSize()) } }
+            submission.fileIds.forEachIndexed { i, file -> Thumb(Modifier.size(120.dp, 160.dp)) { AnnotatedPage(file, overlayFile(submission, i), Modifier.fillMaxSize(), thumbnail = true) } }
         }
         submission.review?.let { review ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -424,14 +424,14 @@ enum class EntryMode(val label: String, val hint: String) {
 /** Kept across tab switches, like the iOS form that keeps its rows until the next entry. */
 class EntryForm {
     var text by mutableStateOf("")
-    val images = mutableStateListOf<ByteArray>()
+    val images = mutableStateListOf<PreparedPhoto>()
     var childIds by mutableStateOf(setOf<String>())
     /** Items being filled in by hand; the AI result page keeps its own list. */
     val manualDrafts = mutableStateListOf<DraftItem>()
 
-    fun addImage(data: ByteArray) {
+    fun addImage(photo: PreparedPhoto) {
         if (images.size >= 6) return
-        images.add(data)
+        images.add(photo)
         // Pictures added while filling in by hand go with the first item, as they do after AI.
         if (images.size == 1 && manualDrafts.none { it.attachImages }) manualDrafts.firstOrNull()?.let { manualDrafts[0] = it.copy(attachImages = true) }
     }
@@ -452,7 +452,7 @@ fun newHomework(drafts: List<DraftItem>, children: List<RemoteChild>, childIds: 
     }
 
 /** Saves the drafts for every selected child, uploading the pictures once if any draft carries them. */
-suspend fun HomeworkStore.saveDrafts(drafts: List<DraftItem>, images: List<ByteArray>, childIds: Set<String>, rawText: String) {
+suspend fun HomeworkStore.saveDrafts(drafts: List<DraftItem>, images: List<PreparedPhoto>, childIds: Set<String>, rawText: String) {
     val attachments = if (images.isNotEmpty() && drafts.any { it.attachImages }) uploadImages(images) else emptyList()
     create(newHomework(drafts, state.value.children, childIds, rawText, attachments))
 }
@@ -534,9 +534,9 @@ suspend fun HomeworkStore.saveDrafts(drafts: List<DraftItem>, images: List<ByteA
             }
             FormSection("图片（选填）", "作业单、课本页。最多 6 张。") {
                 if (form.images.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    form.images.forEachIndexed { i, data ->
+                    form.images.forEachIndexed { i, photo ->
                         Box {
-                            val bitmap = remember(data) { decodeBitmap(data, 300) }
+                            val bitmap = remember(photo) { decodeBitmap(photo.thumb ?: photo.data, 300) }
                             Thumb(Modifier.size(76.dp)) { bitmap?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) } }
                             IconButton({ form.images.removeAt(i) }, Modifier.align(Alignment.TopEnd).size(28.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)) {
                                 Icon(Icons.Filled.Close, "删除图片", tint = Color.White, modifier = Modifier.size(16.dp))

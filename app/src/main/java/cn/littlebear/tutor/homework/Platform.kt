@@ -19,6 +19,7 @@ import androidx.exifinterface.media.ExifInterface
 import cn.littlebear.tutor.BuildConfig
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -101,45 +102,99 @@ fun parentAuthIntent(context: Context) = (context.getSystemService(Context.KEYGU
 
 fun isDeviceSecure(context: Context) = (context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceSecure
 
-// ---------- Photos: upright JPEG within the server's 2 MB limit ----------
+// ---------- Photos: upright JPEG pages within the server's 2 MB limit, each with a small list thumbnail ----------
+
+/** A homework photo ready to upload: the page itself and a small JPEG for lists (null when none could be made). */
+class PreparedPhoto(val data: ByteArray, val thumb: ByteArray?)
 
 object Photos {
     private const val MAX_BYTES = 1_900_000
+    /** A page stays readable at 1400 px on the long side; about 300 KB instead of about 1 MB at 2000 px / 86. */
+    const val PAGE_SIDE = 1400
+    const val PAGE_QUALITY = 70
+    /** What the server keeps as `/v1/files/<id>/thumb`: about 10–40 KB, at most 300 KB. */
+    const val THUMB_SIDE = 480
+    const val THUMB_QUALITY = 60
+    const val THUMB_MAX_BYTES = 300_000
 
-    /** Reads a picked or captured photo, applies EXIF rotation, scales to ≤ [maxSide] px and compresses to JPEG. */
-    suspend fun prepare(context: Context, uri: Uri, maxSide: Int = 2000): ByteArray? = withContext(Dispatchers.IO) {
-        try {
-            val resolver = context.contentResolver
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
-            if (bounds.outWidth <= 0) return@withContext null
-            var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
-            val decoded = resolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return@withContext null
-            val orientation = resolver.openInputStream(uri).use { input -> input?.let { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) } } ?: ExifInterface.ORIENTATION_NORMAL
-            val matrix = Matrix().apply {
-                when (orientation) {
-                    ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> setScale(-1f, 1f)
-                    ExifInterface.ORIENTATION_ROTATE_180 -> setRotate(180f)
-                    ExifInterface.ORIENTATION_FLIP_VERTICAL -> { setRotate(180f); postScale(-1f, 1f) }
-                    ExifInterface.ORIENTATION_TRANSPOSE -> { setRotate(90f); postScale(-1f, 1f) }
-                    ExifInterface.ORIENTATION_ROTATE_90 -> setRotate(90f)
-                    ExifInterface.ORIENTATION_TRANSVERSE -> { setRotate(-90f); postScale(-1f, 1f) }
-                    ExifInterface.ORIENTATION_ROTATE_270 -> setRotate(-90f)
-                }
-            }
-            var bitmap = if (matrix.isIdentity) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { decoded.recycle() }
-            val longest = maxOf(bitmap.width, bitmap.height)
-            if (longest > maxSide) {
-                val scale = maxSide.toFloat() / longest
-                bitmap = Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-            }
-            jpeg(bitmap)
-        } catch (_: Exception) { null }
+    /** Reads a picked or captured homework photo: upright, ≤ [PAGE_SIDE] px, JPEG, plus its thumbnail. */
+    suspend fun prepare(context: Context, uri: Uri): PreparedPhoto? = withContext(Dispatchers.IO) {
+        prepare { context.contentResolver.openInputStream(uri) }
     }
 
-    fun jpeg(bitmap: Bitmap): ByteArray? {
-        var quality = 86
+    /** [open] gives a fresh stream of the original each time (bounds, pixels and EXIF are read separately). */
+    fun prepare(open: () -> InputStream?): PreparedPhoto? = try {
+        page(open)?.let { bitmap ->
+            val data = jpeg(bitmap, PAGE_QUALITY)
+            // Made from the same upright page, so it has the page's aspect ratio and the red-pen overlay lines up on it.
+            val thumb = data?.let { thumbnail(bitmap) }
+            bitmap.recycle()
+            data?.let { PreparedPhoto(it, thumb) }
+        }
+    } catch (_: Exception) { null }
+
+    /** The photo decoded upright (EXIF orientation applied) and scaled to at most [maxSide] px on the long side. */
+    fun page(open: () -> InputStream?, maxSide: Int = PAGE_SIDE): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        open().use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+        val decoded = open().use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
+        val orientation = open().use { input -> input?.let { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) } } ?: ExifInterface.ORIENTATION_NORMAL
+        val matrix = Matrix().apply {
+            when (orientation) {
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> setScale(-1f, 1f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> setRotate(180f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> { setRotate(180f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_TRANSPOSE -> { setRotate(90f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_ROTATE_90 -> setRotate(90f)
+                ExifInterface.ORIENTATION_TRANSVERSE -> { setRotate(-90f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_ROTATE_270 -> setRotate(-90f)
+            }
+        }
+        val upright = if (matrix.isIdentity) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { decoded.recycle() }
+        return shrink(upright, maxSide)
+    }
+
+    /** Width and height scaled to at most [maxSide] on the long side, keeping the aspect ratio (rounded, never 0). */
+    fun fit(width: Int, height: Int, maxSide: Int): Pair<Int, Int> {
+        val longest = maxOf(width, height)
+        if (longest <= maxSide) return width to height
+        val scale = maxSide.toDouble() / longest
+        return maxOf(1, Math.round(width * scale).toInt()) to maxOf(1, Math.round(height * scale).toInt())
+    }
+
+    /** Scales down in halving steps, then to the exact size, so fine handwriting does not alias; recycles what it replaces. */
+    private fun shrink(bitmap: Bitmap, maxSide: Int): Bitmap {
+        val (w, h) = fit(bitmap.width, bitmap.height, maxSide)
+        var current = bitmap
+        while (current.width / 2 >= w && current.height / 2 >= h) {
+            val half = Bitmap.createScaledBitmap(current, current.width / 2, current.height / 2, true)
+            if (current !== bitmap) current.recycle()
+            current = half
+        }
+        if (current.width == w && current.height == h) return current
+        return Bitmap.createScaledBitmap(current, w, h, true).also { if (current !== bitmap && it !== current) current.recycle() }
+    }
+
+    /** The list thumbnail: ≤ [THUMB_SIDE] px, JPEG [THUMB_QUALITY]; null if it cannot be kept under [THUMB_MAX_BYTES]. */
+    fun thumbnail(page: Bitmap): ByteArray? {
+        val small = shrink(page, THUMB_SIDE)
+        try {
+            var quality = THUMB_QUALITY
+            while (quality >= 30) {
+                val out = ByteArrayOutputStream()
+                if (!small.compress(Bitmap.CompressFormat.JPEG, quality, out)) return null
+                if (out.size() <= THUMB_MAX_BYTES) return out.toByteArray()
+                quality -= 15
+            }
+            return null
+        } finally { if (small !== page) small.recycle() }
+    }
+
+    fun jpeg(bitmap: Bitmap, startQuality: Int = PAGE_QUALITY): ByteArray? {
+        var quality = startQuality
         var current = bitmap
         while (true) {
             val out = ByteArrayOutputStream()

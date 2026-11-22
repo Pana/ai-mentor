@@ -153,6 +153,62 @@ class Phase1ServerTest {
         }
     }
 
+    /** Pages and pictures go up with their thumbnails; the parent's lists load those, older photos fall back, prefetch fills the cache. */
+    @Test fun thumbnailsTravelWithPhotosAndThePhoneLoadsThemFirst() = runBlocking {
+        assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
+        val parent = HomeworkStore(tempDir("thumb-parent"), MemorySessionStorage(), debug = true)
+        parent.connectParent(server!!, secret!!, "缩略图家长")
+        parent.saveChild(name = "缩略图", grade = 2)
+        val child = parent.state.value.children.single { it.name == "缩略图" }
+        // Removed again at the end so the full-loop test still sees only its own child.
+        try {
+            val sheet = PreparedPhoto(jpeg(20), jpeg(21))
+            val attachment = parent.uploadImages(listOf(sheet)).single()
+            parent.create(listOf(NewHomework(childId = child.id, subject = "MATH", date = parent.today, content = "缩略图作业", mode = "OFFLINE", attachmentIds = listOf(attachment))))
+            val net = Switchable()
+            val kid = HomeworkStore(tempDir("thumb-child"), MemorySessionStorage(), transport = net, debug = true)
+            kid.pairChild(server, parent.pairingCode().code, "缩略图平板")
+            kid.sync()
+            val item = kid.state.value.items(child.id).single()
+            assertTrue(kid.thumbData(attachment).contentEquals(jpeg(21)))
+
+            // Offline first: the thumbnail waits in the outbox next to its page, then goes up right after it.
+            net.offline = true
+            val withThumb = PreparedPhoto(jpeg(22), jpeg(23)); val older = PreparedPhoto(jpeg(24), null)
+            kid.submit(item, pages = listOf(withThumb, older))
+            net.offline = false
+            kid.sync()
+            assertTrue(kid.state.value.outbox.isEmpty())
+            val pages = kid.state.value.homework.getValue(item.id).latest!!.fileIds
+            assertEquals(2, pages.size)
+
+            // A fresh phone (nothing cached): the thumbnail for the new page, the photo itself for one without.
+            val phone = HomeworkStore(tempDir("thumb-phone"), MemorySessionStorage(parent.state.value.session), debug = true)
+            phone.sync()
+            assertTrue(phone.thumbData(pages[0]).contentEquals(jpeg(23)))
+            assertTrue(phone.cachedThumb(pages[0]).exists())
+            assertTrue(phone.thumbData(pages[1]).contentEquals(jpeg(24)))
+            assertTrue(phone.fileData(pages[0]).contentEquals(jpeg(22)))
+
+            // The server's rules: a thumbnail only for an uploaded photo, and only for photos.
+            val api = parent.client!!
+            assertTrue(runCatching { api.uploadThumb(newId(), jpeg(25)) }.exceptionOrNull() is ApiException.NotFound)
+            val pngId = newId().also { api.upload(it, png(), "image/png") }
+            assertTrue(runCatching { api.uploadThumb(pngId, jpeg(25)) }.exceptionOrNull() is ApiException.Rejected)
+            assertTrue(runCatching { api.downloadThumb(pngId) }.exceptionOrNull() is ApiException.NotFound)
+
+            // Prefetch on another fresh phone: the pages waiting for review and the picture are on disk before anyone opens them.
+            val other = HomeworkStore(tempDir("thumb-prefetch"), MemorySessionStorage(parent.state.value.session), debug = true)
+            other.sync()
+            other.prefetch()
+            assertTrue(other.cachedThumb(pages[0]).readBytes().contentEquals(jpeg(23)))
+            assertTrue(other.cachedThumb(attachment).readBytes().contentEquals(jpeg(21)))
+            (pages + attachment).forEach { assertTrue(other.cachedFile(it).exists()) }
+        } finally {
+            parent.deleteChild(child.id)
+        }
+    }
+
     @Test fun parentAndChildRunThePhase1LoopThroughTheServer() = runBlocking {
         assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
 
@@ -176,7 +232,7 @@ class Phase1ServerTest {
 
         // Parent enters three kinds of homework for today.
         val today = parent.today
-        val attachment = parent.uploadImages(listOf(jpeg(1))).single()
+        val attachment = parent.uploadImages(listOf(PreparedPhoto(jpeg(1), null))).single()
         parent.create(listOf(
             NewHomework(childId = child.id, subject = "MATH", date = today, dueDate = Day.add(today, 1), content = "口算本第 12 页",
                 rawText = "数学：口算本第12页，明早交[抱拳]", mode = "OFFLINE", parentTodo = "检查后签字", attachmentIds = listOf(attachment)),
@@ -192,7 +248,7 @@ class Phase1ServerTest {
 
         // Offline photo submission waits in the queue, then goes out when the network is back.
         net.offline = true
-        kid.submit(items.getValue("MATH"), pages = listOf(jpeg(2), jpeg(3)))
+        kid.submit(items.getValue("MATH"), pages = listOf(PreparedPhoto(jpeg(2), null), PreparedPhoto(jpeg(3), null)))
         assertEquals(1, kid.state.value.outbox.size)
         assertEquals("SUBMITTED", kid.state.value.homework.getValue(items.getValue("MATH").id).status)
         net.offline = false
@@ -227,7 +283,7 @@ class Phase1ServerTest {
         assertEquals(2, review.annotationFileIds.size)
         assertNotNull(overlayFile(corrected.latest!!, 1))
         assertTrue(kid.fileData(review.annotationFileIds.first()).copyOfRange(1, 4).decodeToString() == "PNG")
-        kid.submit(corrected, pages = listOf(jpeg(4)))
+        kid.submit(corrected, pages = listOf(PreparedPhoto(jpeg(4), null)))
         parent.sync()
         val second = parent.state.value.homework.getValue(photoItem.id)
         assertEquals(2, second.latest!!.attempt)

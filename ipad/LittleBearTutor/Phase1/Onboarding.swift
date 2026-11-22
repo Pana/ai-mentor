@@ -26,6 +26,8 @@ struct RootView: View {
         .task(id: loop) {
             // In the foreground: sync, then hold a request open until the server has news (long polling stands in for
             // push notifications until the app has an Apple Developer account). Cancelled when the app leaves the foreground.
+            // The store's background photo prefetching (parent phone) follows the same foreground state.
+            store.setActive(loop.active)
             guard loop.active, loop.deviceId != nil else { return }
             while !Task.isCancelled {
                 await store.sync()

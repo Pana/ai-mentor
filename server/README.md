@@ -37,6 +37,7 @@
 | `GET/PATCH/DELETE /v1/homework/:id` | 读：全部；写：家长 | 单项作业；删除会删掉相关文件 |
 | `GET /v1/routines?childId`、`PUT/DELETE /v1/routines/:id` | 读：全部；写：家长 | 每天坚持，每个孩子启用中的最多 5 项（超出返回 409 `routine_limit`） |
 | `PUT /v1/files/:id`、`GET /v1/files/:id` | 全部 | 原始字节上传下载：`image/jpeg` ≤2MB、`image/png` ≤4MB（批注图）、`audio/mp4` ≤10MB、`video/mp4` ≤300MB（录像作业，边收边写盘；下载支持 `Range`）、`application/octet-stream` ≤1MB（批注笔迹） |
+| `PUT /v1/files/:id/thumb`、`GET /v1/files/:id/thumb` | 全部 | 作业照片的缩略图（App 生成，长边约 480 像素的 JPEG，≤300KB），列表里先显示它；只能给已上传的照片加，随照片一起删除。没有缩略图（老版本 App 传的照片）时返回 404 `thumb_not_found`，App 改为加载原图 |
 | `POST /v1/homework/:id/submissions` | 全部 | `{id, fileIds, submittedAt, durationSeconds?}`：线下作业需要照片，录音作业需要一个音频，录像作业需要一个视频，计时作业需要计满时长 |
 | `POST /v1/submissions/:id/review` | 家长 | `{grade: EXCELLENT/GOOD/FAIR/TRY_AGAIN, comment, requireCorrection, annotationFileIds}` |
 | `GET/PUT /v1/reward-rules` | 读：全部；写：家长 | 奖励规则，含每天完成时间 `finishTime` |

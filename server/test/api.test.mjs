@@ -256,6 +256,30 @@ test('files: big uploads stream to disk, and downloads serve byte ranges for vid
   assert.deepEqual(readdirSync(join(dataDir, 'files', familyDir)).filter(name => name.endsWith('.part')), [], 'a rejected upload leaves nothing behind');
 });
 
+test('files: a photo can carry a small thumbnail for lists, removed with the photo', async t => {
+  const { call, child, parent, upload, addHomework, submit, dataDir } = await setup(t);
+  const small = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 9]);
+  const hw = await addHomework();
+  const submitted = await submit(hw);
+  const photo = submitted.body.submissions[0].fileIds[0];
+  assert.equal((await call('GET', `/v1/files/${photo}/thumb`, { token: parent })).body.error, 'thumb_not_found', 'an older app uploads none');
+  assert.equal((await call('PUT', `/v1/files/${photo}/thumb`, { token: child, raw: small, type: 'image/jpeg' })).status, 200);
+  const thumb = await call('GET', `/v1/files/${photo}/thumb`, { token: parent });
+  assert.deepEqual(thumb.body, small);
+  assert.equal(thumb.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await call('PUT', `/v1/files/${photo}/thumb`, { token: child, raw: Buffer.from('nope'), type: 'image/jpeg' })).status, 400);
+  assert.equal((await call('PUT', `/v1/files/${photo}/thumb`, { token: child, raw: small, type: 'image/png' })).status, 415);
+  assert.equal((await call('PUT', `/v1/files/${randomUUID()}/thumb`, { token: child, raw: small, type: 'image/jpeg' })).status, 404, 'only for a photo that exists');
+  const audio = await upload(m4a, 'audio/mp4');
+  assert.equal((await call('PUT', `/v1/files/${audio}/thumb`, { token: child, raw: small, type: 'image/jpeg' })).status, 400, 'only photos have thumbnails');
+  assert.equal((await call('PUT', `/v1/files/${photo}/thumb`, { token: child, raw: Buffer.concat([small, Buffer.alloc(300_000)]), type: 'image/jpeg' })).status, 413);
+  const familyDir = (await call('GET', '/v1/me', { token: parent })).body.family.id;
+  assert.ok(existsSync(join(dataDir, 'files', familyDir, `${photo}.thumb`)));
+  await call('DELETE', `/v1/homework/${hw.id}`, { token: parent });
+  assert.ok(!existsSync(join(dataDir, 'files', familyDir, `${photo}.thumb`)), 'deleted with its homework');
+  assert.equal((await call('GET', `/v1/files/${photo}/thumb`, { token: parent })).status, 404);
+});
+
 test('change feed lists what to re-fetch, in order', async t => {
   const { call, child, addHomework, submit } = await setup(t);
   const start = (await call('GET', '/v1/me', { token: child })).body.cursor;

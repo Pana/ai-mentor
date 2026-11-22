@@ -166,7 +166,7 @@ struct ParentHomeworkDetail: View {
                 if !item.attachmentIds.isEmpty {
                     Section("附带图片") {
                         ScrollView(.horizontal) {
-                            HStack { ForEach(item.attachmentIds, id: \.self) { RemoteImage(fileId: $0, contentMode: .fill).frame(width: 90, height: 90).clipShape(RoundedRectangle(cornerRadius: 10)) } }
+                            HStack { ForEach(item.attachmentIds, id: \.self) { RemoteImage(fileId: $0, contentMode: .fill, preview: true).frame(width: 90, height: 90).clipShape(RoundedRectangle(cornerRadius: 10)) } }
                         }
                     }
                 }
@@ -216,7 +216,7 @@ struct SubmissionSummary: View {
                 ScrollView(.horizontal) {
                     HStack {
                         ForEach(Array(submission.fileIds.enumerated()), id: \.offset) { index, file in
-                            AnnotatedPage(photo: file, overlay: overlayFile(submission, index)).frame(width: 120, height: 160)
+                            AnnotatedPage(photo: file, overlay: overlayFile(submission, index), preview: true).frame(width: 120, height: 160)
                                 .background(Color.chip).clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                     }
@@ -336,7 +336,7 @@ func dayBinding(_ text: Binding<String>) -> Binding<Date> {
 
 struct DraftFields: View {
     @Binding var draft: DraftItem
-    let images: [Data]
+    let images: [HomeworkPhoto]
     var body: some View {
         Picker("科目", selection: $draft.subject) { ForEach(SubjectStyle.all, id: \.self) { Text(SubjectStyle.label($0)).tag($0) } }
         TextField("作业内容", text: $draft.content, axis: .vertical).lineLimit(2...8)
@@ -365,7 +365,7 @@ struct ParentEntry: View {
     let onSaved: () -> Void
     @AppStorage("parent.entryMode") private var mode = EntryMode.ai
     @State private var text = ""
-    @State private var images: [Data] = []
+    @State private var images: [HomeworkPhoto] = []
     @State private var childIds: Set<UUID> = []
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var drafts: [DraftItem] = []
@@ -450,9 +450,9 @@ struct ParentEntry: View {
             if !images.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
-                        ForEach(Array(images.enumerated()), id: \.offset) { index, data in
+                        ForEach(Array(images.enumerated()), id: \.offset) { index, photo in
                             ZStack(alignment: .topTrailing) {
-                                if let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFill().frame(width: 76, height: 76).clipShape(RoundedRectangle(cornerRadius: 10)) }
+                                if let image = UIImage(data: photo.thumbnail ?? photo.jpeg) { Image(uiImage: image).resizable().scaledToFill().frame(width: 76, height: 76).clipShape(RoundedRectangle(cornerRadius: 10)) }
                                 Button { images.remove(at: index) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.white, .black.opacity(0.6)) }.accessibilityLabel("删除图片")
                             }
                         }
@@ -467,8 +467,8 @@ struct ParentEntry: View {
     private var canSaveManual: Bool { !saving && !childIds.isEmpty && !manualDrafts.isEmpty && draftsComplete(manualDrafts) }
 
     private func append(_ data: Data) {
-        guard images.count < 6, let image = UIImage(data: data), let jpeg = PhotoStore.gatewayJPEG(image) else { return }
-        images.append(jpeg)
+        guard images.count < 6, let image = UIImage(data: data), let photo = PhotoStore.homeworkPhoto(image) else { return }
+        images.append(photo)
     }
 
     private func parse() {
@@ -504,7 +504,7 @@ func draftsComplete(_ drafts: [DraftItem]) -> Bool { !drafts.contains { $0.conte
 @MainActor func childNames(_ store: HomeworkStore, _ ids: Set<UUID>) -> String { store.children.filter { ids.contains($0.id) }.map(\.name).joined(separator: "、") }
 
 /// Saves each draft for every selected child, uploading the pictures once if any draft carries them.
-@MainActor func saveDrafts(_ drafts: [DraftItem], images: [Data], childIds: Set<UUID>, rawText: String, store: HomeworkStore) async throws {
+@MainActor func saveDrafts(_ drafts: [DraftItem], images: [HomeworkPhoto], childIds: Set<UUID>, rawText: String, store: HomeworkStore) async throws {
     let attachments = !images.isEmpty && drafts.contains(where: \.attachImages) ? try await store.uploadImages(images) : []
     var items: [NewHomework] = []
     for child in store.children where childIds.contains(child.id) {
@@ -522,7 +522,7 @@ func draftsComplete(_ drafts: [DraftItem]) -> Bool { !drafts.contains { $0.conte
 struct DraftList: View {
     @EnvironmentObject private var store: HomeworkStore
     @Binding var drafts: [DraftItem]
-    let images: [Data]
+    let images: [HomeworkPhoto]
     var body: some View {
         ForEach($drafts) { $draft in
             Section {
@@ -537,7 +537,7 @@ struct DraftList: View {
 struct EntryResult: View {
     @EnvironmentObject private var store: HomeworkStore
     @Binding var drafts: [DraftItem]
-    let images: [Data]
+    let images: [HomeworkPhoto]
     let message: String
     let childIds: Set<UUID>
     let rawText: String

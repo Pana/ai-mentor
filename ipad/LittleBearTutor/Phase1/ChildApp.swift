@@ -473,7 +473,7 @@ struct WaitingView: View {
                     .background(saved ? Color.pineSoft : Color(hex: 0xFDEBDC), in: RoundedRectangle(cornerRadius: 16))
             }
             if let latest = item.latest, item.isOffline {
-                HStack { ForEach(latest.fileIds, id: \.self) { RemoteImage(fileId: $0, contentMode: .fill).frame(width: 120, height: 160).clipShape(RoundedRectangle(cornerRadius: 12)) } }
+                HStack { ForEach(latest.fileIds, id: \.self) { RemoteImage(fileId: $0, contentMode: .fill, preview: true).frame(width: 120, height: 160).clipShape(RoundedRectangle(cornerRadius: 12)) } }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.card, in: RoundedRectangle(cornerRadius: 28))
@@ -549,7 +549,7 @@ struct SubmitPhotosView: View {
     @Environment(\.dismiss) private var dismiss
     let id: UUID
     let done: () -> Void
-    @State private var pages: [Data] = []
+    @State private var pages: [HomeworkPhoto] = []
     @State private var sending = false
 
     var body: some View {
@@ -572,9 +572,9 @@ struct SubmitPhotosView: View {
                     } else {
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
-                                ForEach(Array(pages.enumerated()), id: \.offset) { i, data in
+                                ForEach(Array(pages.enumerated()), id: \.offset) { i, page in
                                     ZStack(alignment: .topTrailing) {
-                                        if let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFit().frame(height: 260).frame(maxWidth: .infinity).background(Color(hex: 0xEDE8DD)).clipShape(RoundedRectangle(cornerRadius: 14)) }
+                                        if let image = UIImage(data: page.jpeg) { Image(uiImage: image).resizable().scaledToFit().frame(height: 260).frame(maxWidth: .infinity).background(Color(hex: 0xEDE8DD)).clipShape(RoundedRectangle(cornerRadius: 14)) }
                                         Button { pages.remove(at: i) } label: { Image(systemName: "xmark.circle.fill").font(.title).foregroundStyle(.white, .black.opacity(0.6)) }
                                             .padding(8).accessibilityLabel("删除第 \(i + 1) 页")
                                         Text("第 \(i + 1) 页").font(.subheadline.bold()).padding(.horizontal, 10).padding(.vertical, 4).background(.white, in: Capsule())
@@ -593,7 +593,7 @@ struct SubmitPhotosView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(pages.isEmpty ? "还没拍" : "已经拍了 \(pages.count) 页").font(.title3.bold())
                     Text("最多 6 页").foregroundStyle(Color.ink3)
-                    if let dark = pages.firstIndex(where: { Self.isDark($0) }) {
+                    if let dark = pages.firstIndex(where: { Self.isDark($0.thumbnail ?? $0.jpeg) }) {
                         HStack(alignment: .top, spacing: 12) {
                             BearView(size: 40)
                             Text("第 \(dark + 1) 页有点暗，靠近台灯再拍一次会更清楚。").font(.system(size: 16))
@@ -613,8 +613,8 @@ struct SubmitPhotosView: View {
     }
 
     private func add(_ data: Data) {
-        guard let image = UIImage(data: data), let jpeg = PhotoStore.gatewayJPEG(image) else { return }
-        pages.append(jpeg)
+        guard let image = UIImage(data: data), let photo = PhotoStore.homeworkPhoto(image) else { return }
+        pages.append(photo)
     }
 
     private func send() {
