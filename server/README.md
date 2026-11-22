@@ -28,7 +28,8 @@
 
 | 方法与路径 | 角色 | 说明 |
 | --- | --- | --- |
-| `GET /v1/me` | 全部 | 当前设备、家庭、孩子列表、奖励规则、家庭时区的“今天” |
+| `GET /v1/me` | 全部 | 当前设备、家庭、孩子列表、奖励规则、家庭时区的“今天”；家长还会收到 `locks`：各孩子平板的奖励时间锁定状态 |
+| `PUT /v1/devices/self/lock` | 孩子 | `{enabled, lockedApps, stalled, adminActive}`：安卓平板的锁定心跳。家长看到的 `problem`：`off`（锁定关了）、`paused`（被系统暂停过）、`silent`（超过一天没报告）。只有家长看到的内容变了才写入变化流 |
 | `GET /v1/children`、`PUT/DELETE /v1/children/:id` | 读：全部；写：家长 | 孩子档案；删除会一并删除作业、每天坚持、奖励和文件 |
 | `POST /v1/homework/parse` | 家长 | `{text, date?}` → `{items:[{subject, content, mode, dueText, dueDate, parentTodo}], message}`，只整理不保存 |
 | `POST /v1/homework` | 家长 | `{items:[…]}` 批量新建，按 `id` 幂等 |

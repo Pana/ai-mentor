@@ -39,6 +39,7 @@
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/reward_lock_service" />
         </service>
+        <receiver android:name=".homework.RewardLockHeartbeat" android:exported="false" />
         <!-- Device admin without policies, so the child can't uninstall the app to get around the lock. -->
         <receiver android:name=".homework.RewardLockAdmin" android:exported="true" android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin" />

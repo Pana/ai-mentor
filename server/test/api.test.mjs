@@ -293,6 +293,47 @@ test('change feed can wait for the next change', async t => {
   assert.equal((await call('GET', '/v1/changes?since=0&wait=-1', { token: child })).status, 400);
 });
 
+test('reward lock heartbeat: the parent sees when the tablet lock is off, paused or silent', async t => {
+  const { call, clock, parent, child } = await setup(t);
+  const locks = async () => (await call('GET', '/v1/me', { token: parent })).body.locks;
+  const cursor = async () => (await call('GET', '/v1/me', { token: parent })).body.cursor;
+  const report = (body, token = child) => call('PUT', '/v1/devices/self/lock', { token, body });
+  const ok = { enabled: true, lockedApps: 3, stalled: false, adminActive: true };
+
+  assert.deepEqual(await locks(), [], 'nothing until a tablet reports');
+  assert.equal((await report({ ...ok, lockedApps: 0 })).status, 200);
+  assert.deepEqual(await locks(), [], 'a tablet with no apps picked is not set up');
+
+  let start = await cursor();
+  await report(ok);
+  let [lock] = await locks();
+  assert.equal(lock.name, '林林的 iPad');
+  assert.equal(lock.problem, null);
+  assert.equal(lock.lockedApps, 3);
+  assert.deepEqual((await call('GET', `/v1/changes?since=${start}`, { token: parent })).body.changes.map(c => c.entity), ['device']);
+
+  // A routine heartbeat with nothing new stays out of the change feed.
+  start = await cursor();
+  clock.ms += 30 * 60_000;
+  await report(ok);
+  assert.deepEqual((await call('GET', `/v1/changes?since=${start}`, { token: parent })).body.changes, []);
+  assert.equal((await locks())[0].reportedAt, new Date(clock.ms).toISOString());
+
+  await report({ ...ok, enabled: false });
+  assert.equal((await locks())[0].problem, 'off');
+  assert.equal((await call('GET', `/v1/changes?since=${start}`, { token: parent })).body.changes.length, 1);
+  await report({ ...ok, stalled: true });
+  assert.equal((await locks())[0].problem, 'paused');
+  await report(ok);
+  clock.ms += 25 * 3_600_000;
+  assert.equal((await locks())[0].problem, 'silent', 'no report for a day');
+
+  assert.deepEqual((await call('GET', '/v1/me', { token: child })).body.locks, [], 'children do not get the lock list');
+  assert.equal((await call('GET', '/v1/devices', { token: parent })).body.devices.find(d => d.role === 'child').lock.problem, 'silent');
+  assert.equal((await report(ok, parent)).status, 403, 'only child devices report');
+  assert.equal((await report({ ...ok, lockedApps: -1 })).status, 400);
+});
+
 test('deleting a child removes their homework, routines and rewards', async t => {
   const { call, parent, childId, addHomework, submit, balance } = await setup(t);
   await submit(await addHomework());

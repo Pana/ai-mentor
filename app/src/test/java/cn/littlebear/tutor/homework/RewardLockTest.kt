@@ -65,6 +65,17 @@ class RewardLockTest {
         assertEquals(Verdict.LOCKED_APP, verdict(game, parent = parent, now = later(11 * 60_000L)))
     }
 
+    @Test fun parentMessagesSayWhatToDo() {
+        val base = LockStatus(deviceId = "d", name = "林林的平板", enabled = true, lockedApps = 3, adminActive = true, reportedAt = "2026-11-22T07:39:00Z")
+        assertEquals("林林的平板：锁定正常，锁住 3 个 App，11/22 15:39 报告", lockMessage(base, "Asia/Shanghai"))
+        assertTrue(lockMessage(base.copy(adminActive = false), "Asia/Shanghai").endsWith("没开“防止卸载”"))
+        assertTrue(lockMessage(base.copy(problem = "off"), "Asia/Shanghai").contains("重新开启"))
+        assertTrue(lockMessage(base.copy(problem = "paused"), "Asia/Shanghai").contains("无限制"))
+        assertTrue(lockMessage(base.copy(problem = "silent"), "Asia/Shanghai").contains("最后一次 11/22 15:39"))
+        assertTrue(lockMessage(base.copy(name = ""), "Asia/Shanghai").startsWith("孩子的平板"))
+        assertEquals("", lockTime("not a time", "Asia/Shanghai"))
+    }
+
     @Test fun windowTextIsReadOnlyForGuardedScreens() {
         var asked = 0
         LockPolicy.verdict(game, own, locked, null, null, t0) { asked++; true }

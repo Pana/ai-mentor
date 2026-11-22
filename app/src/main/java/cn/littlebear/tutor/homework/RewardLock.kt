@@ -1,7 +1,11 @@
 package cn.littlebear.tutor.homework
 
 import android.accessibilityservice.AccessibilityService
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.app.admin.DeviceAdminReceiver
+import android.content.BroadcastReceiver
+import kotlinx.coroutines.launch
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
@@ -107,7 +111,7 @@ object RewardLock {
     fun endParent(context: Context) { save(context, "parent", null) }
 
     /** The system paused the lock (see RewardLockService's tick). Shown to the parent for a day, or until they open battery settings. */
-    fun recordStall(context: Context) { prefs(context).edit().putLong("stall.at", System.currentTimeMillis()).apply() }
+    fun recordStall(context: Context) { prefs(context).edit().putLong("stall.at", System.currentTimeMillis()).apply(); report(context) }
     fun clearStall(context: Context) { prefs(context).edit().remove("stall.at").apply() }
     fun recentlyStalled(context: Context) = System.currentTimeMillis() - prefs(context).getLong("stall.at", 0) < 24 * 3_600_000L
 
@@ -115,6 +119,31 @@ object RewardLock {
         val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
         val me = ComponentName(context, RewardLockService::class.java)
         return enabled.split(':').any { ComponentName.unflattenFromString(it) == me }
+    }
+
+    // ---------- Heartbeat to the parent ----------
+    // The lock can be switched off without anyone on the tablet noticing (seen on a Xiaomi Pad 9 Pro overnight, cause
+    // unknown), so the tablet tells the server how the lock is doing and the parent app warns when it is off.
+
+    fun currentReport(context: Context, enabled: Boolean = isServiceEnabled(context)) =
+        LockReport(enabled, lockedApps(context).size, recentlyStalled(context), isAdminActive(context))
+
+    suspend fun sendReport(context: Context, enabled: Boolean = isServiceEnabled(context)) {
+        val app = context.applicationContext
+        try { StoreHolder.get(app).reportLock(currentReport(app, enabled)) } catch (e: Exception) { Log.w("RewardLock", "heartbeat failed: $e") }
+    }
+
+    fun report(context: Context, enabled: Boolean = isServiceEnabled(context)) {
+        val app = context.applicationContext
+        StoreHolder.scope.launch { sendReport(app, enabled) }
+    }
+
+    /** Hourly while the tablet is awake, so a lock that was turned off is reported even if nobody opens the app. */
+    fun scheduleHeartbeat(context: Context) {
+        val app = context.applicationContext
+        val intent = PendingIntent.getBroadcast(app, 0, Intent(app, RewardLockHeartbeat::class.java), PendingIntent.FLAG_IMMUTABLE)
+        app.getSystemService(AlarmManager::class.java).setInexactRepeating(AlarmManager.ELAPSED_REALTIME,
+            SystemClock.elapsedRealtime() + AlarmManager.INTERVAL_HOUR, AlarmManager.INTERVAL_HOUR, intent)
     }
 
     fun adminComponent(context: Context) = ComponentName(context, RewardLockAdmin::class.java)
@@ -143,6 +172,7 @@ class RewardLockService : AccessibilityService() {
     private val check = Runnable { evaluate() }
     // A session can run out while the child stays inside a game, which sends no events; look again every few seconds.
     private var lastTick = 0L
+    private var lastReport = 0L
     private val tick = object : Runnable {
         override fun run() {
             // Uptime stops in deep sleep but not while HyperOS freezes the process, so a long gap here means the
@@ -150,12 +180,16 @@ class RewardLockService : AccessibilityService() {
             val up = SystemClock.uptimeMillis()
             if (lastTick != 0L && up - lastTick > 20_000) RewardLock.recordStall(this@RewardLockService)
             lastTick = up
+            if (up - lastReport > 30 * 60_000) { lastReport = up; RewardLock.report(this@RewardLockService, enabled = true) }
             evaluate(); handler.postDelayed(this, 5_000)
         }
     }
     private val changed = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> scheduleSessionEnd(); schedule(0) }
 
     override fun onServiceConnected() {
+        RewardLock.scheduleHeartbeat(this)
+        lastReport = SystemClock.uptimeMillis()
+        RewardLock.report(this, enabled = true)
         RewardLock.prefs(this).registerOnSharedPreferenceChangeListener(changed)
         handler.post(tick)
         scheduleSessionEnd()
@@ -167,6 +201,12 @@ class RewardLockService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
+
+    // Turning the service off in system settings unbinds it: say so while the process is still running.
+    override fun onUnbind(intent: Intent?): Boolean {
+        RewardLock.report(this, enabled = false)
+        return super.onUnbind(intent)
+    }
 
     override fun onDestroy() {
         RewardLock.prefs(this).unregisterOnSharedPreferenceChangeListener(changed)
@@ -241,6 +281,14 @@ class RewardLockService : AccessibilityService() {
         handler.removeCallbacks(hideNotice)
         notice?.let { runCatching { getSystemService(WindowManager::class.java).removeView(it) } }
         notice = null
+    }
+}
+
+/** Hourly heartbeat (RewardLock.scheduleHeartbeat). Runs even when the accessibility service is off. */
+class RewardLockHeartbeat : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val pending = goAsync()
+        StoreHolder.scope.launch { try { RewardLock.sendReport(context) } finally { pending.finish() } }
     }
 }
 

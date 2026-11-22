@@ -99,8 +99,9 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
         is ParentRoute.Detail -> if (!wide) ParentHomeworkDetail(route.id, pop, push) else { SideEffect { pop() } }
         null -> {
             var selected by rememberSaveable { mutableStateOf<String?>(null) }
-            val page: @Composable (Modifier) -> Unit = { modifier ->
-                Box(modifier) {
+            val page: @Composable (Modifier) -> Unit = { modifier -> Column(modifier) {
+                LockAlertBanner(state.locks, state.timeZone) { tab = ParentTab.REWARDS }
+                Box(Modifier.weight(1f)) {
                     when (tab) {
                         ParentTab.HOMEWORK -> if (wide) Row(Modifier.fillMaxSize()) {
                             ParentOverview(child, { childId = it }, Modifier.weight(1f), selected, { selected = it }, push)
@@ -118,7 +119,7 @@ enum class ParentTab(val label: String, val icon: ImageVector) {
                         ParentTab.REWARDS -> ParentRewards(child) { childId = it }
                     }
                 }
-            }
+            } }
             if (wide) Row(Modifier.fillMaxSize().systemBarsPadding()) {
                 NavigationRail(containerColor = Palette.card, header = { BearView(44.dp) }) {
                     Spacer(Modifier.height(12.dp))
@@ -706,6 +707,7 @@ data class RoutineDraft(
                     Column(Modifier.weight(1f)) { Text(t, fontSize = 12.sp, color = Palette.onNight); Text("$v 分钟", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c) }
                 }
             }
+            LockStatusSection(state.locks, state.timeZone)
             FormSection("怎么攒", "订正后评分提高，会补上差额。") {
                 Stepper("按时交（${rules.finishTime} 前）+${rules.onTime}", rules.onTime, 0..60) { rules = rules.copy(onTime = it) }
                 ClockField("每天完成时间", rules.finishTime) { rules = rules.copy(finishTime = it) }
@@ -725,7 +727,6 @@ data class RoutineDraft(
                 saving = true
                 store.launch({ saving = false }) { saveRules(rules) }
             }
-            Text("安卓平板可以锁住动画和游戏 App，平时打不开，用奖励时间才放开：在孩子平板的“家长 → 奖励时间锁定”里设置。", fontSize = 13.sp, color = Palette.ink3)
             if (summary != null && summary.entries.isNotEmpty()) FormSection("最近明细") {
                 summary.entries.take(20).forEach { e ->
                     Row { Text(rewardReason(e, state), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -9,6 +9,13 @@ struct ParentApp: View {
     @AppStorage("parent.childId") private var childIdText = ""
 
     var body: some View {
+        VStack(spacing: 0) {
+            LockAlertBanner { tab = .rewards }
+            tabs
+        }
+    }
+
+    private var tabs: some View {
         TabView(selection: $tab) {
             ParentOverview(childIdText: $childIdText)
                 .tabItem { Label("作业", systemImage: "list.bullet") }.tag(Tab.homework)
@@ -723,6 +730,7 @@ struct ParentRewards: View {
                         .listRowBackground(Color.ink)
                     }
                 }
+                LockStatusSection()
                 Section("怎么攒") {
                     Stepper("按时交（\(rules.finishTime) 前）+\(rules.onTime)", value: $rules.onTime, in: 0...60)
                     DatePicker("每天完成时间", selection: clockBinding($rules.finishTime), displayedComponents: .hourAndMinute)

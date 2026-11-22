@@ -91,6 +91,7 @@ const val VIDEO_MIME = "video/mp4"
     val rules: RewardRules = RewardRules(),
     val rewards: List<RewardSummary> = emptyList(),
     val outbox: List<PendingSubmission> = emptyList(),
+    val locks: List<LockStatus> = emptyList(),
 )
 
 data class HomeworkState(
@@ -102,6 +103,8 @@ data class HomeworkState(
     val rules: RewardRules = RewardRules(),
     val rewards: Map<String, RewardSummary> = emptyMap(),
     val outbox: List<PendingSubmission> = emptyList(),
+    /** Parent only: each child tablet's reward-time lock, from the tablet's heartbeat. */
+    val locks: List<LockStatus> = emptyList(),
     val syncing: Boolean = false,
     val lastSynced: Long? = null,
     /** Set when the server no longer accepts this device's credential. */
@@ -266,7 +269,7 @@ class HomeworkStore(
     }
 
     private fun apply(me: MeResponse) {
-        _state.update { it.copy(family = me.family, children = me.children, rules = me.rules) }
+        _state.update { it.copy(family = me.family, children = me.children, rules = me.rules, locks = me.locks) }
     }
 
     private suspend fun applyChanges(api: ApiClient) {
@@ -275,7 +278,7 @@ class HomeworkStore(
             val feed = api.changes(cursor)
             more = feed.hasMore
             val upserts = linkedSetOf<String>(); val deletes = linkedSetOf<String>(); val rewardChildren = linkedSetOf<String>()
-            var childrenChanged = false; var routinesChanged = false; var rulesChanged = false
+            var childrenChanged = false; var routinesChanged = false; var rulesChanged = false; var devicesChanged = false
             for (change in feed.changes) {
                 when (change.entity) {
                     "homework" -> if (change.op == "DELETE") { deletes += change.id; upserts -= change.id } else { upserts += change.id; deletes -= change.id }
@@ -283,6 +286,7 @@ class HomeworkStore(
                     "routine" -> routinesChanged = true
                     "rules" -> rulesChanged = true
                     "reward" -> rewardChildren += change.id
+                    "device" -> devicesChanged = true
                 }
             }
             _state.update { it.copy(homework = it.homework - deletes) }
@@ -299,7 +303,7 @@ class HomeworkStore(
                     }
                 }
             }
-            if (childrenChanged || rulesChanged) {
+            if (childrenChanged || rulesChanged || devicesChanged) {
                 apply(api.me())
                 val known = current.children.map { it.id }.toSet()
                 _state.update { s -> s.copy(homework = s.homework.filterValues { it.childId in known }, rewards = s.rewards.filterKeys { it in known }) }
@@ -415,6 +419,13 @@ class HomeworkStore(
         return session
     }
 
+    /** Child tablets only: tell the parent whether the reward-time lock is running (RewardLock). */
+    suspend fun reportLock(report: LockReport) {
+        if (current.session?.role != "child") return
+        val api = client ?: return
+        api.call<LockReport, Ok>("PUT", "v1/devices/self/lock", report)
+    }
+
     // ---------- Parent actions (online) ----------
 
     private fun api(): ApiClient = client ?: throw ApiException.InvalidServer(debug)
@@ -525,13 +536,13 @@ class HomeworkStore(
         cursor = cache.cursor
         _state.update {
             it.copy(family = cache.family, children = cache.children, homework = cache.homework.associateBy { h -> h.id },
-                routines = cache.routines, rules = cache.rules, rewards = cache.rewards.associateBy { r -> r.childId }, outbox = cache.outbox)
+                routines = cache.routines, rules = cache.rules, rewards = cache.rewards.associateBy { r -> r.childId }, outbox = cache.outbox, locks = cache.locks)
         }
     }
 
     private suspend fun saveCache() {
         val s = current
-        val cache = Cache(cursor, s.family, s.children, s.homework.values.toList(), s.routines, s.rules, s.rewards.values.toList(), s.outbox)
+        val cache = Cache(cursor, s.family, s.children, s.homework.values.toList(), s.routines, s.rules, s.rewards.values.toList(), s.outbox, s.locks)
         val text = wireJson.encodeToString(Cache.serializer(), cache)
         withContext(io) {
             val tmp = File(directory, "cache.json.tmp")

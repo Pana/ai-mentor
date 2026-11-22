@@ -117,6 +117,21 @@ struct MeResponse: Codable, Sendable {
     var family: FamilyInfo
     var children: [RemoteChild]
     var rules: RewardRules
+    /// Parent only, and only from servers that have the lock heartbeat: optional so an older server still decodes.
+    var locks: [LockStatus]?
+}
+
+/// A child tablet's reward-time lock as the parent sees it (Android tablets report it; see the server's `/v1/devices/self/lock`).
+/// `problem`: "off", "paused" (the system froze it) or "silent" (no report for a day); nil when it is working.
+struct LockStatus: Codable, Hashable, Sendable {
+    var deviceId: String
+    var name: String
+    var enabled: Bool
+    var lockedApps: Int
+    var stalled: Bool
+    var adminActive: Bool
+    var reportedAt: String
+    var problem: String?
 }
 
 struct Change: Codable, Sendable { var seq: Int; var entity: String; var id: String; var op: String }

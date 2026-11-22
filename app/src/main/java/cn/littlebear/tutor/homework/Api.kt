@@ -80,7 +80,15 @@ import okio.source
 
 @Serializable data class FamilyInfo(val id: String, val name: String = "", val timezone: String = "Asia/Shanghai", val today: String = "")
 @Serializable data class DeviceInfo(val id: String, val role: String, val name: String = "")
-@Serializable data class MeResponse(val cursor: Int, val device: DeviceInfo, val family: FamilyInfo, val children: List<RemoteChild> = emptyList(), val rules: RewardRules = RewardRules())
+@Serializable data class MeResponse(val cursor: Int, val device: DeviceInfo, val family: FamilyInfo, val children: List<RemoteChild> = emptyList(), val rules: RewardRules = RewardRules(),
+    val locks: List<LockStatus> = emptyList())
+
+/** What a child tablet's reward-time lock reports (`PUT /v1/devices/self/lock`). */
+@Serializable data class LockReport(val enabled: Boolean, val lockedApps: Int, val stalled: Boolean, val adminActive: Boolean)
+
+/** A child tablet's lock as the parent sees it. `problem`: "off", "paused" (the system froze it) or "silent" (no report for a day). */
+@Serializable data class LockStatus(val deviceId: String, val name: String = "", val enabled: Boolean = false, val lockedApps: Int = 0,
+    val stalled: Boolean = false, val adminActive: Boolean = false, val reportedAt: String = "", val problem: String? = null)
 @Serializable data class Change(val seq: Int, val entity: String, val id: String, val op: String)
 @Serializable data class ChangeFeed(val changes: List<Change> = emptyList(), val next: Int, val hasMore: Boolean = false)
 @Serializable data class DeviceGrant(val deviceId: String, val deviceToken: String, val role: String, val familyId: String)

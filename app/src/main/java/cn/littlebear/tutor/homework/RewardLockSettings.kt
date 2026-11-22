@@ -30,7 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Bumps whenever the screen comes back to the front, so status read from system settings stays current. */
-@Composable private fun resumeCount(): Int {
+@Composable fun resumeCount(): Int {
     var count by remember { mutableIntStateOf(0) }
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
@@ -85,6 +85,7 @@ private fun Context.open(intent: Intent) = try { startActivity(intent) } catch (
 
     if (picking) LockedAppsDialog(apps, onDismiss = { picking = false }) { chosen ->
         RewardLock.setLockedApps(context, chosen); apps = chosen; picking = false
+        RewardLock.scheduleHeartbeat(context); RewardLock.report(context)
     }
 }
 

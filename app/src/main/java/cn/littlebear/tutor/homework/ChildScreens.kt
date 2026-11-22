@@ -82,6 +82,9 @@ enum class ChildTab(val label: String) { TODAY("今天"), ALL("全部作业"), R
     val state by LocalStore.current.state.collectAsStateWithLifecycle()
     var childId by remember { mutableStateOf(prefs(context).getString("current", null)) }
     fun choose(id: String?) { childId = id; prefs(context).edit().putString("current", id).apply() }
+    // Reward-time lock heartbeat: each time the app comes to the front, and hourly from then on.
+    val resumed = resumeCount()
+    LaunchedEffect(resumed) { if (RewardLock.lockedApps(context).isNotEmpty()) { RewardLock.scheduleHeartbeat(context); RewardLock.report(context) } }
     val child = state.child(childId)
     if (child != null) ChildShell(child) { choose(null) } else ProfilePicker { choose(it.id) }
 }
