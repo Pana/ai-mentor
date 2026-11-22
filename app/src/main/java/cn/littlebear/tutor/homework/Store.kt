@@ -5,11 +5,16 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,8 +70,11 @@ object Day {
 
 // ---------- Offline submission queue (child device) ----------
 
-/** A file waiting in the outbox: only its name in the outbox folder is kept here, the bytes stay on disk. */
-@Serializable data class PendingFile(val fileId: String, val localName: String, val mime: String) {
+/**
+ * A file waiting in the outbox: only its name in the outbox folder is kept here, the bytes stay on disk.
+ * A photo also has its list thumbnail there ([thumbName]), sent right after it; queues from older versions have none.
+ */
+@Serializable data class PendingFile(val fileId: String, val localName: String, val mime: String, val thumbName: String? = null) {
     val isVideo: Boolean get() = mime == VIDEO_MIME
 }
 
@@ -126,6 +134,22 @@ data class HomeworkState(
             }
 }
 
+/** One file the parent's device downloads ahead of time: a photo's [thumb]nail or the photo itself. */
+data class Prefetch(val fileId: String, val thumb: Boolean)
+
+/**
+ * What the parent will open next: the pages of submissions waiting for review, then the pictures attached to homework
+ * from the last [days] days on. Thumbnails first (lists show them), then the photos. Images only: recordings and videos
+ * are not photos and never listed.
+ */
+fun prefetchPlan(homework: Collection<RemoteHomework>, today: String, days: Int = 7): List<Prefetch> {
+    val pages = homework.filter { it.awaitingReview && it.isOffline }.sortedByDescending { it.date }.flatMap { it.latest?.fileIds.orEmpty() }
+    val since = Day.add(today, -days)
+    val attachments = homework.filter { it.date >= since }.sortedByDescending { it.date }.flatMap { it.attachmentIds }
+    val ids = (pages + attachments).map { it.lowercase() }.distinct()
+    return ids.map { Prefetch(it, thumb = true) } + ids.map { Prefetch(it, thumb = false) }
+}
+
 // ---------- Store ----------
 
 /**
@@ -148,6 +172,10 @@ class HomeworkStore(
     val uploads = MutableStateFlow<Map<String, Float>>(emptyMap())
 
     private var cursor = 0
+    /** Photos whose thumbnail the server does not have (uploaded by an older app): their photo is shown instead. */
+    private val noThumb: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /** Files that failed to prefetch (not for lack of network): not tried again until the app restarts. */
+    private val prefetchFailed: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val syncLock = Mutex()
     @Volatile private var syncAgain = false
     private val outboxDir = File(directory, "outbox")
@@ -200,6 +228,7 @@ class HomeworkStore(
 
     private suspend fun resetData() {
         cursor = 0
+        noThumb.clear(); prefetchFailed.clear()
         current.outbox.forEach(::removeLocalFiles)
         _state.update { HomeworkState(session = it.session, signedOut = it.signedOut) }
         saveCache()
@@ -321,7 +350,7 @@ class HomeworkStore(
 
     // ---------- Child: submissions (queued, so a submission made offline is sent later) ----------
 
-    suspend fun submit(item: RemoteHomework, pages: List<ByteArray> = emptyList(), audio: ByteArray? = null, durationSeconds: Int? = null, video: File? = null) {
+    suspend fun submit(item: RemoteHomework, pages: List<PreparedPhoto> = emptyList(), audio: ByteArray? = null, durationSeconds: Int? = null, video: File? = null) {
         queue(item, pages, audio, durationSeconds, video)
         sync()
     }
@@ -330,10 +359,10 @@ class HomeworkStore(
      * Puts a submission in the outbox and shows it as handed in, without sending it yet. A [video] file is moved
      * into the outbox (not read into memory: it can be 200 MB).
      */
-    suspend fun queue(item: RemoteHomework, pages: List<ByteArray> = emptyList(), audio: ByteArray? = null, durationSeconds: Int? = null, video: File? = null) {
+    suspend fun queue(item: RemoteHomework, pages: List<PreparedPhoto> = emptyList(), audio: ByteArray? = null, durationSeconds: Int? = null, video: File? = null) {
         val files = mutableListOf<PendingFile>()
         withContext(io) {
-            pages.forEach { files += storeOutboxFile(it, "image/jpeg", "jpg") }
+            pages.forEach { files += storeOutboxPhoto(it) }
             audio?.let { files += storeOutboxFile(it, "audio/mp4", "m4a") }
             video?.let { files += moveToOutbox(it, VIDEO_MIME, "mp4") }
         }
@@ -351,6 +380,12 @@ class HomeworkStore(
         return PendingFile(id, name, mime)
     }
 
+    private fun storeOutboxPhoto(photo: PreparedPhoto): PendingFile {
+        val file = storeOutboxFile(photo.data, "image/jpeg", "jpg")
+        val thumb = photo.thumb?.let { "${file.fileId}.thumb.jpg".also { name -> File(outboxDir, name).writeBytes(it) } }
+        return file.copy(thumbName = thumb)
+    }
+
     private fun moveToOutbox(file: File, mime: String, ext: String): PendingFile {
         val id = newId()
         val name = "$id.$ext"
@@ -360,7 +395,10 @@ class HomeworkStore(
     }
 
     private fun removeLocalFiles(item: PendingSubmission) {
-        item.files.forEach { File(outboxDir, it.localName).delete() }
+        item.files.forEach { file ->
+            File(outboxDir, file.localName).delete()
+            file.thumbName?.let { File(outboxDir, it).delete() }
+        }
     }
 
     @Serializable private data class SubmissionBody(val id: String, val fileIds: List<String>, val submittedAt: String, val durationSeconds: Int? = null)
@@ -392,7 +430,8 @@ class HomeworkStore(
                 } else {
                     api.upload(file.fileId, local, file.mime)
                     // Photos and recordings stay on the device so they show without downloading; a video is in the gallery already.
-                    withContext(io) { local.copyTo(cachedFile(file.fileId), overwrite = true) }
+                    withContext(io) { copyAtomically(local, cachedFile(file.fileId)) }
+                    file.thumbName?.let { name -> withContext(io) { File(outboxDir, name).takeIf { it.exists() }?.readBytes() }?.let { sendThumb(api, file.fileId, it) } }
                 }
             }
             val updated: RemoteHomework = api.call("POST", "v1/homework/${item.homeworkId.lowercase()}/submissions",
@@ -402,6 +441,17 @@ class HomeworkStore(
         } finally {
             uploads.update { it - item.homeworkId }
         }
+    }
+
+    /**
+     * Keeps a photo's thumbnail on this device and sends it after the photo (the server needs the photo first).
+     * Optional: a failure never holds up the submission; lists then load the photo itself.
+     */
+    private suspend fun sendThumb(api: ApiClient, fileId: String, thumb: ByteArray) {
+        withContext(io) { writeAtomically(cachedThumb(fileId), thumb) }
+        try { api.uploadThumb(fileId, thumb) }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { }
     }
 
     private suspend fun finish(item: PendingSubmission) {
@@ -449,13 +499,14 @@ class HomeworkStore(
     @Serializable private data class ParseBody(val text: String, val date: String)
     suspend fun parse(text: String): ParseResult = api().call("POST", "v1/homework/parse", ParseBody(text, today))
 
-    /** Uploads JPEG attachments and returns their file ids. */
-    suspend fun uploadImages(images: List<ByteArray>): List<String> {
+    /** Uploads JPEG attachments (each followed by its thumbnail) and returns their file ids. */
+    suspend fun uploadImages(images: List<PreparedPhoto>): List<String> {
         val api = api()
         return images.map { image ->
             val id = newId()
-            api.upload(id, image, "image/jpeg")
-            withContext(io) { cachedFile(id).writeBytes(image) }
+            api.upload(id, image.data, "image/jpeg")
+            withContext(io) { writeAtomically(cachedFile(id), image.data) }
+            image.thumb?.let { sendThumb(api, id, it) }
             id
         }
     }
@@ -493,7 +544,7 @@ class HomeworkStore(
         val ids = overlays.map { png ->
             val id = newId()
             api.upload(id, png, "image/png")
-            withContext(io) { cachedFile(id).writeBytes(png) }
+            withContext(io) { writeAtomically(cachedFile(id), png) }
             id
         }
         val updated: RemoteHomework = api.call("POST", "v1/submissions/${submission.id.lowercase()}/review", ReviewBody(grade, comment.trim(), requireCorrection, ids))
@@ -518,14 +569,81 @@ class HomeworkStore(
     // ---------- Files ----------
 
     fun cachedFile(id: String): File = File(filesDir, id.lowercase())
+    fun cachedThumb(id: String): File = File(filesDir, "${id.lowercase()}.thumb")
     fun outboxFile(file: PendingFile): File = File(outboxDir, file.localName)
+    fun outboxThumb(file: PendingFile): File? = file.thumbName?.let { File(outboxDir, it) }
 
     suspend fun fileData(id: String): ByteArray {
         val local = cachedFile(id)
         withContext(io) { if (local.exists()) local.readBytes() else null }?.let { return it }
         val data = api().download(id)
-        withContext(io) { local.writeBytes(data) }
+        withContext(io) { writeAtomically(local, data) }
         return data
+    }
+
+    /**
+     * For small previews: the photo's thumbnail, or the photo itself when that is already on the device or the server
+     * has no thumbnail for it (404, a photo from an older app). Thumbnails are cached apart from photos (`<id>.thumb`).
+     */
+    suspend fun thumbData(id: String): ByteArray {
+        withContext(io) { (cachedThumb(id).takeIf { it.exists() } ?: cachedFile(id).takeIf { it.exists() })?.readBytes() }?.let { return it }
+        val key = id.lowercase()
+        if (key !in noThumb) {
+            try {
+                val data = api().downloadThumb(id)
+                withContext(io) { writeAtomically(cachedThumb(id), data) }
+                return data
+            } catch (_: ApiException.NotFound) {
+                noThumb += key
+            }
+        }
+        return fileData(id)
+    }
+
+    /**
+     * Parent device, after a sync: downloads the thumbnails and photos the parent is about to open ([prefetchPlan]),
+     * two at a time, skipping what is cached. Stops when the network is gone (the next sync tries again); a file that
+     * fails otherwise is not tried again. Runs in the caller's scope, so leaving the foreground cancels it.
+     */
+    suspend fun prefetch(workers: Int = 2) {
+        val s = current
+        if (s.session?.isParent != true || s.signedOut || client == null) return
+        withContext(io) {
+            val queue = ConcurrentLinkedQueue(prefetchPlan(s.homework.values, today).filter(::needsFetch))
+            if (queue.isEmpty()) return@withContext
+            val stop = AtomicBoolean(false)
+            coroutineScope {
+                repeat(workers.coerceIn(1, 2)) {
+                    launch {
+                        while (!stop.get()) {
+                            val job = queue.poll() ?: break
+                            if (!needsFetch(job)) continue
+                            try { if (job.thumb) thumbData(job.fileId) else fileData(job.fileId) }
+                            catch (e: CancellationException) { throw e }
+                            catch (_: ApiException.Network) { stop.set(true) }
+                            catch (_: ApiException.Unauthorized) { stop.set(true) }
+                            catch (_: Exception) { prefetchFailed += job.fileId }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun needsFetch(job: Prefetch): Boolean = job.fileId !in prefetchFailed &&
+        if (job.thumb) !(cachedThumb(job.fileId).exists() || cachedFile(job.fileId).exists() || job.fileId in noThumb) else !cachedFile(job.fileId).exists()
+
+    /** A reader never sees half a file, even while a prefetch and a screen load the same one. */
+    private fun writeAtomically(target: File, data: ByteArray) {
+        val tmp = File(target.parentFile, "${target.name}.${newId()}.part")
+        tmp.writeBytes(data)
+        if (!tmp.renameTo(target)) { target.delete(); if (!tmp.renameTo(target)) tmp.delete() }
+    }
+
+    private fun copyAtomically(source: File, target: File) {
+        val tmp = File(target.parentFile, "${target.name}.${newId()}.part")
+        source.copyTo(tmp, overwrite = true)
+        if (!tmp.renameTo(target)) { target.delete(); if (!tmp.renameTo(target)) tmp.delete() }
     }
 
     // ---------- Cache ----------

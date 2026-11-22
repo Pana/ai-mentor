@@ -1,7 +1,7 @@
 import XCTest
 @testable import LittleBearTutor
 
-/// A scripted server: each request goes to `handler`, which returns a status and JSON.
+/// A scripted server: each request goes to `handler`, which returns a status and JSON (or raw `Data`, sent as is).
 final class FakeServer: @unchecked Sendable {
     private let lock = NSLock()
     private var _requests: [URLRequest] = []
@@ -21,7 +21,7 @@ final class FakeServer: @unchecked Sendable {
             if lock.withLock({ offline }) { throw URLError(.notConnectedToInternet) }
             progress(0.5); progress(1)
             let (status, body) = lock.withLock { handler(request) }
-            let data = try JSONSerialization.data(withJSONObject: body)
+            let data = try body as? Data ?? JSONSerialization.data(withJSONObject: body)
             return (data, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!)
         }
     }
@@ -31,7 +31,7 @@ final class FakeServer: @unchecked Sendable {
             lock.withLock { _requests.append(request) }
             if lock.withLock({ offline }) { throw URLError(.notConnectedToInternet) }
             let (status, body) = lock.withLock { handler(request) }
-            let data = try JSONSerialization.data(withJSONObject: body)
+            let data = try body as? Data ?? JSONSerialization.data(withJSONObject: body)
             return (data, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!)
         }
     }
@@ -147,7 +147,7 @@ final class FakeServer: @unchecked Sendable {
         let item = try XCTUnwrap(store.homework[id])
 
         server.offline = true
-        await store.submit(item, pages: [Data([0xFF, 0xD8, 0xFF, 0x00])])
+        await store.submit(item, pages: [HomeworkPhoto(jpeg: Data([0xFF, 0xD8, 0xFF, 0x00]))])
         XCTAssertEqual(store.outbox.count, 1)
         XCTAssertEqual(store.homework[id]?.status, "SUBMITTED", "shown as handed in while offline")
         XCTAssertNil(store.errorMessage, "being offline is not an error")

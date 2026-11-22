@@ -32,6 +32,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import cn.littlebear.tutor.BuildConfig
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /** App entry: role choice and pairing until this device is connected, then the parent or child app. */
 @Composable fun HomeworkApp(store: HomeworkStore) {
@@ -41,10 +43,17 @@ import cn.littlebear.tutor.BuildConfig
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             // In the foreground: sync, then hold a request open until the server has news. Long polling stands in for
             // push notifications (FCM is unavailable on many devices in mainland China); stopped when the app leaves the foreground.
+            // On the parent's phone each sync also starts downloading the photos waiting for review alongside (one run at a
+            // time, cancelled with the loop); the child's device does not prefetch.
             LaunchedEffect(state.session?.deviceId) {
                 if (state.session == null) return@LaunchedEffect
                 lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                    while (true) { store.sync(); store.waitForChanges() }
+                    var prefetching: Job? = null
+                    while (true) {
+                        store.sync()
+                        if (store.state.value.session?.isParent == true && prefetching?.isActive != true) prefetching = launch { store.prefetch() }
+                        store.waitForChanges()
+                    }
                 }
             }
             Surface(Modifier.fillMaxSize(), color = Palette.paper) {

@@ -96,6 +96,68 @@ struct PhotoStore {
         }
         return nil
     }
+
+    // MARK: Homework photos (phase 1)
+
+    /// A homework page is read on a phone: 1400 px on the long side at quality 0.7 keeps handwriting legible at about
+    /// a quarter of the bytes of `gatewayJPEG` (a real page went from 1.2 MB to about 300 KB).
+    static let homeworkLongSide: CGFloat = 1400
+    static let homeworkQuality = 0.7
+    /// What `PUT /v1/files/<id>` accepts for an image, with room to spare.
+    static let homeworkMaxBytes = 2_000_000
+    /// The list thumbnail uploaded next to each photo (`PUT /v1/files/<id>/thumb`, at most 300 KB on the server).
+    static let thumbnailLongSide: CGFloat = 480
+    static let thumbnailQuality = 0.6
+    static let thumbnailMaxBytes = 300_000
+
+    /// A photo prepared for a homework upload: the page itself and its list thumbnail.
+    static func homeworkPhoto(_ image: UIImage) -> HomeworkPhoto? {
+        guard let page = render(image, longSide: homeworkLongSide) else { return nil }
+        guard let jpeg = encode(page, from: homeworkQuality, maxBytes: homeworkMaxBytes) else { return nil }
+        // Drawn from the page (not the camera original), so both have the same aspect ratio and a red-pen overlay drawn
+        // over the page lines up over the thumbnail too.
+        let thumbnail = render(page, longSide: thumbnailLongSide).flatMap { encode($0, from: thumbnailQuality, maxBytes: thumbnailMaxBytes) }
+        return HomeworkPhoto(jpeg: jpeg, thumbnail: thumbnail)
+    }
+
+    static func homeworkJPEG(_ image: UIImage) -> Data? {
+        render(image, longSide: homeworkLongSide).flatMap { encode($0, from: homeworkQuality, maxBytes: homeworkMaxBytes) }
+    }
+
+    static func homeworkThumbnail(_ image: UIImage) -> Data? {
+        render(image, longSide: thumbnailLongSide).flatMap { encode($0, from: thumbnailQuality, maxBytes: thumbnailMaxBytes) }
+    }
+
+    /// Redraws upright (`UIImage.draw` applies the EXIF orientation) at most `longSide` px on the long side, 8-bit sRGB, opaque.
+    static func render(_ image: UIImage, longSide: CGFloat) -> UIImage? {
+        let longest = max(image.size.width, image.size.height) * image.scale
+        guard longest > 0 else { return nil }
+        let factor = min(1, longSide / longest) * image.scale
+        let size = CGSize(width: max(1, (image.size.width * factor).rounded()), height: max(1, (image.size.height * factor).rounded()))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        format.preferredRange = .standard
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
+    /// Starts at `quality` and steps down only if the JPEG is still over `maxBytes`.
+    static func encode(_ image: UIImage, from quality: Double, maxBytes: Int) -> Data? {
+        for q in stride(from: quality, through: 0.2, by: -0.1) {
+            if let data = image.jpegData(compressionQuality: q), data.count <= maxBytes { return data }
+        }
+        return nil
+    }
+}
+
+/// A homework photo ready to upload: the JPEG page and, when it could be made, its small list thumbnail.
+struct HomeworkPhoto: Hashable, Sendable {
+    var jpeg: Data
+    var thumbnail: Data?
 }
 
 enum PhotoError: LocalizedError {

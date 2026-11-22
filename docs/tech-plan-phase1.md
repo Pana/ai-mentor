@@ -109,6 +109,7 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 | `GET/POST/PATCH/DELETE /routines` | parent（读：全部） | 每天坚持 |
 | `PUT /files/:id` | 全部 | 上传一个文件，`Content-Type` 为 `image/jpeg`、`audio/mp4`、`video/mp4` 或 `application/octet-stream`（批注）；边收边写盘 |
 | `GET /files/:id` | 全部 | 下载文件，只能下载自己家庭的；支持 `Range`，视频可以边下边播 |
+| `PUT /files/:id/thumb`、`GET /files/:id/thumb` | 全部 | 照片的缩略图，由上传照片的 App 生成（服务端没有图片解码），列表先显示它；没有时 404，App 改为加载原图 |
 | `POST /homework/:id/submissions` | child | 提交，引用已上传的文件 ID |
 | `POST /submissions/:id/review` | parent | 批改：评分、评语、批注文件、是否要求订正 |
 | `GET/PUT /reward-rules` | parent（读：全部） | 奖励规则 |
@@ -116,7 +117,7 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 | `POST /rewards/sessions` | child | 开始使用奖励时间，服务端检查规则后扣减并返回可用分钟数 |
 | `GET /changes?since=<seq>` | 全部 | 增量同步，见 2.8 |
 
-上传大小限制：照片单张 2MB（JPEG，客户端缩放压缩），录音单条 10MB，视频单个 300MB（客户端压缩到 480p、约 0.8 Mbps，30 分钟约 200MB），单次提交最多 6 页。为了能传完大视频，服务端整个请求的超时是 30 分钟（请求头仍须 10 秒内到齐）。
+上传大小限制：照片单张 2MB（JPEG，客户端缩放压缩：作业照片长边 1400 像素、质量 70，一般 300KB 左右；另传一张长边 480 像素的缩略图），录音单条 10MB，视频单个 300MB（客户端压缩到 480p、约 0.8 Mbps，30 分钟约 200MB），单次提交最多 6 页。为了能传完大视频，服务端整个请求的超时是 30 分钟（请求头仍须 10 秒内到齐）。
 
 ### 2.7 AI 整理作业：`POST /homework/parse`
 
@@ -176,7 +177,7 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 ### 3.2 本机存储
 
 - 现在的 `Family` 本机 JSON 改为“服务端数据的缓存 + 待上传队列”，保留读取旧数据的兼容，首次登录后提示家长是否把旧的本机作业上传（或直接丢弃示例数据）。
-- 照片和录音缓存在 App 的 Caches 目录，按文件 ID 命名。
+- 照片和录音缓存在 App 的 Caches 目录，按文件 ID 命名。家长端同步后在后台预先下载等批改作业的缩略图和照片，打开时不用再等下载。
 
 ### 3.3 家长端要点
 

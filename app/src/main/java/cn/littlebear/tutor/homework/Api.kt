@@ -321,6 +321,12 @@ class ApiClient(val baseUrl: String, val token: String?, private val transport: 
         raw(uploadRequest(fileId, file, mime, onProgress))
     }
     suspend fun download(fileId: String): ByteArray = raw(request("GET", "v1/files/${fileId.lowercase()}"))
+    /** A photo's list thumbnail (JPEG, ≤ 300 KB); only after the photo itself is uploaded (404 `file_not_found` before). */
+    suspend fun uploadThumb(fileId: String, data: ByteArray) {
+        raw(request("PUT", "v1/files/${fileId.lowercase()}/thumb", body = data.toRequestBody("image/jpeg".toMediaType())))
+    }
+    /** 404 (`thumb_not_found`) for a photo from an app version that made no thumbnail: load the photo instead. */
+    suspend fun downloadThumb(fileId: String): ByteArray = raw(request("GET", "v1/files/${fileId.lowercase()}/thumb"))
     /** Where a player streams a file from (with [token] as a Bearer header; the server answers Range requests). */
     fun fileUrl(fileId: String): String = baseUrl.trimEnd('/') + "/v1/files/${fileId.lowercase()}"
 }

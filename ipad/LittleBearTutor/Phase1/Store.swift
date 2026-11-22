@@ -100,7 +100,13 @@ enum Day {
 // MARK: - Offline submission queue (child iPad)
 
 /// A file waiting in `outbox/`; only its name is queued (never its bytes), so a 200 MB video costs nothing in the cache.
-struct PendingFile: Codable, Hashable, Sendable { var fileId: UUID; var localName: String; var mime: String }
+/// A photo may carry `thumbName`, its list thumbnail in `outbox/`, uploaded right after it (absent in queues from older versions).
+struct PendingFile: Codable, Hashable, Sendable {
+    var fileId: UUID
+    var localName: String
+    var mime: String
+    var thumbName: String? = nil
+}
 struct PendingSubmission: Codable, Identifiable, Hashable, Sendable {
     var id: UUID              // submission id; the server treats a retry with the same id as the same submission
     var homeworkId: UUID
@@ -152,6 +158,17 @@ private struct Cache: Codable {
     private let transport: HTTPTransport
     private let uploadTransport: UploadTransport
     private var syncAgain = false
+    /// Photos the server has no thumbnail for (uploaded by an older app): lists load the photo itself. Only for this run.
+    private var missingThumbnails: Set<UUID> = []
+    /// Parent device: the background download of photos the parent is about to open (see `prefetch`).
+    private(set) var prefetchTask: Task<Void, Never>?
+    /// Failed prefetch downloads by "thumb:<id>" / "file:<id>"; after `prefetchAttempts` failures prefetching gives the
+    /// file up for this run (opening the page still tries).
+    private var prefetchFailures: [String: Int] = [:]
+    static let prefetchAttempts = 2
+    private var prefetchGeneration = 0
+    /// Whether the app is in the foreground; prefetching stops when it is not.
+    private var appActive = true
 
     init(directory: URL? = nil, sessions: SessionStore = SessionStore(), transport: @escaping HTTPTransport = APIClient.urlSession,
          uploadTransport: @escaping UploadTransport = APIClient.urlSessionUpload) {
@@ -221,6 +238,8 @@ private struct Cache: Codable {
         cursor = 0; family = nil; children = []; homework = [:]; routines = []; rules = RewardRules(); rewards = [:]; locks = []
         for item in outbox { removeLocalFiles(item) }
         outbox = []
+        prefetchTask?.cancel(); prefetchTask = nil
+        prefetchFailures = [:]; missingThumbnails = []
         uploadProgress = [:]
         albumSaves = [:]
         lastSynced = nil
@@ -243,6 +262,7 @@ private struct Cache: Codable {
                 for item in try await api.homework(from: today, to: today) { homework[item.id] = item }
                 lastSynced = Date()
                 saveCache()
+                startPrefetch()
             } catch APIError.unauthorized {
                 signedOut = true
                 errorMessage = APIError.unauthorized.errorDescription
@@ -335,9 +355,17 @@ private struct Cache: Codable {
     // MARK: Child: submissions (queued, so a submission made offline is sent later)
 
     /// `video` is a compressed `.mp4` on disk; it is moved into the queue, never read into memory.
-    func submit(_ item: RemoteHomework, pages: [Data] = [], audio: Data? = nil, video: URL? = nil, durationSeconds: Int? = nil) async {
+    /// `pages` come from `PhotoStore.homeworkPhoto`; each page's thumbnail is queued next to it.
+    func submit(_ item: RemoteHomework, pages: [HomeworkPhoto] = [], audio: Data? = nil, video: URL? = nil, durationSeconds: Int? = nil) async {
         var files: [PendingFile] = []
-        for page in pages { files.append(storeOutboxFile(page, mime: "image/jpeg", ext: "jpg")) }
+        for page in pages {
+            var file = storeOutboxFile(page.jpeg, mime: "image/jpeg", ext: "jpg")
+            if let thumbnail = page.thumbnail {
+                let name = "\(file.fileId.uuidString).thumb.jpg"
+                if (try? thumbnail.write(to: outboxURL(name), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])) != nil { file.thumbName = name }
+            }
+            files.append(file)
+        }
         if let audio { files.append(storeOutboxFile(audio, mime: "audio/mp4", ext: "m4a")) }
         if let video {
             guard let file = moveIntoOutbox(video, mime: "video/mp4", ext: "mp4") else { return }
@@ -376,7 +404,10 @@ private struct Cache: Codable {
     func noteAlbumSave(_ homeworkId: UUID, saved: Bool) { albumSaves[homeworkId] = saved }
 
     private func removeLocalFiles(_ item: PendingSubmission) {
-        for file in item.files { try? FileManager.default.removeItem(at: directory.appendingPathComponent("outbox").appendingPathComponent(file.localName)) }
+        for file in item.files {
+            try? FileManager.default.removeItem(at: outboxFileURL(file))
+            if let thumb = file.thumbName { try? FileManager.default.removeItem(at: outboxURL(thumb)) }
+        }
     }
 
     private func flushOutbox(_ api: APIClient) async throws {
@@ -401,7 +432,8 @@ private struct Cache: Codable {
                     done += size
                     // Photos and recordings stay cached for viewing offline; a video is streamed from the server instead of
                     // keeping 200 MB per day on the iPad (the child's own copy is in the photo library).
-                    if !file.mime.hasPrefix("video/") { cacheUploaded(url, as: file.fileId) }
+                    if !file.mime.hasPrefix("video/") { cacheUploaded(url, to: cachedFileURL(file.fileId)) }
+                    if let thumb = file.thumbName { await uploadThumbnail(api, of: file.fileId, from: outboxURL(thumb)) }
                 }
                 let body = Body(id: item.id, fileIds: item.files.map(\.fileId), submittedAt: ISO8601DateFormatter().string(from: item.submittedAt), durationSeconds: item.durationSeconds)
                 let updated: RemoteHomework = try await api.send("POST", "v1/homework/\(item.homeworkId.uuidString.lowercased())/submissions", json: body)
@@ -421,10 +453,23 @@ private struct Cache: Codable {
     }
 
     /// A hard link costs no extra space and outlives the outbox copy; copy when linking is not possible.
-    private func cacheUploaded(_ url: URL, as id: UUID) {
-        let target = cachedFileURL(id)
+    private func cacheUploaded(_ url: URL, to target: URL) {
         guard !FileManager.default.fileExists(atPath: target.path) else { return }
         do { try FileManager.default.linkItem(at: url, to: target) } catch { try? FileManager.default.copyItem(at: url, to: target) }
+    }
+
+    /// Sends a photo's list thumbnail after the photo itself. Optional: a failure is skipped and never holds up the
+    /// submission (lists then load the photo, as for photos from older versions).
+    private func uploadThumbnail(_ api: APIClient, of photo: UUID, from url: URL) async {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return }
+        do {
+            try await api.uploadThumbnail(fileId: photo, data: data)
+            cacheUploaded(url, to: cachedThumbnailURL(photo))
+        } catch {
+            #if DEBUG
+            print("[homework] thumbnail upload skipped for \(photo): \(error)")
+            #endif
+        }
     }
 
     private func finish(_ item: PendingSubmission) {
@@ -474,14 +519,24 @@ private struct Cache: Codable {
         return try await call("POST", "v1/homework/parse", json: Body(text: text, date: today))
     }
 
-    /// Uploads JPEG attachments and returns their file ids.
-    func uploadImages(_ images: [Data]) async throws -> [UUID] {
+    /// Uploads JPEG attachments (each followed by its thumbnail, when it has one) and returns their file ids.
+    func uploadImages(_ images: [HomeworkPhoto]) async throws -> [UUID] {
         guard let api = client else { throw APIError.invalidServer }
         var ids: [UUID] = []
         for image in images {
             let id = UUID()
-            try await api.upload(fileId: id, data: image, mime: "image/jpeg")
-            try? image.write(to: cachedFileURL(id))
+            try await api.upload(fileId: id, data: image.jpeg, mime: "image/jpeg")
+            try? image.jpeg.write(to: cachedFileURL(id))
+            if let thumbnail = image.thumbnail {
+                do {
+                    try await api.uploadThumbnail(fileId: id, data: thumbnail)
+                    try? thumbnail.write(to: cachedThumbnailURL(id))
+                } catch {
+                    #if DEBUG
+                    print("[homework] thumbnail upload skipped for \(id): \(error)")
+                    #endif
+                }
+            }
             ids.append(id)
         }
         return ids
@@ -551,7 +606,103 @@ private struct Cache: Codable {
         return data
     }
 
-    func outboxFileURL(_ file: PendingFile) -> URL { directory.appendingPathComponent("outbox").appendingPathComponent(file.localName) }
+    /// A photo's list thumbnail, cached apart from the photo (`<id>.thumb`).
+    func cachedThumbnailURL(_ id: UUID) -> URL { directory.appendingPathComponent("files").appendingPathComponent("\(id.uuidString).thumb") }
+
+    /// For lists and other small previews: the thumbnail when there is one, otherwise the photo itself (a photo from an
+    /// older app has no thumbnail, `404 thumb_not_found`). A photo already on the device is used as is, with no download.
+    func thumbnailData(_ id: UUID) async throws -> Data {
+        if let data = try? Data(contentsOf: cachedThumbnailURL(id)) { return data }
+        if let data = try? Data(contentsOf: cachedFileURL(id)) { return data }
+        if !missingThumbnails.contains(id) {
+            guard let api = client else { throw APIError.invalidServer }
+            do {
+                let data = try await api.downloadThumbnail(fileId: id)
+                try? data.write(to: cachedThumbnailURL(id), options: .atomic)
+                return data
+            } catch APIError.notFound {
+                missingThumbnails.insert(id)
+            } catch APIError.rejected {
+                missingThumbnails.insert(id)
+            }
+        }
+        return try await fileData(id)
+    }
+
+    func outboxFileURL(_ file: PendingFile) -> URL { outboxURL(file.localName) }
+    func outboxThumbnailURL(_ file: PendingFile) -> URL? { file.thumbName.map(outboxURL) }
+    private func outboxURL(_ name: String) -> URL { directory.appendingPathComponent("outbox").appendingPathComponent(name) }
+
+    // MARK: Prefetch (parent device)
+
+    /// Photos the parent is likely to open next, most urgent first: the pages of submissions waiting for review, then
+    /// the pictures attached to homework from the last `recentDays` days on. Only photos: recordings and videos are skipped.
+    nonisolated static func prefetchTargets(_ items: [RemoteHomework], today: String, recentDays: Int = 7) -> [UUID] {
+        var ids: [UUID] = [], seen = Set<UUID>()
+        func add(_ id: UUID) { if seen.insert(id).inserted { ids.append(id) } }
+        let waiting = items.filter { $0.awaitingReview && $0.isOffline }
+            .sorted { ($0.latest?.receivedAt ?? "", $0.id.uuidString) > ($1.latest?.receivedAt ?? "", $1.id.uuidString) }
+        for item in waiting { item.latest?.fileIds.forEach(add) }
+        let from = Day.add(today, -recentDays)
+        for item in items.filter({ $0.date >= from && !$0.attachmentIds.isEmpty }).sorted(by: { ($0.date, $0.id.uuidString) > ($1.date, $1.id.uuidString) }) {
+            item.attachmentIds.forEach(add)
+        }
+        return ids
+    }
+
+    /// Tells the store whether the app is in the foreground; going to the background stops prefetching.
+    func setActive(_ active: Bool) {
+        appActive = active
+        if !active { prefetchTask?.cancel(); prefetchTask = nil }
+    }
+
+    /// After a sync on the parent's phone: download, one at a time, the thumbnails and then the photos the parent is
+    /// about to open into the disk cache, so the first open is instant. Skips what is cached and what already failed.
+    private func startPrefetch() {
+        guard session?.isParent == true, appActive, prefetchTask == nil, client != nil else { return }
+        let targets = Self.prefetchTargets(Array(homework.values), today: today)
+        guard !targets.isEmpty else { return }
+        prefetchGeneration += 1
+        let generation = prefetchGeneration
+        prefetchTask = Task { [weak self] in
+            await self?.prefetch(targets)
+            if let self, self.prefetchGeneration == generation { self.prefetchTask = nil }
+        }
+    }
+
+    private func prefetch(_ ids: [UUID]) async {
+        let fm = FileManager.default
+        func gaveUp(_ key: String) -> Bool { prefetchFailures[key, default: 0] >= Self.prefetchAttempts }
+        // Thumbnails first so every list fills in quickly, then the full pages for review. A network error ends this
+        // round (the next sync starts another); it still counts against the file so one bad file is not retried forever.
+        for id in ids {
+            guard appActive, session != nil, !Task.isCancelled, let api = client else { return }
+            if missingThumbnails.contains(id) || gaveUp("thumb:\(id)") { continue }
+            if fm.fileExists(atPath: cachedThumbnailURL(id).path) || fm.fileExists(atPath: cachedFileURL(id).path) { continue }
+            do {
+                let data = try await api.downloadThumbnail(fileId: id)
+                try? data.write(to: cachedThumbnailURL(id), options: .atomic)
+            } catch APIError.notFound { missingThumbnails.insert(id) }
+            catch APIError.rejected { missingThumbnails.insert(id) }
+            catch is CancellationError { return }
+            catch {
+                prefetchFailures["thumb:\(id)", default: 0] += 1
+                if error as? APIError == .network { return }
+            }
+        }
+        for id in ids {
+            guard appActive, session != nil, !Task.isCancelled, let api = client else { return }
+            if gaveUp("file:\(id)") || fm.fileExists(atPath: cachedFileURL(id).path) { continue }
+            do {
+                let data = try await api.download(fileId: id)
+                try? data.write(to: cachedFileURL(id), options: .atomic)
+            } catch is CancellationError { return }
+            catch {
+                prefetchFailures["file:\(id)", default: 0] += 1
+                if error as? APIError == .network { return }
+            }
+        }
+    }
 
     // MARK: Cache
 
