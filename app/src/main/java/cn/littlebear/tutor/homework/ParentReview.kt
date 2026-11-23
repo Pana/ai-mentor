@@ -6,8 +6,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -22,15 +25,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -47,12 +55,13 @@ enum class MarkTool(val label: String) { PEN("红笔"), CHECK("打勾"), CIRCLE(
 /** Marks per page with an undo history; exported as one transparent PNG per page with the photo's aspect ratio. */
 class AnnotationModel {
     val strokes = mutableStateMapOf<Int, List<List<Offset>>>()
-    private val history = mutableMapOf<Int, MutableList<List<List<Offset>>>>()
+    // Snapshot state, so the 撤销 button (which reads canUndo) turns on and off as marks are added and undone.
+    private val history = mutableStateMapOf<Int, List<List<List<Offset>>>>()
     val aspect = mutableMapOf<Int, Float>()   // photo width / height
 
     fun add(page: Int, stroke: List<Offset>) {
         if (stroke.size < 2) return
-        history.getOrPut(page) { mutableListOf() }.add(strokes[page] ?: emptyList())
+        history[page] = history[page].orEmpty() + listOf(strokes[page] ?: emptyList())
         strokes[page] = (strokes[page] ?: emptyList()) + listOf(stroke)
     }
 
@@ -70,7 +79,12 @@ class AnnotationModel {
     }
 
     fun canUndo(page: Int) = history[page]?.isNotEmpty() == true
-    fun undo(page: Int) { history[page]?.removeLastOrNull()?.let { strokes[page] = it } }
+    fun undo(page: Int) {
+        val past = history[page].orEmpty()
+        if (past.isEmpty()) return
+        strokes[page] = past.last()
+        history[page] = past.dropLast(1)
+    }
     val isEmpty get() = strokes.values.all { it.isEmpty() }
 
     /** One PNG per page (so overlays line up with pages by index), or none when nothing was marked. */
@@ -95,8 +109,49 @@ class AnnotationModel {
     }
 }
 
-/** One submitted page fitted to the box, with the drawing layer exactly on top of the photo. */
-@Composable private fun AnnotatePage(fileId: String, page: Int, model: AnnotationModel, tool: MarkTool) {
+/** How far one page is zoomed while marking it: 1…5×, moved by [offset] px from the centred position. */
+class PageZoom {
+    var scale by mutableFloatStateOf(1f); private set
+    var offset by mutableStateOf(Offset.Zero); private set
+    val zoomed get() = scale > 1.01f
+
+    fun reset() { scale = 1f; offset = Offset.Zero }
+
+    /** A pinch: zoom by [factor] around [centroid] and move by [pan] (all in the viewport's pixels). */
+    fun pinch(centroid: Offset, factor: Float, pan: Offset, viewport: Size, page: Size) {
+        val next = (scale * factor).coerceIn(1f, MAX_ZOOM)
+        val c = centroid - Offset(viewport.width / 2, viewport.height / 2)
+        // Keep the point under the fingers in place while zooming.
+        offset = clamp(c - (c - offset) * (next / scale) + pan, next, viewport, page)
+        scale = next
+    }
+
+    fun pan(by: Offset, viewport: Size, page: Size) { offset = clamp(offset + by, scale, viewport, page) }
+
+    /** A screen point in the viewport → a point on the page (0…1 of its width and height). */
+    fun toPage(p: Offset, viewport: Size, page: Size): Offset {
+        val local = (p - Offset(viewport.width / 2, viewport.height / 2) - offset) / scale + Offset(page.width / 2, page.height / 2)
+        return Offset(local.x / page.width, local.y / page.height)
+    }
+
+    // The zoomed page may move until its edge reaches the viewport's edge, and stays centred along a side it doesn't fill.
+    private fun clamp(o: Offset, scale: Float, viewport: Size, page: Size): Offset {
+        val x = maxOf(0f, (page.width * scale - viewport.width) / 2)
+        val y = maxOf(0f, (page.height * scale - viewport.height) / 2)
+        return Offset(o.x.coerceIn(-x, x), o.y.coerceIn(-y, y))
+    }
+
+    companion object { const val MAX_ZOOM = 5f }
+}
+
+private enum class Touch { DRAW, TAP, PAN, PINCH, NONE }
+
+/**
+ * One submitted page fitted to the box, with the drawing layer exactly on top of the photo.
+ * One finger draws (红笔) or stamps (打勾/圈出); two fingers zoom and move the page. When zoomed, one finger with a
+ * stamp tool moves the page; when not zoomed, it is left to the pager to turn pages.
+ */
+@Composable private fun AnnotatePage(fileId: String, page: Int, model: AnnotationModel, tool: MarkTool, zoom: PageZoom) {
     val result by rememberRemoteBitmap(fileId)
     val bitmap = result?.getOrNull()
     BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.Center) {
@@ -104,24 +159,61 @@ class AnnotationModel {
         val ratio = bitmap.width.toFloat() / bitmap.height
         SideEffect { model.aspect[page] = ratio }
         val w = if (maxWidth / maxHeight > ratio) maxHeight * ratio else maxWidth
-        Box(Modifier.size(w, w / ratio)) {
-            Image(bitmap, "第 ${page + 1} 页", Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
-            var live by remember { mutableStateOf<List<Offset>>(emptyList()) }
-            Canvas(Modifier.fillMaxSize().semantics { contentDescription = "在这一页上${tool.label}" }.pointerInput(tool, page) {
-                if (tool == MarkTool.PEN) detectDragGestures(
-                    onDragStart = { live = listOf(Offset(it.x / size.width, it.y / size.height)) },
-                    onDrag = { change, _ -> live = live + Offset(change.position.x / size.width, change.position.y / size.height) },
-                    onDragEnd = { model.add(page, live); live = emptyList() },
-                    onDragCancel = { live = emptyList() })
-                else detectTapGestures { model.stamp(tool, Offset(it.x / size.width, it.y / size.height), page) }
+        val pageSize = with(LocalDensity.current) { Size(w.toPx(), (w / ratio).toPx()) }
+        var live by remember { mutableStateOf<List<Offset>>(emptyList()) }
+        Box(Modifier.fillMaxSize().clipToBounds().semantics { contentDescription = "在这一页上${tool.label}" }.pointerInput(tool, page, pageSize) {
+            awaitEachGesture {
+                val viewport = Size(size.width.toFloat(), size.height.toFloat())
+                val down = awaitFirstDown(requireUnconsumed = false)
+                var touch = if (tool == MarkTool.PEN) Touch.DRAW else Touch.TAP
+                if (touch == Touch.DRAW) { live = listOf(zoom.toPage(down.position, viewport, pageSize)); down.consume() }
+                var moved = Offset.Zero
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val pressed = event.changes.filter { it.pressed }
+                    if (pressed.isEmpty()) break
+                    if (pressed.size >= 2) {
+                        // A second finger turns any stroke in progress into a pinch, and the gesture stays a pinch until all fingers lift.
+                        touch = Touch.PINCH; live = emptyList()
+                        zoom.pinch(event.calculateCentroid(), event.calculateZoom(), event.calculatePan(), viewport, pageSize)
+                        event.changes.forEach { it.consume() }
+                        continue
+                    }
+                    val change = pressed.first()
+                    when (touch) {
+                        Touch.DRAW -> { live = live + zoom.toPage(change.position, viewport, pageSize); change.consume() }
+                        Touch.TAP -> {
+                            moved += change.positionChangeIgnoreConsumed()
+                            if (moved.getDistance() > viewConfiguration.touchSlop) touch = if (zoom.zoomed) Touch.PAN else Touch.NONE
+                        }
+                        Touch.PAN -> { zoom.pan(change.positionChangeIgnoreConsumed(), viewport, pageSize); change.consume() }
+                        Touch.PINCH, Touch.NONE -> Unit
+                    }
+                }
+                when (touch) {
+                    Touch.DRAW -> model.add(page, live)
+                    Touch.TAP -> model.stamp(tool, zoom.toPage(down.position, viewport, pageSize), page)
+                    else -> Unit
+                }
+                live = emptyList()
+            }
+        }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(w, w / ratio).graphicsLayer {
+                scaleX = zoom.scale; scaleY = zoom.scale; translationX = zoom.offset.x; translationY = zoom.offset.y
             }) {
-                val stroke = Stroke(size.width * 5f / 300f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                (model.strokes[page].orEmpty() + listOf(live)).forEach { points ->
-                    if (points.size < 2) return@forEach
-                    val path = Path().apply { points.forEachIndexed { i, o -> if (i == 0) moveTo(o.x * size.width, o.y * size.height) else lineTo(o.x * size.width, o.y * size.height) } }
-                    drawPath(path, Palette.redPen, style = stroke)
+                Image(bitmap, "第 ${page + 1} 页", Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+                Canvas(Modifier.fillMaxSize()) {
+                    val stroke = Stroke(size.width * 5f / 300f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    (model.strokes[page].orEmpty() + listOf(live)).forEach { points ->
+                        if (points.size < 2) return@forEach
+                        val path = Path().apply { points.forEachIndexed { i, o -> if (i == 0) moveTo(o.x * size.width, o.y * size.height) else lineTo(o.x * size.width, o.y * size.height) } }
+                        drawPath(path, Palette.redPen, style = stroke)
+                    }
                 }
             }
+        }
+        if (zoom.zoomed) Surface(onClick = zoom::reset, Modifier.align(Alignment.TopEnd).padding(8.dp), shape = RoundedCornerShape(50), color = Color.Black.copy(alpha = 0.6f)) {
+            Text("还原大小", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
         }
     }
 }
@@ -134,6 +226,7 @@ class AnnotationModel {
         return
     }
     val pager = rememberPagerState { submission.fileIds.size }
+    val zooms = remember(submission.id) { List(submission.fileIds.size) { PageZoom() } }
     var tool by remember { mutableStateOf(MarkTool.PEN) }
     Column(Modifier.fillMaxSize().background(Palette.night).systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -142,9 +235,9 @@ class AnnotationModel {
                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.width(64.dp))
         }
-        // Swiping pages only with the stamp tools; with the pen a drag draws.
-        HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth(), userScrollEnabled = tool != MarkTool.PEN) { page ->
-            AnnotatePage(submission.fileIds[page], page, marks, tool)
+        // Swiping pages only with the stamp tools on an unzoomed page; with the pen a drag draws, on a zoomed page it moves the page.
+        HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth(), userScrollEnabled = tool != MarkTool.PEN && zooms.getOrNull(pager.currentPage)?.zoomed != true) { page ->
+            AnnotatePage(submission.fileIds[page], page, marks, tool, zooms[page])
         }
         Column(Modifier.fillMaxWidth().background(Palette.nightBar).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -160,7 +253,8 @@ class AnnotationModel {
                 }
                 TextButton({ marks.undo(pager.currentPage) }, enabled = marks.canUndo(pager.currentPage)) { Text("撤销", color = Palette.onNight) }
             }
-            if (submission.fileIds.size > 1 && tool == MarkTool.PEN) Text("用打勾或圈出工具时可以左右滑动翻页", color = Palette.onNight, fontSize = 12.sp)
+            Text(if (submission.fileIds.size > 1 && tool == MarkTool.PEN) "两指张开放大看细节 · 用打勾或圈出工具时可以左右滑动翻页" else "两指张开放大看细节",
+                color = Palette.onNight, fontSize = 12.sp)
             PrimaryButton("下一步：打分", Modifier.fillMaxWidth(), height = 50.dp) { grading = true }
         }
     }
