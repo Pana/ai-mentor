@@ -57,51 +57,115 @@ enum MarkTool: String, CaseIterable, Identifiable {
     }
 }
 
+/// The canvas with the page photo inside it, so pinching zooms the photo and the red pen together.
+/// The drawing stays in unzoomed page points; `contentSize` and the photo follow the zoom, as PencilKit expects.
+final class PageCanvasView: PKCanvasView {
+    let imageView = UIImageView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        imageView.contentMode = .scaleToFill
+        insertSubview(imageView, at: 0)
+    }
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        fit()
+    }
+
+    func fit() {
+        let size = CGSize(width: bounds.width * zoomScale, height: bounds.height * zoomScale)
+        if contentSize != size { contentSize = size }
+        if imageView.frame != CGRect(origin: .zero, size: size) { imageView.frame = CGRect(origin: .zero, size: size) }
+        // PencilKit adds its own views lazily; the photo must stay under the ink.
+        if subviews.first !== imageView { sendSubviewToBack(imageView) }
+    }
+}
+
 struct AnnotationCanvas: UIViewRepresentable {
     @ObservedObject var model: AnnotationModel
     let page: Int
     let tool: MarkTool
+    let image: UIImage
+    @Binding var zoomed: Bool
+    let resetToken: Int
 
     static let ink = PKInkingTool(.pen, color: UIColor(red: 0.82, green: 0.24, blue: 0.17, alpha: 1), width: 5)
+    static let maxZoom: CGFloat = 5
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIView(context: Context) -> PKCanvasView {
-        let canvas = PKCanvasView()
+    func makeUIView(context: Context) -> PageCanvasView {
+        let canvas = PageCanvasView()
         canvas.drawingPolicy = .anyInput
         canvas.tool = Self.ink
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
-        canvas.isScrollEnabled = false
+        canvas.minimumZoomScale = 1
+        canvas.maximumZoomScale = Self.maxZoom
+        canvas.showsHorizontalScrollIndicator = false
+        canvas.showsVerticalScrollIndicator = false
         canvas.delegate = context.coordinator
+        canvas.imageView.image = image
+        // Stamps go through UIKit so they land in the canvas's zoomed coordinates and don't block pinching.
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
+        canvas.addGestureRecognizer(tap)
+        context.coordinator.tap = tap
         return canvas
     }
 
-    func updateUIView(_ canvas: PKCanvasView, context: Context) {
-        context.coordinator.parent = self
+    func updateUIView(_ canvas: PageCanvasView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.parent = self
         canvas.drawingGestureRecognizer.isEnabled = tool == .pen
+        coordinator.tap?.isEnabled = tool != .pen
+        // With the pen one finger draws, so moving a zoomed page takes two; with a stamp tool one finger moves it.
+        canvas.panGestureRecognizer.minimumNumberOfTouches = tool == .pen ? 2 : 1
+        if canvas.imageView.image !== image { canvas.imageView.image = image }
+        if coordinator.resetToken != resetToken {
+            coordinator.resetToken = resetToken
+            canvas.setZoomScale(1, animated: true)
+        }
         let drawing = model.drawings[page] ?? PKDrawing()
         if canvas.drawing != drawing {
-            context.coordinator.applying = true
+            coordinator.applying = true
             canvas.drawing = drawing
-            context.coordinator.applying = false
+            coordinator.applying = false
         }
     }
 
     @MainActor final class Coordinator: NSObject, PKCanvasViewDelegate {
         var parent: AnnotationCanvas
         var applying = false
-        init(_ parent: AnnotationCanvas) { self.parent = parent }
+        var resetToken = 0
+        weak var tap: UITapGestureRecognizer?
+        init(_ parent: AnnotationCanvas) {
+            self.parent = parent
+            resetToken = parent.resetToken
+        }
 
         func canvasViewDrawingDidChange(_ canvas: PKCanvasView) {
             guard !applying, canvas.drawing != parent.model.drawings[parent.page] else { return }
             parent.model.set(canvas.drawing, page: parent.page)
         }
 
+        @objc func tapped(_ recognizer: UITapGestureRecognizer) {
+            guard let canvas = recognizer.view as? PKCanvasView else { return }
+            let p = recognizer.location(in: canvas)   // zoomed content coordinates
+            let zoom = canvas.zoomScale
+            parent.model.stamp(parent.tool, at: CGPoint(x: p.x / zoom, y: p.y / zoom), page: parent.page)
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            (scrollView as? PageCanvasView)?.fit()
+            let zoomed = scrollView.zoomScale > 1.01
+            if zoomed != parent.zoomed { Task { @MainActor in self.parent.zoomed = zoomed } }
+        }
     }
 }
 
-/// One submitted page sized to the photo, with the drawing layer exactly on top of it.
+/// One submitted page sized to the photo, with the drawing layer exactly on top of it. Two fingers zoom in.
 struct AnnotatePage: View {
     @EnvironmentObject private var store: HomeworkStore
     let fileId: UUID
@@ -109,25 +173,32 @@ struct AnnotatePage: View {
     @ObservedObject var model: AnnotationModel
     let tool: MarkTool
     @State private var image: UIImage?
+    @State private var zoomed = false
+    @State private var resetToken = 0
 
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image).resizable().aspectRatio(contentMode: .fit)
-                    .accessibilityIdentifier("review-page")
+                Color.clear.aspectRatio(image.size, contentMode: .fit)
                     .overlay(GeometryReader { geo in
-                        ZStack {
-                            AnnotationCanvas(model: model, page: page, tool: tool)
-                            // Stamps are placed by a plain SwiftUI tap, which nothing inside PencilKit can swallow.
-                            if tool != .pen {
-                                Color.clear.contentShape(Rectangle())
-                                    .onTapGesture(coordinateSpace: .local) { point in model.stamp(tool, at: point, page: page) }
-                                    .accessibilityLabel("在这一页上\(tool.label)")
-                            }
-                        }
-                        .onAppear { model.sizes[page] = geo.size }
-                        .onChange(of: geo.size) { _, size in model.sizes[page] = size }
+                        AnnotationCanvas(model: model, page: page, tool: tool, image: image, zoomed: $zoomed, resetToken: resetToken)
+                            .onAppear { model.sizes[page] = geo.size }
+                            .onChange(of: geo.size) { _, size in model.sizes[page] = size }
                     })
+                    // The photo view inside the canvas isn't reachable by accessibility, so the page as a whole is the image.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityAddTraits(.isImage)
+                    .accessibilityLabel("第 \(page + 1) 页，在这一页上\(tool.label)")
+                    .accessibilityIdentifier("review-page")
+                    .overlay(alignment: .topTrailing) {
+                        if zoomed {
+                            Button("还原大小") { resetToken += 1 }
+                                .font(.subheadline).foregroundStyle(.white)
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Color.black.opacity(0.6), in: Capsule())
+                                .padding(8)
+                        }
+                    }
             } else { ProgressView().tint(.white) }
         }
         .task { if let data = try? await store.fileData(fileId) { image = UIImage(data: data) } }
@@ -179,8 +250,11 @@ struct ReviewFlow: View {
                     }
                     Button { marks.undo(page) } label: {
                         VStack(spacing: 2) { Image(systemName: "arrow.uturn.backward").font(.title3); Text("撤销").font(.caption2) }.frame(width: 60, height: 52).foregroundStyle(Color(hex: 0xD9D2C5))
-                    }.disabled(!marks.canUndo(page))
+                    }
+                    .accessibilityIdentifier("tool-undo")
+                    .disabled(!marks.canUndo(page))
                 }
+                Text("两指张开放大看细节").font(.caption).foregroundStyle(Color(hex: 0xD9D2C5))
                 Button("下一步：打分") { grading = true }.buttonStyle(PrimaryButtonStyle(height: 50)).frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8).background(Color(hex: 0x26241F))

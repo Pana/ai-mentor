@@ -43,8 +43,9 @@ final class Phase1E2EUITests: XCTestCase {
         app.secureTextFields["家长密钥"].typeText(env["E2E_PARENT_SECRET"]!)
         app.buttons["连接"].waitTap()
         wait(app.navigationBars["作业"], "parent app opened")
+        // iOS offers to save the parent secret as a password; the sheet can take several seconds to appear.
         let notNow = app.buttons["Not Now"]
-        if notNow.waitForExistence(timeout: 3) { notNow.tap() }
+        if notNow.waitForExistence(timeout: 10) { notNow.tap() }
         shot(app, "p1-empty")
 
         app.buttons["设置"].waitTap()
@@ -89,6 +90,9 @@ final class Phase1E2EUITests: XCTestCase {
         replace(app.textFields["服务器地址"], with: env["E2E_SERVER"]!)
         app.textFields["6 位配对码"].waitTap()
         app.textFields["6 位配对码"].typeText(env["E2E_PAIR_CODE"]!)
+        // With the simulator's on-screen keyboard up, “连接” can be under it and the tap goes nowhere.
+        let hide = app.keyboards.buttons["Hide keyboard"]
+        if hide.exists { hide.tap() }
         app.buttons["连接"].waitTap()
         let me = app.buttons.matching(NSPredicate(format: "label CONTAINS '林林'")).firstMatch
         wait(me, "profile picker", timeout: 30)
@@ -125,7 +129,21 @@ final class Phase1E2EUITests: XCTestCase {
         XCTAssertTrue(app.buttons["tool-check"].isSelected, "check tool selected")
         page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
         app.buttons["tool-circle"].waitTap()
+        let undo = app.buttons["tool-undo"]
+        XCTAssertTrue(undo.isEnabled, "one mark to undo")
+        app.buttons["tool-undo"].waitTap()
+        XCTAssertFalse(undo.isEnabled, "undo took the check away, nothing left to undo")
+        app.buttons["tool-check"].waitTap()
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
+        app.buttons["tool-circle"].waitTap()
         page.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.6)).tap()
+        // Zoom in to look closer, then back.
+        page.pinch(withScale: 2.5, velocity: 3)
+        let reset = app.buttons["还原大小"]
+        wait(reset, "zoomed in")
+        shot(app, "p6b-zoomed")
+        reset.waitTap()
+        XCTAssertTrue(reset.waitForNonExistence(timeout: 5), "back to normal size")
         shot(app, "p6-annotate")
         app.buttons["下一步：打分"].waitTap()
         app.buttons["良"].waitTap()
