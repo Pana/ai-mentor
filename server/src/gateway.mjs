@@ -1,3 +1,4 @@
+import { serveAndroidUpdate } from './android-update.mjs';
 import http from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { attachVoice } from './voice.mjs';
@@ -124,6 +125,7 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
   const teacherPage = config.api ? createTeacherPage({ webDir: config.teacher?.webDir }) : null;
   const server = http.createServer(async (req, res) => {
     const send = (status, body) => { if (!res.destroyed) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); } };
+    if (config.updateDir && await serveAndroidUpdate(req, res, config.updateDir)) return;
     if (req.method === 'GET' && req.url === '/health') return send(200, { ok: true });
     // Hanzi dictionary: the /hanzi/ page, its stroke data and /v1/hanzi/lookup.
     if (config.hanzi && await config.hanzi(req, res)) return;

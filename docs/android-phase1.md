@@ -62,3 +62,20 @@
 | 家长设置 | 孩子设备上点“家长”需要锁屏密码；断开后要重新配对 |
 | 手机和平板 | 家长端和孩子端在手机竖屏、平板横竖屏都能用，按钮可点，键盘不遮挡提交按钮 |
 | 覆盖安装 | 从 1.0.0-beta.1 覆盖安装后进入新的角色选择页，不崩溃 |
+
+## 安卓应用内更新
+
+家长手机打开“作业 → 设置 → 检查更新”。孩子手机或平板打开“家长设置”，完成设备验证后点“检查更新”。App 从已配对的服务器检查版本，有新版时自动下载并打开系统安装界面。首次使用按系统提示允许小熊伴学安装应用，返回后点“更新”。覆盖安装保留配对、作业缓存和本机设置。
+
+已有 USB 安装的旧版本需要先用原签名覆盖安装一次带更新按钮的版本（1.1.0-alpha.2，versionCode 4）。可在原开发机构建后运行 `adb install -r app/build/outputs/apk/debug/app-debug.apk`。后续每次发布递增 `app/build.gradle.kts` 的 versionCode，并更新 versionName。沿用相同 applicationId 和签名密钥；如果旧包由另一台机器签名，需找回那台机器的密钥来构建。
+
+**发布更新包**（在项目根目录执行）：
+
+```sh
+./gradlew assembleDebug
+python3 scripts/publish-android-update.py app/build/outputs/apk/debug artifacts/android-updates
+```
+
+第一次发布时部署包含更新接口的网关代码并重启服务，把公网 HTTPS 的 `/android-updates/` 转发到同一网关。将生成目录中的散列名 APK 上传至网关的 `DATA_DIR/android-updates/`，传完后再替换 `latest.json`（可用 `ANDROID_UPDATE_DIR` 指定其他目录）。在网关所在机器构建时也可把发布脚本的第二个参数直接设成该目录。保留上一版 APK，供已取得旧清单的设备完成下载。后续替换包和清单即可生效。
+
+发布后，用设备上配置的服务器地址打开 `/android-updates/latest.json`，核对 versionCode。设备仅下载更高版本，安装前校验文件大小、SHA-256、包名、包内版本和签名。若提示签名不匹配，换回原签名重新发布并重试。

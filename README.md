@@ -8,7 +8,7 @@
 | `server/` | 作业管理 API + AI 网关，也是小熊老师和小熊写字的后端（Node 22，兼容 OpenAI API） | 一期接口已实现并测试；AI 整理作业已用 DeepSeek 实测 |
 | `web/teacher/` + `server/src/teacher.mjs` | 小熊老师：语音对话 + 白板讲题（火山 ASR/TTS + DeepSeek）。iPad 原生（`ipad/…/Teacher/`，孩子端首页入口）；网页版由服务端 `/teacher/` 提供；Android 孩子端用 WebView 打开网页版 | 语音和白板已接真实服务全链路跑通（2026-11-17）；算式验算、学情卡片（对话记忆，家长可查看和清除）、语文英语白板元素已实现；评测集 30 题通过 29 题（2026-11-18）。iPad 原生已于 2026-11-18 真机跑通；Safari、童声及完整场景验收见[验收清单](docs/voice-teacher.md)；教材进度、知识点掌握度、拍题讲解未开始 |
 | `web/hanzi/` | 小熊写字：语音查字的汉字笔顺字典（网页版，服务端 `/hanzi/` 提供） | 支线任务；网页版可用，待集成到 iPad 端 |
-| `app/` | Android 客户端（Kotlin + Jetpack Compose）：家长端和孩子端，手机和平板都能用 | 一期作业管理已实现（1.1.0-alpha.1）；真实服务端全流程测试通过（`scripts/android-phase1-e2e.sh`）；完整真机验收待补齐；Android 已实现选定 App 的奖励时间锁定，并在小米平板验证基本锁定与解锁。家长可查看锁定失效提醒，详见[技术方案](docs/tech-plan-phase1.md) |
+| `app/` | Android 客户端（Kotlin + Jetpack Compose）：家长端和孩子端，手机和平板都能用 | 一期作业管理已实现，手机和平板支持[应用内更新](docs/android-phase1.md#安卓应用内更新)（1.1.0-alpha.2）；真实服务端全流程测试通过（`scripts/android-phase1-e2e.sh`）；完整真机验收待补齐；Android 已实现选定 App 的奖励时间锁定，并在小米平板验证基本锁定与解锁。家长可查看锁定失效提醒，详见[技术方案](docs/tech-plan-phase1.md) |
 
 模型和语音：AI 整理作业、小熊老师和小熊写字都只给模型发文字，目前用 DeepSeek。小熊老师的语音识别和语音合成、小熊写字的语音识别用火山引擎豆包语音；没配置语音时仍可以打字使用。
 
