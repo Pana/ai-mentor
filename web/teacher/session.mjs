@@ -39,6 +39,8 @@ export class TeacherSession {
   #playToken = 0; #waitTimer = 0;
   /** Gives up on a “sentence” that has produced no words (noise the mic took for speech). */
   #wordsTimer = 0;
+  /** A possible interruption; ASR must confirm words before playback is paused. */
+  #candidatePhase = null;
   /** A reply paused because the child may be talking over it: `{turn}` of the reply, until words are heard. */
   #held = null;
 
@@ -124,8 +126,10 @@ export class TeacherSession {
 
   #speechStarted() {
     if (!this.state.voiceInput || !this.canTalk) return;
-    if (this.#response >= 0 && ['speaking', 'thinking'].includes(this.state.phase)) this.#hold();
-    else this.#interruptIfNeeded();
+    const phase = this.state.phase;
+    // VAD alone is not enough: coughs, doors and other speakers can cross its level threshold.
+    this.#candidatePhase = this.#response >= 0 && ['speaking', 'thinking'].includes(phase) ? phase : null;
+    if (!this.#candidatePhase) this.#interruptIfNeeded();
     this.#set({ heard: '', notice: '', phase: 'hearing' });
     clearTimeout(this.#wordsTimer);
     this.#wordsTimer = setTimeout(() => {
@@ -172,16 +176,19 @@ export class TeacherSession {
     if (!this.state.voiceInput || this.state.phase !== 'hearing') return;
     clearTimeout(this.#wordsTimer);
     this.#turn += 1;
-    this.#set({ phase: 'thinking' });
     this.#send({ type: 'input.audio.end', turn: this.#turn });
+    // Wait for the recognizer to return words or an empty result before pausing the teacher.
+    if (!this.#candidatePhase) this.#set({ phase: 'thinking' });
   }
 
   /** Drops the sentence being heard (muted mid-sentence, or the mic went away). */
   #cancelHearing() {
     this.#send({ type: 'input.audio.cancel' });
     this.audio.resetDetection();
-    this.#set({ heard: '', phase: 'listening' });
-    this.#resume();
+    const prior = this.#candidatePhase;
+    this.#candidatePhase = null;
+    this.#set({ heard: '', phase: prior ?? 'listening' });
+    if (!prior) this.#resume();
   }
 
   #interruptIfNeeded() {
@@ -204,7 +211,10 @@ export class TeacherSession {
         break;
       case 'input.transcript.partial':
         if (phase === 'hearing' && typeof event.text === 'string') {
-          if (event.text.trim()) this.#confirmInterrupt();
+          if (event.text.trim()) {
+            if (this.#candidatePhase) { this.#hold(); this.#candidatePhase = null; }
+            this.#confirmInterrupt();
+          }
           this.#set({ heard: event.text });
         }
         break;
@@ -213,11 +223,24 @@ export class TeacherSession {
         if (phase === 'hearing') { this.audio.resetDetection(); this.#speechEnded(); }
         break;
       case 'input.transcript.final':
+        if (phase === 'hearing' && event.turn === this.#turn && String(event.text ?? '').trim()) {
+          if (this.#candidatePhase) { this.#hold(); this.#candidatePhase = null; }
+          this.#confirmInterrupt();
+          this.#set({ heard: event.text ?? '', phase: 'thinking' });
+          break;
+        }
         if (this.#held && event.turn === this.#turn) this.#confirmInterrupt(); // words, though no partial came first
         if (event.turn === this.#turn && this.#turn >= this.#minTurn && phase !== 'hearing') this.#set({ heard: event.text ?? this.state.heard, phase: 'thinking' });
         break;
       case 'input.transcript.empty':
-        if (event.turn !== this.#turn || phase !== 'thinking') break;
+        if (event.turn !== this.#turn) break;
+        if (phase === 'hearing' && this.#candidatePhase) {
+          const prior = this.#candidatePhase;
+          this.#candidatePhase = null;
+          this.#set({ phase: prior });
+          break;
+        }
+        if (phase !== 'thinking') break;
         if (this.#held) this.#resume(); else this.#set({ phase: 'listening' });
         break;
       case 'response.start':

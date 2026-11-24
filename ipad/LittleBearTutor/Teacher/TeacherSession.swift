@@ -83,6 +83,8 @@ import SwiftUI
     private var heldTurn: Int?
     /// Gives up on a “sentence” that has produced no words (noise the mic took for speech).
     private var wordsTask: Task<Void, Never>?
+    /// A possible interruption; ASR must confirm words before playback is paused.
+    private var candidatePhase: Phase?
 
     init() {
         audio.onSpeechStart = { [weak self] in self?.speechStarted() }
@@ -159,7 +161,10 @@ import SwiftUI
 
     private func speechStarted() {
         guard voiceInput, canTalk else { return }
-        if response >= 0, phase == .speaking || phase == .thinking { hold() } else { interruptIfNeeded() }
+        let prior = phase
+        // VAD alone is not enough: coughs, doors and other speakers can cross its level threshold.
+        candidatePhase = response >= 0 && (prior == .speaking || prior == .thinking) ? prior : nil
+        if candidatePhase == nil { interruptIfNeeded() }
         heard = ""
         notice = nil
         phase = .hearing
@@ -182,17 +187,20 @@ import SwiftUI
         guard voiceInput, phase == .hearing else { return }
         wordsTask?.cancel(); wordsTask = nil
         turn += 1
-        phase = .thinking
         send(["type": "input.audio.end", "turn": turn])
+        // Wait for the recognizer to return words or an empty result before pausing the teacher.
+        if candidatePhase == nil { phase = .thinking }
     }
 
     /// Drops the sentence being heard (muted mid-sentence, or the mic went away).
     private func cancelHearing() {
         send(["type": "input.audio.cancel"])
         audio.resetDetection()
+        let prior = candidatePhase
+        candidatePhase = nil
         heard = ""
-        phase = .listening
-        resume()
+        phase = prior ?? .listening
+        if prior == nil { resume() }
     }
 
     /// Pauses the reply while the child may be talking; `confirmInterrupt` or `resume` follows.
@@ -285,7 +293,10 @@ import SwiftUI
             Task { await startAudio(outputRate: (output?["sample_rate"] as? NSNumber)?.doubleValue ?? 24_000) }
         case "input.transcript.partial":
             guard phase == .hearing, let text = event["text"] as? String else { return }
-            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { confirmInterrupt() }
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if candidatePhase != nil { hold(); candidatePhase = nil }
+                confirmInterrupt()
+            }
             heard = text
         case "input.speech_end":
             // The recognizer heard the sentence end, often before the mic level drops (a noisy room, a quiet voice).
@@ -293,12 +304,27 @@ import SwiftUI
             audio.resetDetection()
             speechEnded()
         case "input.transcript.final":
+            if phase == .hearing, eventTurn == turn,
+               let text = event["text"] as? String,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if candidatePhase != nil { hold(); candidatePhase = nil }
+                confirmInterrupt()
+                heard = text
+                phase = .thinking
+                return
+            }
             if heldTurn != nil, eventTurn == turn { confirmInterrupt() } // words, though no partial came first
             guard eventTurn == turn, turn >= minTurn, phase != .hearing else { return }
             heard = event["text"] as? String ?? heard
             phase = .thinking
         case "input.transcript.empty":
-            guard eventTurn == turn, phase == .thinking else { return }
+            guard eventTurn == turn else { return }
+            if phase == .hearing, let prior = candidatePhase {
+                candidatePhase = nil
+                phase = prior
+                return
+            }
+            guard phase == .thinking else { return }
             if heldTurn != nil { resume() } else { phase = .listening }
         case "response.start":
             guard let responseId else { return }
