@@ -1,6 +1,8 @@
 # iPad 实机验收清单
 
-状态：iPad 为首发平台。已在 Xcode 27.2 编译通过并在 iPad 模拟器启动；尚未在真实 iPad 安装。记录 Mac 型号、macOS、Xcode、iPad 型号、iPadOS、App 版本、测试日期和结果。
+> 旧版辅导验收清单：以下场景针对 `-legacy-ui`，不适用于当前作业管理入口。当前 iOS 功能与一期联调见 [iOS 说明](../ipad/README.md)，语音老师真机记录与剩余验收见 [语音老师方案](voice-teacher.md)。
+
+状态：iPad 为首发平台。已在 Xcode 27.2 编译通过并在 iPad 模拟器启动；这是旧版阶段记录；后续 iPad 原生语音老师已有真机跑通记录，但不能据此认定下列旧版场景已全部通过。记录 Mac 型号、macOS、Xcode、iPad 型号、iPadOS、App 版本、测试日期和结果。
 
 | 场景 | 操作与预期 |
 | --- | --- |
