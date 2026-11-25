@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f1e8">
+  <title>小熊伴学 · 家长</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%BB%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.mjs"></script>
+</head>
+<body>
+  <svg class="sprite" width="0" height="0" aria-hidden="true">
+    <symbol id="bear" viewBox="0 0 64 64">
+      <circle cx="16" cy="16" r="10" fill="#c9822b"/><circle cx="48" cy="16" r="10" fill="#c9822b"/>
+      <circle cx="16" cy="16" r="5" fill="#f6d7a7"/><circle cx="48" cy="16" r="5" fill="#f6d7a7"/>
+      <circle cx="32" cy="35" r="24" fill="#e39a3b"/>
+      <ellipse cx="32" cy="44" rx="11" ry="8.5" fill="#f6d7a7"/>
+      <circle cx="23" cy="31" r="3" fill="#2a1e14"/><circle cx="41" cy="31" r="3" fill="#2a1e14"/>
+      <ellipse cx="32" cy="40" rx="3.6" ry="2.6" fill="#2a1e14"/>
+      <path d="M28 46 Q32 49 36 46" fill="none" stroke="#2a1e14" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+  </svg>
+
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-bear" aria-hidden="true"><use href="#bear"/></svg>
+      <div class="brand-text"><strong>小熊伴学</strong><span id="who">家长管理</span></div>
+    </div>
+    <button id="sign-out" class="link danger" type="button" hidden>退出登录</button>
+  </header>
+
+  <p id="notice" class="notice" role="alert" hidden></p>
+  <p id="insecure" class="notice warn" hidden>这个网址不是 HTTPS，密码会不加密地发出。请用 https:// 开头的地址打开。</p>
+
+  <main>
+    <!-- Sign in -->
+    <section id="auth" class="card narrow" hidden>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-mode="login" aria-selected="true">登录</button>
+        <button type="button" role="tab" data-mode="register" aria-selected="false">注册</button>
+      </div>
+      <form id="auth-form" autocomplete="on">
+        <label>手机号<input name="phone" inputmode="numeric" autocomplete="tel" maxlength="13" required></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password" maxlength="64" required></label>
+        <div class="register-only" hidden>
+          <label>再输一次密码<input name="confirm" type="password" autocomplete="new-password" maxlength="64"></label>
+          <label>你的称呼<input name="name" placeholder="如 妈妈、爸爸" maxlength="20"></label>
+          <label>邀请码（选填）<input name="invite" inputmode="numeric" maxlength="9" autocomplete="off"></label>
+          <p class="hint">家里已经有家长注册过：请对方在“设置 → 家长 → 邀请家长”生成 8 位邀请码，填上就和对方在同一个家庭。不填就新建一个家庭。密码至少 8 位。</p>
+        </div>
+        <button class="primary" type="submit">登录</button>
+      </form>
+      <details class="secret">
+        <summary>用家长密钥连接</summary>
+        <form id="secret-form">
+          <label>家长密钥<input name="secret" type="password" autocomplete="off" required></label>
+          <p class="hint">旧的连接方式：服务器配置里的 PARENT_BOOTSTRAP_TOKEN。连接后可以在“我的账号”里补设手机号登录。</p>
+          <button class="secondary" type="submit">连接</button>
+        </form>
+      </details>
+    </section>
+
+    <!-- Signed in -->
+    <div id="home" hidden>
+      <section class="card">
+        <h2>孩子</h2>
+        <ul id="children" class="rows"></ul>
+        <button id="add-child" class="link" type="button">＋ 添加孩子</button>
+      </section>
+
+      <section class="card">
+        <h2>家长</h2>
+        <ul id="parents" class="rows"></ul>
+        <p id="unbound" class="hint" hidden></p>
+        <div id="invite" class="code-box" hidden>
+          <strong id="invite-code" class="code"></strong>
+          <span class="hint">24 小时内有效，只能用一次</span>
+          <button id="copy-invite" class="secondary small" type="button">复制邀请信息</button>
+        </div>
+        <button id="make-invite" class="link" type="button">邀请家长</button>
+        <p class="hint">另一位家长用手机号注册时填上邀请码，就能和你一起管理孩子的作业。</p>
+      </section>
+
+      <section class="card">
+        <h2>连接孩子的设备</h2>
+        <div id="pairing" class="code-box" hidden>
+          <strong id="pairing-code" class="code"></strong>
+          <span class="hint">在孩子的 iPad、平板或手机上输入，10 分钟内有效</span>
+        </div>
+        <button id="make-pairing" class="link" type="button">生成配对码</button>
+      </section>
+
+      <section class="card">
+        <h2>已连接的设备</h2>
+        <ul id="devices" class="rows"></ul>
+      </section>
+
+      <section class="card">
+        <h2>我的账号</h2>
+        <div id="account"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Dialogs -->
+  <dialog id="child-dialog">
+    <form method="dialog">
+      <h3 data-title>添加孩子</h3>
+      <label>昵称<input name="name" maxlength="20" required></label>
+      <label>年级<select name="grade"><option value="1">1 年级</option><option value="2" selected>2 年级</option><option value="3">3 年级</option><option value="4">4 年级</option><option value="5">5 年级</option><option value="6">6 年级</option></select></label>
+      <menu><button value="cancel" formnovalidate class="secondary">取消</button><button value="ok" class="primary">保存</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <h3 data-title></h3>
+      <p data-message></p>
+      <menu><button value="cancel" class="secondary">取消</button><button value="ok" class="primary danger-fill" data-action>确定</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="name-dialog">
+    <form method="dialog">
+      <h3>修改称呼</h3>
+      <label>称呼<input name="name" maxlength="20" required></label>
+      <menu><button value="cancel" formnovalidate class="secondary">取消</button><button value="ok" class="primary">保存</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="password-dialog">
+    <form method="dialog">
+      <h3>修改密码</h3>
+      <label>原密码<input name="old" type="password" autocomplete="current-password" maxlength="64" required></label>
+      <label>新密码<input name="new" type="password" autocomplete="new-password" minlength="8" maxlength="64" required></label>
+      <label>再输一次新密码<input name="confirm" type="password" autocomplete="new-password" maxlength="64" required></label>
+      <p class="hint">新密码至少 8 位。改完后，用这个账号登录的其他手机和网页要重新登录。</p>
+      <menu><button value="cancel" formnovalidate class="secondary">取消</button><button value="ok" class="primary">保存</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="bind-dialog">
+    <form method="dialog">
+      <h3>设置手机号登录</h3>
+      <label>手机号<input name="phone" inputmode="numeric" autocomplete="tel" maxlength="13" required></label>
+      <label>密码<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="64" required></label>
+      <label>再输一次密码<input name="confirm" type="password" autocomplete="new-password" maxlength="64" required></label>
+      <label>你的称呼<input name="name" placeholder="如 妈妈、爸爸" maxlength="20" required></label>
+      <p class="hint">密码至少 8 位。家里的数据都不变。</p>
+      <menu><button value="cancel" formnovalidate class="secondary">取消</button><button value="ok" class="primary">保存</button></menu>
+    </form>
+  </dialog>
+</body>
+</html>

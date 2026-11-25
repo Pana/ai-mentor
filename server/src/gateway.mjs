@@ -3,7 +3,7 @@ import http from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { attachVoice } from './voice.mjs';
 import { attachTeacher, TEACHER_PATH } from './teacher.mjs';
-import { createTeacherPage } from './teacher-page.mjs';
+import { createParentPage, createTeacherPage } from './teacher-page.mjs';
 
 const subjects = ['MATH', 'CHINESE', 'ENGLISH'];
 const modes = ['help', 'check', 'recognize', 'practice'];
@@ -123,6 +123,7 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
   }
   let requests = [], active = 0;
   const teacherPage = config.api ? createTeacherPage({ webDir: config.teacher?.webDir }) : null;
+  const parentPage = config.api ? createParentPage() : null;
   const server = http.createServer(async (req, res) => {
     const send = (status, body) => { if (!res.destroyed) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); } };
     if (config.updateDir && await serveAndroidUpdate(req, res, config.updateDir)) return;
@@ -133,6 +134,8 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
     if (config.poems && await config.poems(req, res)) return;
     // Voice teacher web page at /teacher/ (its WebSocket is attached below).
     if (teacherPage && await teacherPage(req, res)) return;
+    // Parent web page at /parent/: family management (children, parents, invite and pairing codes, devices, account).
+    if (parentPage && await parentPage(req, res)) return;
     // Phase-1 homework API: everything under /v1/ except the tutor endpoint.
     if (config.api && req.url.startsWith('/v1/') && !req.url.startsWith('/v1/tutor')) return config.api.handle(req, res);
     if (req.method !== 'POST' || req.url !== '/v1/tutor') return send(404, { error: 'not_found' });
