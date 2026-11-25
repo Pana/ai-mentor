@@ -63,8 +63,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
 import java.time.LocalTime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private fun prefs(context: Context) = context.getSharedPreferences("phase1.child", Context.MODE_PRIVATE)
 
@@ -528,9 +530,17 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
         cameraFile = null
     }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(6)) { uris -> uris.take(6 - pages.size).forEach { add(it) } }
+    val cameraGate = rememberCameraGate { store.reportError("没有相机权限，可以从相册选。") }
     val takePhoto = {
-        val f = Photos.captureFile(context); cameraFile = f.absolutePath
-        try { camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", f)) } catch (_: Exception) { store.reportError("无法打开相机，可以从相册选。") }
+        cameraGate {
+            val f = Photos.captureFile(context); cameraFile = f.absolutePath
+            try { camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", f)) } catch (_: Exception) { store.reportError("无法打开相机，可以从相册选。") }
+        }
+    }
+    val desk = rememberDeskCamera()
+    fun addDeskPhoto(jpeg: ByteArray, turn: Int) = scope.launch {
+        val photo = withContext(Dispatchers.Default) { Photos.prepare(turn) { jpeg.inputStream() } }
+        if (photo == null) store.reportError("这张照片读不出来，再拍一次吧。") else if (pages.size < 6) pages.add(photo)
     }
     Column(Modifier.fillMaxSize()) {
         FlowRow(Modifier.padding(horizontal = if (wide) 24.dp else 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -540,26 +550,30 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
         }
         val photos = @Composable { modifier: Modifier ->
             Column(modifier.background(Palette.card, RoundedCornerShape(28.dp)).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (pages.isEmpty()) {
-                    Spacer(Modifier.weight(1f))
-                    Text("📄", fontSize = 64.sp)
-                    Text("把写好的这一页放平，拍完整就行", fontSize = 20.sp, color = Palette.ink2, textAlign = TextAlign.Center)
-                    Spacer(Modifier.weight(1f))
-                } else LazyVerticalGrid(GridCells.Adaptive(160.dp), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    itemsIndexed(pages) { i, photo ->
-                        Box {
-                            val bitmap = remember(photo) { decodeBitmap(photo.data, 600) }
-                            Thumb(Modifier.fillMaxWidth().height(220.dp)) { bitmap?.let { Image(it, "第 ${i + 1} 页", Modifier.fillMaxSize()) } }
-                            IconButton({ pages.removeAt(i) }, Modifier.align(Alignment.TopEnd).padding(6.dp).size(36.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape)) {
-                                Icon(Icons.Filled.Close, "删除第 ${i + 1} 页", tint = Color.White)
-                            }
-                            Text("第 ${i + 1} 页", fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).background(Color.White, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp))
-                        }
+                if (desk is DeskCameraAvailability.Ready && pages.size < 6) {
+                    // USB desk camera: live picture right here, one tap per page, the tablet stays on its stand.
+                    DeskCameraPanel(desk.cameraId, if (pages.isEmpty()) "拍第 1 页" else "拍第 ${pages.size + 1} 页",
+                        "把写好的这一页放在摄像头下面，点一下画面就能拍", Modifier.weight(1f).fillMaxWidth(), ::addDeskPhoto)
+                    if (pages.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        pages.forEachIndexed { i, photo -> PageTile(i, photo, Modifier.width(160.dp).height(120.dp)) { pages.removeAt(i) } }
                     }
-                }
-                if (pages.size < 6) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PrimaryButton(if (pages.isEmpty()) "拍第 1 页" else "再拍一页", height = 52.dp, onClick = takePhoto)
                     SecondaryButton("从相册选", height = 52.dp) { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                } else {
+                    if (pages.isEmpty()) {
+                        Spacer(Modifier.weight(1f))
+                        Text("📄", fontSize = 64.sp)
+                        Text("把写好的这一页放平，拍完整就行", fontSize = 20.sp, color = Palette.ink2, textAlign = TextAlign.Center)
+                        Spacer(Modifier.weight(1f))
+                    } else LazyVerticalGrid(GridCells.Adaptive(160.dp), Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        itemsIndexed(pages) { i, photo -> PageTile(i, photo, Modifier.fillMaxWidth().height(220.dp)) { pages.removeAt(i) } }
+                    }
+                    if (desk is DeskCameraAvailability.Unsupported && pages.size < 6) Row(Modifier.fillMaxWidth().background(Palette.honeySoft, RoundedCornerShape(16.dp)).padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        BearView(40.dp); Text("插着 USB 摄像头，但这台平板的系统不让应用直接用它。先用平板自带的相机拍吧。", fontSize = 16.sp)
+                    }
+                    if (pages.size < 6) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PrimaryButton(if (pages.isEmpty()) "拍第 1 页" else "再拍一页", height = 52.dp, onClick = takePhoto)
+                        SecondaryButton("从相册选", height = 52.dp) { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    }
                 }
             }
         }
@@ -584,6 +598,17 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
         } else Column(Modifier.weight(1f).padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             photos(Modifier.weight(1f).fillMaxWidth()); side(Modifier.fillMaxWidth())
         }
+    }
+}
+
+@Composable private fun PageTile(i: Int, photo: PreparedPhoto, modifier: Modifier, remove: () -> Unit) {
+    Box(modifier) {
+        val bitmap = remember(photo) { decodeBitmap(photo.data, 600) }
+        Thumb(Modifier.fillMaxSize()) { bitmap?.let { Image(it, "第 ${i + 1} 页", Modifier.fillMaxSize()) } }
+        IconButton(remove, Modifier.align(Alignment.TopEnd).padding(6.dp).size(36.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape)) {
+            Icon(Icons.Filled.Close, "删除第 ${i + 1} 页", tint = Color.White)
+        }
+        Text("第 ${i + 1} 页", fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).background(Color.White, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp))
     }
 }
 
@@ -729,7 +754,8 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
         }
     }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { choose(it, null) } }
-    fun record() {
+    val cameraGate = rememberCameraGate { store.reportError("没有相机权限，可以从相册选视频。") }
+    fun record() = cameraGate {
         val f = Videos.captureFile(context, keep = chosenFile); captureFile = f.absolutePath
         try { camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", f)) } catch (_: Exception) { captureFile = null; store.reportError("无法打开相机，可以从相册选视频。") }
     }

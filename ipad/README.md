@@ -87,7 +87,7 @@ xcodebuild -project LittleBearTutor.xcodeproj -scheme LittleBearTutor \
 | `ProgressViews.swift` | 练一练、我的进步、复习安排 |
 | `ParentViews.swift` / `ParentAuth.swift` | 家长设置、作业检查、家长身份验证 |
 | `StudyTools.swift` | 语音输入（优先本机识别）、朗读、学习计时 |
-| `PhotoCapture.swift` | 摄像头预览（含 USB-C 外接摄像头）、拍照、框选流程 |
+| `PhotoCapture.swift` | 摄像头预览（含 USB-C 外接摄像头）、拍照、框选流程；外接摄像头插拔、旋转设置，以及页面内嵌的桌面摄像头 `DeskCameraPanel`（点一下就拍） |
 | `ImageCropping.swift` | 框选计算与图片裁剪 |
 
 ### 本地服务联调

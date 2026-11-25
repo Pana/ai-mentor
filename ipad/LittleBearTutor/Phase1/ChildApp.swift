@@ -551,6 +551,7 @@ struct SubmitPhotosView: View {
     let done: () -> Void
     @State private var pages: [HomeworkPhoto] = []
     @State private var sending = false
+    @ObservedObject private var external = ExternalCamera.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -564,28 +565,36 @@ struct SubmitPhotosView: View {
             .padding(.horizontal, 24).padding(.vertical, 14)
             HStack(alignment: .top, spacing: 20) {
                 VStack(spacing: 20) {
-                    if pages.isEmpty {
-                        Spacer()
-                        Image(systemName: "doc.viewfinder").font(.system(size: 80)).foregroundStyle(Color.ink3)
-                        Text("把写好的这一页放平，拍完整就行").font(.title2).foregroundStyle(Color.ink2)
-                        Spacer()
+                    if external.isConnected && pages.count < 6 {
+                        // USB desk camera: live picture right here, one tap per page, the iPad stays on its stand.
+                        DeskCameraPanel(buttonTitle: pages.isEmpty ? "拍第 1 页" : "拍第 \(pages.count + 1) 页",
+                                        hint: "把写好的这一页放在摄像头下面，点一下画面就能拍") { addImage($0) }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if !pages.isEmpty {
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 12) {
+                                    ForEach(Array(pages.enumerated()), id: \.offset) { i, page in pageTile(i, page, height: 120).frame(width: 160) }
+                                }
+                            }
+                            .frame(height: 120)
+                        }
+                        PhotoSourceButtons(showsCamera: false) { add($0) }.controlSize(.large)
                     } else {
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
-                                ForEach(Array(pages.enumerated()), id: \.offset) { i, page in
-                                    ZStack(alignment: .topTrailing) {
-                                        if let image = UIImage(data: page.jpeg) { Image(uiImage: image).resizable().scaledToFit().frame(height: 260).frame(maxWidth: .infinity).background(Color(hex: 0xEDE8DD)).clipShape(RoundedRectangle(cornerRadius: 14)) }
-                                        Button { pages.remove(at: i) } label: { Image(systemName: "xmark.circle.fill").font(.title).foregroundStyle(.white, .black.opacity(0.6)) }
-                                            .padding(8).accessibilityLabel("删除第 \(i + 1) 页")
-                                        Text("第 \(i + 1) 页").font(.subheadline.bold()).padding(.horizontal, 10).padding(.vertical, 4).background(.white, in: Capsule())
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading).padding(10)
-                                    }
+                        if pages.isEmpty {
+                            Spacer()
+                            Image(systemName: "doc.viewfinder").font(.system(size: 80)).foregroundStyle(Color.ink3)
+                            Text("把写好的这一页放平，拍完整就行").font(.title2).foregroundStyle(Color.ink2)
+                            Spacer()
+                        } else {
+                            ScrollView {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
+                                    ForEach(Array(pages.enumerated()), id: \.offset) { i, page in pageTile(i, page, height: 260) }
                                 }
                             }
                         }
-                    }
-                    if pages.count < 6 {
-                        PhotoSourceButtons(cameraTitle: pages.isEmpty ? "拍第 1 页" : "再拍一页") { add($0) }.controlSize(.large)
+                        if pages.count < 6 {
+                            PhotoSourceButtons(cameraTitle: pages.isEmpty ? "拍第 1 页" : "再拍一页") { add($0) }.controlSize(.large)
+                        }
                     }
                 }
                 .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.card, in: RoundedRectangle(cornerRadius: 28))
@@ -612,8 +621,23 @@ struct SubmitPhotosView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
+    private func pageTile(_ i: Int, _ page: HomeworkPhoto, height: CGFloat) -> some View {
+        ZStack(alignment: .topTrailing) {
+            if let image = UIImage(data: page.jpeg) { Image(uiImage: image).resizable().scaledToFit().frame(height: height).frame(maxWidth: .infinity).background(Color(hex: 0xEDE8DD)).clipShape(RoundedRectangle(cornerRadius: 14)) }
+            Button { pages.remove(at: i) } label: { Image(systemName: "xmark.circle.fill").font(.title).foregroundStyle(.white, .black.opacity(0.6)) }
+                .padding(8).accessibilityLabel("删除第 \(i + 1) 页")
+            Text("第 \(i + 1) 页").font(.subheadline.bold()).padding(.horizontal, 10).padding(.vertical, 4).background(.white, in: Capsule())
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading).padding(10)
+        }
+    }
+
     private func add(_ data: Data) {
-        guard let image = UIImage(data: data), let photo = PhotoStore.homeworkPhoto(image) else { return }
+        guard let image = UIImage(data: data) else { return }
+        addImage(image)
+    }
+
+    private func addImage(_ image: UIImage) {
+        guard pages.count < 6, let photo = PhotoStore.homeworkPhoto(image) else { return }
         pages.append(photo)
     }
 

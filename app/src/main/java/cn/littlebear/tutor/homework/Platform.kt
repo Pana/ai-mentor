@@ -122,9 +122,12 @@ object Photos {
         prepare { context.contentResolver.openInputStream(uri) }
     }
 
-    /** [open] gives a fresh stream of the original each time (bounds, pixels and EXIF are read separately). */
-    fun prepare(open: () -> InputStream?): PreparedPhoto? = try {
-        page(open)?.let { bitmap ->
+    /**
+     * [open] gives a fresh stream of the original each time (bounds, pixels and EXIF are read separately).
+     * [turn] is an extra clockwise rotation in degrees, for the USB desk camera, whose JPEGs carry no orientation.
+     */
+    fun prepare(turn: Int = 0, open: () -> InputStream?): PreparedPhoto? = try {
+        page(open, turn = turn)?.let { bitmap ->
             val data = jpeg(bitmap, PAGE_QUALITY)
             // Made from the same upright page, so it has the page's aspect ratio and the red-pen overlay lines up on it.
             val thumb = data?.let { thumbnail(bitmap) }
@@ -134,7 +137,7 @@ object Photos {
     } catch (_: Exception) { null }
 
     /** The photo decoded upright (EXIF orientation applied) and scaled to at most [maxSide] px on the long side. */
-    fun page(open: () -> InputStream?, maxSide: Int = PAGE_SIDE): Bitmap? {
+    fun page(open: () -> InputStream?, maxSide: Int = PAGE_SIDE, turn: Int = 0): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         open().use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0) return null
@@ -152,6 +155,7 @@ object Photos {
                 ExifInterface.ORIENTATION_TRANSVERSE -> { setRotate(-90f); postScale(-1f, 1f) }
                 ExifInterface.ORIENTATION_ROTATE_270 -> setRotate(-90f)
             }
+            if (turn % 360 != 0) postRotate(turn.toFloat())
         }
         val upright = if (matrix.isIdentity) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { decoded.recycle() }
         return shrink(upright, maxSide)

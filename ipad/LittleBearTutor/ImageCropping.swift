@@ -57,6 +57,22 @@ enum ImageCropper {
         return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in image.draw(at: .zero) }
     }
 
+    /// Turns the image clockwise by a multiple of 90°; other angles are rounded to the nearest quarter turn.
+    static func rotated(_ image: UIImage, clockwise degrees: Int) -> UIImage {
+        let turns = ((Int((Double(degrees) / 90).rounded()) % 4) + 4) % 4
+        let source = upright(image)
+        guard turns != 0 else { return source }
+        let size = turns % 2 == 0 ? source.size : CGSize(width: source.size.height, height: source.size.width)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = source.scale
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            let cg = context.cgContext
+            cg.translateBy(x: size.width / 2, y: size.height / 2)
+            cg.rotate(by: CGFloat(turns) * .pi / 2)
+            source.draw(in: CGRect(x: -source.size.width / 2, y: -source.size.height / 2, width: source.size.width, height: source.size.height))
+        }
+    }
+
     /// Crops to a normalized rectangle. Returns nil when the rectangle does not overlap the image.
     static func crop(_ image: UIImage, to normalized: CGRect) -> UIImage? {
         let source = upright(image)
