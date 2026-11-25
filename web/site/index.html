@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fff8ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1d1814" media="(prefers-color-scheme: dark)">
+  <title>小熊伴学 · 陪孩子学习的个人学习助理</title>
+  <meta name="description" content="小熊伴学是陪孩子学习的个人学习助理：作业管理、小熊语音老师、小熊汉字、小熊唐诗、江山 Map，一只小熊陪孩子把每天的学习走好。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%BB%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 小熊头像，和 App 图标同一套形状，页面里多处复用 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="bear" viewBox="0 0 200 200">
+      <circle cx="42" cy="54" r="30" fill="#b07d55"/><circle cx="158" cy="54" r="30" fill="#b07d55"/>
+      <circle cx="42" cy="54" r="17" fill="#ecca9f"/><circle cx="158" cy="54" r="17" fill="#ecca9f"/>
+      <ellipse cx="100" cy="112" rx="70" ry="68" fill="#b07d55"/>
+      <circle cx="74" cy="96" r="9" fill="#442a1e"/><circle cx="126" cy="96" r="9" fill="#442a1e"/>
+      <circle cx="77" cy="93" r="2.8" fill="#fff"/><circle cx="129" cy="93" r="2.8" fill="#fff"/>
+      <circle cx="58" cy="122" r="9" fill="#f1a796"/><circle cx="142" cy="122" r="9" fill="#f1a796"/>
+      <ellipse cx="100" cy="128" rx="31" ry="30" fill="#ecca9f"/>
+      <ellipse cx="100" cy="117" rx="10" ry="7" fill="#442a1e"/>
+      <path d="M89 137q11 11 22 0" stroke="#442a1e" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+    </symbol>
+  </svg>
+
+  <header class="nav" id="nav">
+    <div class="wrap nav-inner">
+      <a class="logo" href="#top" aria-label="小熊伴学首页">
+        <svg class="logo-bear" aria-hidden="true"><use href="#bear"/></svg>
+        <span>小熊伴学</span>
+      </a>
+      <button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="打开菜单">
+        <span></span><span></span>
+      </button>
+      <nav class="nav-links" id="nav-links" aria-label="页面导航">
+        <a href="#assistant">学习助理</a>
+        <a href="#features">功能</a>
+        <a href="#soon">即将推出</a>
+        <a href="#devices">设备</a>
+        <a class="btn btn-small" href="#contact">申请体验</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- 首屏 -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">个人学习助理</p>
+          <h1>一只小熊，<br>陪孩子把<span class="nb">每天的学习走好</span></h1>
+          <p class="lead">作业有人管，难题有人讲，写字有人教，古诗有人陪着读。小熊伴学记得孩子学过什么、哪里卡住了，每天陪在身边，慢慢长成最懂孩子的学习助理。</p>
+          <div class="hero-actions">
+            <a class="btn" href="#features">看看小熊会什么</a>
+            <a class="btn btn-ghost" href="#contact">申请体验</a>
+          </div>
+          <ul class="hero-tags" aria-label="支持的设备">
+            <li>iPad</li><li>iPhone</li><li>安卓手机和平板</li><li>网页</li>
+          </ul>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <div class="hero-blob"></div>
+          <svg class="hero-bear"><use href="#bear"/></svg>
+          <div class="float f1"><span class="dot dot-hw"></span>口算练习册第 12 页 · 已批改</div>
+          <div class="float f2"><span class="dot dot-teacher"></span>“个位不够减，向十位借一”</div>
+          <div class="float f3"><span class="kai">江</span> 三点水的江</div>
+          <div class="float f4"><span class="dot dot-poem"></span>碧玉妆成一树高</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 学习助理 -->
+    <section class="section" id="assistant">
+      <div class="wrap assistant-grid">
+        <div>
+          <p class="eyebrow">我们想做的</p>
+          <h2>不是又一个刷题 App，<br>而是一位懂孩子的学习助理</h2>
+          <p class="section-lead">小熊伴学把作业、讲题、识字、读诗这些每天都会发生的学习连在一起。小熊知道今天有哪些作业、哪道题刚订正过、孩子最近在学什么，在合适的时候帮一把。</p>
+          <ul class="pillars">
+            <li>
+              <span class="pillar-icon" aria-hidden="true">📒</span>
+              <div><h3>懂学情</h3><p>知道孩子的年级、今天的作业和家长的批改，聊过的内容会记下来，家长随时能看、能清除。</p></div>
+            </li>
+            <li>
+              <span class="pillar-icon" aria-hidden="true">✏️</span>
+              <div><h3>会讲题</h3><p>不直接给答案，一步一步引导孩子自己想出来，边说边在白板上画。</p></div>
+            </li>
+            <li>
+              <span class="pillar-icon" aria-hidden="true">🌱</span>
+              <div><h3>陪坚持</h3><p>每天坚持的小目标、完成作业换来的奖励时间，帮孩子养成自己学的习惯。</p></div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="assistant-demo" aria-label="学习助理对话示意">
+          <div class="demo-head">
+            <svg class="demo-bear" aria-hidden="true"><use href="#bear"/></svg>
+            <div><strong>小熊</strong><span>你的学习助理</span></div>
+          </div>
+          <div class="bubble bear-say">晚上好！今天还有 <b>2 项作业</b>没交。数学口算妈妈已经批改了，第 7 题要订正一下。</div>
+          <div class="bubble kid-say">第 7 题我不会……</div>
+          <div class="bubble bear-say">没关系，我们一起看看。35 减 18，个位上 5 减 8 够不够减呀？</div>
+          <div class="demo-chips">
+            <span>先订正第 7 题</span><span>背诵《咏柳》</span><span>查一个字</span>
+          </div>
+          <p class="demo-note">学习助理还在成长中，这是我们正在做的方向。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 功能 -->
+    <section class="section section-tint" id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">五个好帮手</p>
+          <h2>小熊伴学现在会做这些</h2>
+        </div>
+
+        <!-- 1 作业管理 -->
+        <article class="feature" id="homework">
+          <div class="feature-copy">
+            <span class="feature-num">01</span>
+            <h3>作业管理</h3>
+            <p class="feature-lead">家长从班级群复制老师的话，AI 自动整理成一项项作业，孩子在平板上看、做、拍照交，家长批改，完成情况换奖励时间。</p>
+            <ul class="checks">
+              <li><b>AI 整理作业</b>：分科目、去掉寒暄、找出截止时间，“家长签字”这类事单独列给家长</li>
+              <li><b>拍照交作业</b>：多页一起交，也支持朗读视频、桌面摄像头一点就拍</li>
+              <li><b>家长批注</b>：直接在照片上打勾、圈错，需要订正就退回给孩子</li>
+              <li><b>每天坚持 + 奖励时间</b>：规律练习自动出现，按完成情况换平板时间，规则家长定</li>
+            </ul>
+          </div>
+          <div class="feature-art art-homework" aria-hidden="true">
+            <div class="msg">
+              <span class="msg-who">王老师</span>
+              各位家长好[抱拳]，今天作业：1. 口算练习册第 12 页；2. 背诵《咏柳》，明早检查；3. 试卷请家长签字。
+            </div>
+            <div class="ai-arrow"><span>✨ 让 AI 整理</span></div>
+            <ul class="tasks">
+              <li><span class="subj s-math">数学</span>口算练习册第 12 页<em>拍照交</em></li>
+              <li><span class="subj s-cn">语文</span>背诵《咏柳》<em>明早</em></li>
+              <li class="parent"><span class="subj s-parent">家长</span>试卷签字<em>家长要做</em></li>
+            </ul>
+            <div class="reward">⭐ 全部完成，奖励 <b>20 分钟</b> 平板时间</div>
+          </div>
+        </article>
+
+        <!-- 2 小熊老师 -->
+        <article class="feature reverse" id="teacher">
+          <div class="feature-copy">
+            <span class="feature-num">02</span>
+            <h3>小熊语音老师</h3>
+            <p class="feature-lead">孩子直接开口和小熊老师说话，不用按按钮，随时可以打断。小熊一边讲一边在白板上画，像身边坐着一位耐心的老师。</p>
+            <ul class="checks">
+              <li><b>自然对话</b>：实时字幕，说完就答，孩子插话小熊会停下来听</li>
+              <li><b>白板讲题</b>：竖式、数轴、线段图、钟面，语文英语也能写在白板上</li>
+              <li><b>不怕算错</b>：小熊说出的每个算式都会自动验算一遍</li>
+              <li><b>引导思考</b>：孩子要答案时，小熊会换个问法，帮孩子自己想出来</li>
+            </ul>
+          </div>
+          <div class="feature-art art-teacher" aria-hidden="true">
+            <div class="board">
+              <div class="board-title">白板</div>
+              <div class="vertical">
+                <div class="vrow"><span></span><span>3</span><span class="borrow">5</span></div>
+                <div class="vrow"><span>−</span><span>1</span><span>8</span></div>
+                <div class="vline"></div>
+                <div class="vrow ans"><span></span><span>1</span><span>7</span></div>
+              </div>
+            </div>
+            <div class="subtitle">
+              <svg aria-hidden="true"><use href="#bear"/></svg>
+              <p>个位上 5 减 8 不够减，向十位借 1，变成 15 减 8，等于几呀？</p>
+            </div>
+            <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+        </article>
+
+        <!-- 3 小熊汉字 -->
+        <article class="feature" id="hanzi">
+          <div class="feature-copy">
+            <span class="feature-num">03</span>
+            <h3>小熊汉字</h3>
+            <p class="feature-lead">不会写的字，说出来就行。“三点水的江”、“妈妈的妈”、“木子李”，小熊听懂后一笔一笔演示怎么写。</p>
+            <ul class="checks">
+              <li><b>怎么说都行</b>：说字词、说组词、说偏旁拆字、说拼音声调</li>
+              <li><b>笔顺动画</b>：田字格里一笔一笔写给孩子看，部首单独变色</li>
+              <li><b>跟着描</b>：孩子在屏幕上描红，写错笔顺会提醒</li>
+              <li><b>字卡</b>：拼音、部首、结构、意思和常用组词一目了然</li>
+            </ul>
+          </div>
+          <div class="feature-art art-hanzi" aria-hidden="true">
+            <div class="ask-pill">🎙 “三点水的江”</div>
+            <div class="tian">
+              <span class="tian-guide">江</span>
+              <span class="tian-char">江</span>
+            </div>
+            <div class="hanzi-card">
+              <div><small>拼音</small>jiāng</div>
+              <div><small>部首</small>氵</div>
+              <div><small>结构</small>左右</div>
+              <div><small>组词</small>长江 · 江河</div>
+            </div>
+          </div>
+        </article>
+
+        <!-- 4 小熊唐诗 -->
+        <article class="feature reverse" id="poems">
+          <div class="feature-copy">
+            <span class="feature-num">04</span>
+            <h3>小熊唐诗</h3>
+            <p class="feature-lead">课本里的古诗按年级排好，打开就能读。想多读几首，诗库里按朝代、诗人、题材慢慢找。</p>
+            <ul class="checks">
+              <li><b>课本古诗</b>：一到六年级按册整理，和学校进度对得上</li>
+              <li><b>读一读</b>：小熊把诗读给孩子听，跟着读、背下来</li>
+              <li><b>诗库</b>：诗名、诗句、诗人都能搜，按朝代、体裁、题材筛选</li>
+            </ul>
+          </div>
+          <div class="feature-art art-poem" aria-hidden="true">
+            <div class="poem-tag">二年级下册</div>
+            <div class="poem">
+              <div class="poem-title">咏柳</div>
+              <div class="poem-author">〔唐〕贺知章</div>
+              <p>碧玉妆成一树高</p>
+              <p>万条垂下绿丝绦</p>
+              <p>不知细叶谁裁出</p>
+              <p>二月春风似剪刀</p>
+            </div>
+            <div class="poem-play">🔊 读一读</div>
+          </div>
+        </article>
+
+        <!-- 5 江山 Map：网址和介绍待补 -->
+        <article class="feature" id="jiangshan">
+          <div class="feature-copy">
+            <span class="feature-num">05</span>
+            <h3>江山 Map</h3>
+            <p class="feature-lead">一张能拖动时间的中国历史地图。从战国到今天，拖一拖时间轴，看历代疆域怎么变、古城今天在哪里，读过的历史和古诗都能在地图上找到。</p>
+            <ul class="checks">
+              <li><b>历史时间轴</b>：战国到现代 18 个时期，按年份播放疆域、都城和大事</li>
+              <li><b>古今地名</b>：点一下城市，看它历代叫什么、归哪里管</li>
+              <li><b>人物行迹</b>：跟着张骞、玄奘、李白、苏轼走一遍他们的路</li>
+              <li><b>舆图寻址</b>：地图找地方小测验，边玩边记</li>
+            </ul>
+            <a class="btn" id="jiangshan-link" href="https://deanchen.me/jiangshan-map/?lang=zh" target="_blank" rel="noopener">打开江山 Map ↗</a>
+          </div>
+          <div class="feature-art art-map" aria-hidden="true">
+            <svg viewBox="0 0 400 300" class="map-svg" preserveAspectRatio="xMidYMax slice">
+              <path class="m-mtn" d="M20 210 L80 120 L120 170 L170 90 L230 180 L270 130 L330 200 L380 160 L380 300 L20 300Z"/>
+              <path class="m-mtn2" d="M20 240 L70 180 L130 230 L190 170 L260 235 L320 190 L380 230 L380 300 L20 300Z"/>
+              <path class="m-river" d="M10 270 C 90 250, 130 290, 200 262 S 320 236, 392 258"/>
+              <circle class="m-pin" cx="170" cy="96" r="7"/>
+              <circle class="m-pin" cx="270" cy="136" r="7"/>
+            </svg>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 即将推出 -->
+    <section class="section" id="soon">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">正在路上</p>
+          <h2>小熊还在学新本领</h2>
+        </div>
+        <div class="soon-grid">
+          <div class="soon-card soon-main">
+            <span class="badge">即将推出</span>
+            <h3>AI 口语练习</h3>
+            <p>给学外语的人一个随时能开口的陪练。不怕说错、不怕被笑，想练多久练多久，从打招呼到日常对话，一句一句练出口。</p>
+            <div class="talk" aria-hidden="true">
+              <span class="t-a">Hi! What did you do today?</span>
+              <span class="t-b">I go to the park…</span>
+              <span class="t-a">Nice! You <b>went</b> to the park. What did you see there?</span>
+            </div>
+          </div>
+          <div class="soon-card">
+            <span class="badge badge-soft">打磨中</span>
+            <h3>AI 帮家长预批改</h3>
+            <p>家长打开批注页时，小熊先在照片上标好对错，家长确认或修改后再发给孩子。家长始终是最后确认的人。</p>
+          </div>
+          <div class="soon-card">
+            <span class="badge badge-soft">打磨中</span>
+            <h3>小熊老师看得见</h3>
+            <p>桌上架一个摄像头对着作业本，孩子不用拿起平板，小熊老师就能看到题目，和孩子一起讨论。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设备 -->
+    <section class="section section-tint" id="devices">
+      <div class="wrap devices-grid">
+        <div>
+          <p class="eyebrow">家长和孩子各用各的</p>
+          <h2>家长用手机管，孩子用平板学</h2>
+          <p class="section-lead">家长在手机上录作业、批改、设奖励规则；孩子在平板上看作业、交作业、找小熊老师。两边数据自动同步，一个家庭可以有好几个孩子。</p>
+        </div>
+        <ul class="device-list">
+          <li><span class="dev-icon" aria-hidden="true">📱</span><div><b>家长端</b>iPhone、安卓手机</div></li>
+          <li><span class="dev-icon" aria-hidden="true">📲</span><div><b>孩子端</b>iPad、安卓平板</div></li>
+          <li><span class="dev-icon" aria-hidden="true">💻</span><div><b>网页版</b>小熊老师、小熊汉字、小熊唐诗在浏览器里也能用</div></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 家长放心 -->
+    <section class="section" id="trust">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">家长放心</p>
+          <h2>家长说了算</h2>
+        </div>
+        <div class="trust-grid">
+          <div class="trust"><h3>家长确认后才给孩子</h3><p>AI 整理的作业、以后 AI 预批改的结果，都要家长看过、点头才会发给孩子。</p></div>
+          <div class="trust"><h3>学情家长看得见</h3><p>小熊记下的学习情况家长随时可以查看，不想保留就一键清除。</p></div>
+          <div class="trust"><h3>平板时间有规矩</h3><p>奖励多少时间、能用哪些 App，由家长来定。安卓平板上时间用完会自动锁上，iPad 即将支持。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 联系 -->
+    <section class="cta" id="contact">
+      <div class="wrap cta-inner">
+        <svg class="cta-bear" aria-hidden="true"><use href="#bear"/></svg>
+        <h2>想让小熊陪你家孩子学习吗？</h2>
+        <p>小熊伴学正在小范围试用，欢迎联系我们申请体验。</p>
+        <!-- TODO：换成正式的联系方式（邮箱、公众号二维码或表单） -->
+        <a class="btn btn-light" href="#contact">联系方式即将公布</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div class="logo">
+        <svg class="logo-bear" aria-hidden="true"><use href="#bear"/></svg>
+        <span>小熊伴学</span>
+      </div>
+      <p>陪孩子学习的个人学习助理</p>
+      <p class="copy">© 2026 小熊伴学</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
