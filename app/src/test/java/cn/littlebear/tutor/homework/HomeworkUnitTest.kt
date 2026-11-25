@@ -261,4 +261,11 @@ class HomeworkUnitTest {
         assertTrue(store.uploads.value.isEmpty())
         assertNull(store.error.value)
     }
+
+    @Test fun wrongPasswordIsNotAnExpiredCredential() {
+        assertEquals("手机号或密码不对。", ApiException.from(401, "invalid_login").message)
+        assertTrue(ApiException.from(401, "unauthorized") is ApiException.Unauthorized)
+        assertEquals("密码错误次数太多，请 15 分钟后再试。", ApiException.from(429, "too_many_attempts").message)
+        assertTrue(ApiException.from(429, "") is ApiException.Server)
+    }
 }

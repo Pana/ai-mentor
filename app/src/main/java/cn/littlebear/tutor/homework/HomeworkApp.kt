@@ -77,9 +77,10 @@ private val defaultServer = if (BuildConfig.DEBUG) "http://10.0.2.2:8787" else "
 
 @Composable private fun OnboardingView() {
     var step by rememberSaveable { mutableStateOf("choose") }
-    BackHandler(step != "choose") { step = "choose" }
+    BackHandler(step != "choose") { step = if (step == "parentSecret") "parent" else "choose" }
     when (step) {
-        "parent" -> ParentConnectView { step = "choose" }
+        "parent" -> ParentAccountView(back = { step = "choose" }, useSecret = { step = "parentSecret" })
+        "parentSecret" -> ParentConnectView { step = "parent" }
         "child" -> ChildPairView { step = "choose" }
         else -> Column(Modifier.fillMaxSize().systemBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(22.dp)) {
@@ -88,7 +89,7 @@ private val defaultServer = if (BuildConfig.DEBUG) "http://10.0.2.2:8787" else "
             Text("小熊伴学", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Palette.ink)
             Text("家长用手机布置和批改作业，孩子用平板或手机完成作业。", fontSize = 18.sp, color = Palette.ink2, textAlign = TextAlign.Center)
             Column(Modifier.widthIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                RoleButton("我是家长", "在这台设备上录入作业、批改、设置奖励", Icons.Filled.Person) { step = "parent" }
+                RoleButton("我是家长", "用手机号登录或注册，录入作业、批改、设置奖励", Icons.Filled.Person) { step = "parent" }
                 RoleButton("这是孩子的设备", "用家长手机上生成的配对码连接", Icons.Filled.Face) { step = "child" }
             }
         }
@@ -125,6 +126,55 @@ private val defaultServer = if (BuildConfig.DEBUG) "http://10.0.2.2:8787" else "
         header?.let { Text(it, fontSize = 14.sp, color = Palette.ink3, modifier = Modifier.padding(start = 8.dp)) }
         Column(Modifier.fillMaxWidth().background(Palette.card, RoundedCornerShape(18.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
         footer?.let { Text(it, fontSize = 13.sp, color = Palette.ink3, modifier = Modifier.padding(horizontal = 8.dp)) }
+    }
+}
+
+/**
+ * Parent sign-in: log in with a phone number and password, or register (a new family, or another parent's family with
+ * an invite code). The old parent-secret connection is still one tap away for servers set up before accounts.
+ */
+@Composable private fun ParentAccountView(back: () -> Unit, useSecret: () -> Unit) {
+    val store = LocalStore.current
+    val context = LocalContext.current
+    var mode by rememberSaveable { mutableStateOf("login") }
+    var server by rememberSaveable { mutableStateOf(defaultServer) }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var invite by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val registering = mode == "register"
+    val mismatch = registering && confirm.isNotEmpty() && confirm != password
+    val ready = phone.length == 11 && password.isNotEmpty() &&
+        (!registering || (password.length >= 8 && password == confirm && name.isNotBlank() && (invite.isEmpty() || invite.length == 8)))
+    FormScaffold("家长登录", back) {
+        ChoiceRow(listOf("login" to "登录", "register" to "注册"), mode) { mode = it }
+        FormSection(footer = if (mismatch) "两次输入的密码不一样。" else if (registering) "密码至少 8 位。" else null) {
+            OutlinedTextField(server, { server = it.trim() }, Modifier.fillMaxWidth(), label = { Text("服务器地址") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+            OutlinedTextField(phone, { phone = it.filter(Char::isDigit).take(11) }, Modifier.fillMaxWidth(), label = { Text("手机号") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+            OutlinedTextField(password, { password = it.take(64) }, Modifier.fillMaxWidth(), label = { Text("密码") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+            if (registering) OutlinedTextField(confirm, { confirm = it.take(64) }, Modifier.fillMaxWidth(), label = { Text("再输一次密码") }, singleLine = true,
+                isError = mismatch, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        }
+        if (registering) FormSection(footer = "家里已经有家长注册过：请对方在“设置 → 家长 → 邀请家长”生成 8 位邀请码，填上就和对方在同一个家庭。不填就新建一个家庭。") {
+            OutlinedTextField(name, { name = it.take(20) }, Modifier.fillMaxWidth(), label = { Text("你的称呼（如 妈妈）") }, singleLine = true)
+            OutlinedTextField(invite, { invite = it.filter(Char::isDigit).take(8) }, Modifier.fillMaxWidth(), label = { Text("邀请码（选填）") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        }
+        PrimaryButton(if (busy) "请稍候…" else if (registering) "注册" else "登录", Modifier.fillMaxWidth(), busy = busy, enabled = ready) {
+            busy = true
+            store.launch({ busy = false }) {
+                if (registering) register(server, phone, password, name, invite, deviceName(context))
+                else login(server, phone, password, deviceName(context))
+            }
+        }
+        FormSection(footer = "家长密钥是旧的连接方式（服务器配置里的 PARENT_BOOTSTRAP_TOKEN）。连接后可以在设置里补设手机号登录。") {
+            TextButton(useSecret) { Text("用家长密钥连接") }
+        }
     }
 }
 

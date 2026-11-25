@@ -119,7 +119,19 @@ struct MeResponse: Codable, Sendable {
     var rules: RewardRules
     /// Parent only, and only from servers that have the lock heartbeat: optional so an older server still decodes.
     var locks: [LockStatus]?
+    /// The signed-in parent account; nil on child tablets, on phones connected with the parent secret, and from older servers.
+    var account: AccountInfo?
 }
+
+/// A parent's own account: the phone number they sign in with and what the family calls them (妈妈, 爸爸…).
+struct AccountInfo: Codable, Hashable, Sendable { var id: UUID; var phone: String; var name: String }
+/// Another parent of the family, as listed in settings. `phone` is masked (138****8000).
+struct FamilyParent: Codable, Identifiable, Hashable, Sendable {
+    var id: UUID; var name: String; var phone: String; var createdAt: String; var self_: Bool; var devices: Int
+    enum CodingKeys: String, CodingKey { case id, name, phone, createdAt, self_ = "self", devices }
+}
+struct FamilyParents: Codable, Sendable { var parents: [FamilyParent]; var unboundDevices: Int }
+struct InviteCode: Codable, Sendable { var code: String; var expiresAt: String }
 
 /// A child tablet's reward-time lock as the parent sees it (Android tablets report it; see the server's `/v1/devices/self/lock`).
 /// `problem`: "off", "paused" (the system froze it) or "silent" (no report for a day); nil when it is working.
@@ -136,10 +148,12 @@ struct LockStatus: Codable, Hashable, Sendable {
 
 struct Change: Codable, Sendable { var seq: Int; var entity: String; var id: String; var op: String }
 struct ChangeFeed: Codable, Sendable { var changes: [Change]; var next: Int; var hasMore: Bool }
-struct DeviceGrant: Codable, Sendable { var deviceId: UUID; var deviceToken: String; var role: String; var familyId: UUID }
+struct DeviceGrant: Codable, Sendable { var deviceId: UUID; var deviceToken: String; var role: String; var familyId: UUID; var account: AccountInfo? }
 struct PairingCode: Codable, Sendable { var code: String; var expiresAt: String }
 struct DeviceRecord: Codable, Identifiable, Hashable, Sendable { var id: UUID; var role: String; var name: String; var createdAt: String; var lastSeenAt: String?; var self_: Bool
-    enum CodingKeys: String, CodingKey { case id, role, name, createdAt, lastSeenAt, self_ = "self" }
+    /// The parent account signed in on this phone; nil for tablets and phones connected with the parent secret.
+    var accountName: String?
+    enum CodingKeys: String, CodingKey { case id, role, name, createdAt, lastSeenAt, self_ = "self", accountName }
 }
 struct ParsedItem: Codable, Hashable, Sendable {
     var subject: String
@@ -190,6 +204,9 @@ enum APIError: LocalizedError, Equatable {
 
     static func from(status: Int, code: String) -> APIError {
         switch status {
+        // A wrong phone number or password is the person's mistake, not this device's credential running out.
+        case 401 where ["invalid_login", "wrong_password"].contains(code): .rejected(code)
+        case 429 where !code.isEmpty: .rejected(code)
         case 401: .unauthorized
         case 403: .forbidden
         case 404: .notFound
@@ -243,7 +260,17 @@ enum APIError: LocalizedError, Equatable {
         "invalid_window": "开始时间要早于结束时间。",
         "unsupported_file_type": "这种文件不能上传。",
         "invalid_file": "文件已损坏，请重新拍摄。",
-        "body_too_large": "文件太大了。"
+        "body_too_large": "文件太大了。",
+        "invalid_phone": "请填写 11 位手机号。",
+        "weak_password": "密码至少 8 位。",
+        "phone_taken": "这个手机号已经注册过了，请直接登录。",
+        "invalid_login": "手机号或密码不对。",
+        "wrong_password": "原密码不对。",
+        "too_many_attempts": "密码错误次数太多，请 15 分钟后再试。",
+        "rate_limited": "尝试太频繁了，请过一会儿再试。",
+        "invalid_invite": "邀请码不对、已经用过或已过期，请家人重新生成。",
+        "already_bound": "这台手机已经设置过登录账号了。",
+        "cannot_remove_self": "不能把自己移出家庭。"
     ]
 }
 
@@ -346,6 +373,14 @@ struct APIClient: Sendable {
 
     func bootstrap(secret: String, deviceId: UUID, name: String) async throws -> DeviceGrant {
         try await send("POST", "v1/devices/bootstrap", json: ["token": secret, "deviceId": deviceId.uuidString, "name": name])
+    }
+    func register(phone: String, password: String, name: String, inviteCode: String?, deviceId: UUID, deviceName: String) async throws -> DeviceGrant {
+        struct Body: Encodable { var phone: String; var password: String; var name: String; var inviteCode: String?; var deviceId: String; var deviceName: String }
+        return try await send("POST", "v1/accounts/register", json: Body(phone: phone, password: password, name: name, inviteCode: inviteCode,
+                                                                             deviceId: deviceId.uuidString, deviceName: deviceName))
+    }
+    func login(phone: String, password: String, deviceId: UUID, deviceName: String) async throws -> DeviceGrant {
+        try await send("POST", "v1/accounts/login", json: ["phone": phone, "password": password, "deviceId": deviceId.uuidString, "deviceName": deviceName])
     }
     func pair(code: String, deviceId: UUID, name: String) async throws -> DeviceGrant {
         try await send("POST", "v1/devices/pair", json: ["code": code, "deviceId": deviceId.uuidString, "name": name])

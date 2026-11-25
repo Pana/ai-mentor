@@ -100,6 +100,7 @@ const val VIDEO_MIME = "video/mp4"
     val rewards: List<RewardSummary> = emptyList(),
     val outbox: List<PendingSubmission> = emptyList(),
     val locks: List<LockStatus> = emptyList(),
+    val account: AccountInfo? = null,
 )
 
 data class HomeworkState(
@@ -113,6 +114,8 @@ data class HomeworkState(
     val outbox: List<PendingSubmission> = emptyList(),
     /** Parent only: each child tablet's reward-time lock, from the tablet's heartbeat. */
     val locks: List<LockStatus> = emptyList(),
+    /** Parent phone: the account signed in here; null on phones connected with the parent secret (they can set one up). */
+    val account: AccountInfo? = null,
     val syncing: Boolean = false,
     val lastSynced: Long? = null,
     /** Set when the server no longer accepts this device's credential. */
@@ -208,6 +211,27 @@ class HomeworkStore(
         begin(DeviceSession(url, grant.deviceId, grant.role, grant.familyId, grant.deviceToken))
     }
 
+    /** Registers a parent account. Without an invite code the server makes a new family; with one the parent joins that family. */
+    suspend fun register(server: String, phone: String, password: String, name: String, inviteCode: String, deviceName: String) {
+        val url = ApiClient.validate(server, debug)
+        val code = inviteCode.filter(Char::isDigit)
+        val grant = ApiClient(url, null, transport).register(phone.filter(Char::isDigit), password, name.trim(), code.ifEmpty { null }, newId(), deviceName)
+        begin(DeviceSession(url, grant.deviceId, grant.role, grant.familyId, grant.deviceToken))
+        setAccount(grant.account)
+    }
+
+    suspend fun login(server: String, phone: String, password: String, deviceName: String) {
+        val url = ApiClient.validate(server, debug)
+        val grant = ApiClient(url, null, transport).login(phone.filter(Char::isDigit), password, newId(), deviceName)
+        begin(DeviceSession(url, grant.deviceId, grant.role, grant.familyId, grant.deviceToken))
+        setAccount(grant.account)
+    }
+
+    private suspend fun setAccount(account: AccountInfo?) {
+        _state.update { it.copy(account = account) }
+        saveCache()
+    }
+
     suspend fun pairChild(server: String, code: String, name: String) {
         val url = ApiClient.validate(server, debug)
         val grant = ApiClient(url, null, transport).pair(code, newId(), name)
@@ -220,7 +244,9 @@ class HomeworkStore(
         _state.update { it.copy(session = session, signedOut = false) }
     }
 
+    /** Forgets this device's credential and tells the server to stop accepting it (best effort: offline, it just forgets). */
     suspend fun signOut() {
+        client?.let { api -> try { api.send("DELETE", "v1/devices/self", Ok.serializer()) } catch (_: Exception) {} }
         sessions.clear()
         resetData()
         _state.update { it.copy(session = null) }
@@ -298,7 +324,7 @@ class HomeworkStore(
     }
 
     private fun apply(me: MeResponse) {
-        _state.update { it.copy(family = me.family, children = me.children, rules = me.rules, locks = me.locks) }
+        _state.update { it.copy(family = me.family, children = me.children, rules = me.rules, locks = me.locks, account = me.account) }
     }
 
     private suspend fun applyChanges(api: ApiClient) {
@@ -496,6 +522,25 @@ class HomeworkStore(
     suspend fun devices(): List<DeviceRecord> = api().send("GET", "v1/devices", DevicesPage.serializer()).devices
     suspend fun revoke(device: String) { api().send("DELETE", "v1/devices/${device.lowercase()}", Ok.serializer()) }
 
+    // ---------- Account and family members (parent) ----------
+
+    /** Reloads the account and family from the server (the change feed does not carry account changes). */
+    suspend fun refreshMe() { apply(api().me()); saveCache() }
+    suspend fun parents(): FamilyParents = api().send("GET", "v1/family/parents", FamilyParents.serializer())
+    suspend fun inviteCode(): InviteCode = api().call("POST", "v1/family/invites", Empty())
+    suspend fun removeParent(id: String) { api().send("DELETE", "v1/family/parents/${id.lowercase()}", Ok.serializer()) }
+    @Serializable private data class BindBody(val phone: String, val password: String, val name: String)
+    @Serializable private data class AccountReply(val account: AccountInfo)
+    /** A phone connected with the parent secret sets up a phone number and password for its family. */
+    suspend fun bindAccount(phone: String, password: String, name: String) {
+        setAccount(api().call<BindBody, AccountReply>("POST", "v1/accounts/bind", BindBody(phone.filter(Char::isDigit), password, name.trim())).account)
+    }
+    @Serializable private data class NameBody(val name: String)
+    suspend fun renameAccount(name: String) { setAccount(api().call<NameBody, AccountReply>("PUT", "v1/account", NameBody(name.trim())).account) }
+    @Serializable private data class PasswordBody(val oldPassword: String, val newPassword: String)
+    /** The server signs the account out on its other phones. */
+    suspend fun changePassword(old: String, new: String) { api().call<PasswordBody, Ok>("POST", "v1/account/password", PasswordBody(old, new)) }
+
     @Serializable private data class ParseBody(val text: String, val date: String)
     suspend fun parse(text: String): ParseResult = api().call("POST", "v1/homework/parse", ParseBody(text, today))
 
@@ -654,13 +699,13 @@ class HomeworkStore(
         cursor = cache.cursor
         _state.update {
             it.copy(family = cache.family, children = cache.children, homework = cache.homework.associateBy { h -> h.id },
-                routines = cache.routines, rules = cache.rules, rewards = cache.rewards.associateBy { r -> r.childId }, outbox = cache.outbox, locks = cache.locks)
+                routines = cache.routines, rules = cache.rules, rewards = cache.rewards.associateBy { r -> r.childId }, outbox = cache.outbox, locks = cache.locks, account = cache.account)
         }
     }
 
     private suspend fun saveCache() {
         val s = current
-        val cache = Cache(cursor, s.family, s.children, s.homework.values.toList(), s.routines, s.rules, s.rewards.values.toList(), s.outbox, s.locks)
+        val cache = Cache(cursor, s.family, s.children, s.homework.values.toList(), s.routines, s.rules, s.rewards.values.toList(), s.outbox, s.locks, s.account)
         val text = wireJson.encodeToString(Cache.serializer(), cache)
         withContext(io) {
             val tmp = File(directory, "cache.json.tmp")

@@ -81,7 +81,17 @@ import okio.source
 @Serializable data class FamilyInfo(val id: String, val name: String = "", val timezone: String = "Asia/Shanghai", val today: String = "")
 @Serializable data class DeviceInfo(val id: String, val role: String, val name: String = "")
 @Serializable data class MeResponse(val cursor: Int, val device: DeviceInfo, val family: FamilyInfo, val children: List<RemoteChild> = emptyList(), val rules: RewardRules = RewardRules(),
-    val locks: List<LockStatus> = emptyList())
+    val locks: List<LockStatus> = emptyList(),
+    /** The signed-in parent account; null on child tablets, on phones connected with the parent secret, and from older servers. */
+    val account: AccountInfo? = null)
+
+/** A parent's own account: the phone number they sign in with and what the family calls them (妈妈, 爸爸…). */
+@Serializable data class AccountInfo(val id: String, val phone: String, val name: String = "")
+/** Another parent of the family, as listed in settings. `phone` is masked (138****8000). */
+@Serializable data class FamilyParent(val id: String, val name: String = "", val phone: String = "", val createdAt: String = "",
+    @SerialName("self") val isSelf: Boolean = false, val devices: Int = 0)
+@Serializable data class FamilyParents(val parents: List<FamilyParent> = emptyList(), val unboundDevices: Int = 0)
+@Serializable data class InviteCode(val code: String, val expiresAt: String)
 
 /** What a child tablet's reward-time lock reports (`PUT /v1/devices/self/lock`). */
 @Serializable data class LockReport(val enabled: Boolean, val lockedApps: Int, val stalled: Boolean, val adminActive: Boolean)
@@ -91,9 +101,11 @@ import okio.source
     val stalled: Boolean = false, val adminActive: Boolean = false, val reportedAt: String = "", val problem: String? = null)
 @Serializable data class Change(val seq: Int, val entity: String, val id: String, val op: String)
 @Serializable data class ChangeFeed(val changes: List<Change> = emptyList(), val next: Int, val hasMore: Boolean = false)
-@Serializable data class DeviceGrant(val deviceId: String, val deviceToken: String, val role: String, val familyId: String)
+@Serializable data class DeviceGrant(val deviceId: String, val deviceToken: String, val role: String, val familyId: String, val account: AccountInfo? = null)
 @Serializable data class PairingCode(val code: String, val expiresAt: String)
-@Serializable data class DeviceRecord(val id: String, val role: String, val name: String = "", val createdAt: String = "", val lastSeenAt: String? = null, @SerialName("self") val isSelf: Boolean = false)
+@Serializable data class DeviceRecord(val id: String, val role: String, val name: String = "", val createdAt: String = "", val lastSeenAt: String? = null, @SerialName("self") val isSelf: Boolean = false,
+    /** The parent account signed in on this phone; null for tablets and phones connected with the parent secret. */
+    val accountName: String? = null)
 /** `onlineKind` ("RECORDING" / "VIDEO" / "TIMER") is the AI's guess for an ONLINE item; null when it could not tell. */
 @Serializable data class ParsedItem(val subject: String, val content: String, val mode: String = "OFFLINE", val onlineKind: String? = null, val dueText: String = "", val dueDate: String? = null, val parentTodo: String = "")
 @Serializable data class ParseResult(val items: List<ParsedItem> = emptyList(), val message: String = "")
@@ -129,7 +141,14 @@ sealed class ApiException(val code: String? = null) : Exception() {
     object InvalidResponse : ApiException() { private fun readResolve(): Any = InvalidResponse; override val message get() = "服务器返回的内容无法识别。" }
 
     companion object {
-        fun from(status: Int, code: String): ApiException = when (status) {
+        fun from(status: Int, code: String): ApiException = when {
+            // A wrong phone number or password is the person's mistake, not this device's credential running out.
+            status == 401 && code in setOf("invalid_login", "wrong_password") -> Rejected(code)
+            status == 429 && code.isNotEmpty() -> Rejected(code)
+            else -> fromStatus(status, code)
+        }
+
+        private fun fromStatus(status: Int, code: String): ApiException = when (status) {
             401 -> Unauthorized
             403 -> Forbidden
             404 -> NotFound
@@ -159,6 +178,16 @@ sealed class ApiException(val code: String? = null) : Exception() {
             "unsupported_file_type" to "这种文件不能上传。",
             "invalid_file" to "文件已损坏，请重新拍摄。",
             "body_too_large" to "文件太大了。",
+            "invalid_phone" to "请填写 11 位手机号。",
+            "weak_password" to "密码至少 8 位。",
+            "phone_taken" to "这个手机号已经注册过了，请直接登录。",
+            "invalid_login" to "手机号或密码不对。",
+            "wrong_password" to "原密码不对。",
+            "too_many_attempts" to "密码错误次数太多，请 15 分钟后再试。",
+            "rate_limited" to "尝试太频繁了，请过一会儿再试。",
+            "invalid_invite" to "邀请码不对、已经用过或已过期，请家人重新生成。",
+            "already_bound" to "这台手机已经设置过登录账号了。",
+            "cannot_remove_self" to "不能把自己移出家庭。",
         )
     }
 }
@@ -290,12 +319,19 @@ class ApiClient(val baseUrl: String, val token: String?, private val transport: 
 
     @Serializable private data class Bootstrap(val token: String, val deviceId: String, val name: String)
     @Serializable private data class PairBody(val code: String, val deviceId: String, val name: String)
+    @Serializable private data class RegisterBody(val phone: String, val password: String, val name: String, val inviteCode: String?, val deviceId: String, val deviceName: String)
+    @Serializable private data class LoginBody(val phone: String, val password: String, val deviceId: String, val deviceName: String)
     @Serializable private data class HomeworkPage(val items: List<RemoteHomework> = emptyList())
     @Serializable private data class ChildrenPage(val children: List<RemoteChild> = emptyList())
     @Serializable private data class RoutinesPage(val routines: List<Routine> = emptyList())
 
     suspend fun bootstrap(secret: String, deviceId: String, name: String): DeviceGrant =
         send("POST", "v1/devices/bootstrap", DeviceGrant.serializer(), json = wireJson.encodeToString(Bootstrap.serializer(), Bootstrap(secret, deviceId, name)))
+    suspend fun register(phone: String, password: String, name: String, inviteCode: String?, deviceId: String, deviceName: String): DeviceGrant =
+        send("POST", "v1/accounts/register", DeviceGrant.serializer(),
+            json = wireJson.encodeToString(RegisterBody.serializer(), RegisterBody(phone, password, name, inviteCode, deviceId, deviceName)))
+    suspend fun login(phone: String, password: String, deviceId: String, deviceName: String): DeviceGrant =
+        send("POST", "v1/accounts/login", DeviceGrant.serializer(), json = wireJson.encodeToString(LoginBody.serializer(), LoginBody(phone, password, deviceId, deviceName)))
     suspend fun pair(code: String, deviceId: String, name: String): DeviceGrant =
         send("POST", "v1/devices/pair", DeviceGrant.serializer(), json = wireJson.encodeToString(PairBody.serializer(), PairBody(code, deviceId, name)))
     suspend fun me(): MeResponse = send("GET", "v1/me", MeResponse.serializer())

@@ -34,9 +34,11 @@ iPad（孩子）────┘    （数据 + 文件）    └── APNs（计
 
 现在整个网关只有一个 `TUTOR_DEVICE_TOKEN`。一期需要区分家长设备和孩子设备：
 
+2026-11-25 起服务器支持多个家庭：家长用手机号和密码注册登录，一个家庭可以有多位家长（用 8 位邀请码加入，24 小时有效、只能用一次）和多个孩子。
+
 | 角色 | 获得方式 | 权限 |
 | --- | --- | --- |
-| `parent` | 首次部署时由环境变量 `PARENT_BOOTSTRAP_TOKEN` 在家长 iPhone 上换取设备凭证 | 全部读写 |
+| `parent` | 用手机号和密码注册或登录（`/accounts/register`、`/accounts/login`）换取这台手机的设备凭证；旧方式是用环境变量 `PARENT_BOOTSTRAP_TOKEN` 连进服务器上最早的家庭，这样连上的手机可以补设账号（`/accounts/bind`） | 全部读写 |
 | `child` | 家长端生成 6 位配对码（10 分钟有效），在 iPad 上输入后换取设备凭证 | 读自己家庭的作业；提交、打卡、使用奖励；不能改作业、批改或改规则 |
 
 - 每台设备一条凭证，服务端只存凭证的哈希；家长端可以查看和撤销设备。
@@ -50,8 +52,10 @@ iPad（孩子）────┘    （数据 + 文件）    └── APNs（计
 | 表 | 主要字段 |
 | --- | --- |
 | `families` | id, name, timezone（Asia/Shanghai） |
+| `accounts` | id, familyId, phone（唯一）, name（称呼）, passwordHash（scrypt 加盐）；一个账号只属于一个家庭 |
+| `family_invites` | codeHash, familyId, createdBy, expiresAt, usedAt, usedBy |
 | `children` | id, familyId, name, grade, avatar |
-| `devices` | id, familyId, role, childId?, tokenHash, apnsToken?, lastSeenAt, revokedAt? |
+| `devices` | id, familyId, role, accountId?（家长手机登录的账号）, childId?, tokenHash, apnsToken?, lastSeenAt, revokedAt? |
 | `homework` | id, childId, subject（CHINESE / MATH / ENGLISH / OTHER）, date（显示在哪一天）, dueDate?（老师的截止日期）, content, rawText?, mode（OFFLINE / ONLINE）, onlineKind?（TIMER / RECORDING / VIDEO）, durationMinutes?, parentTodo?, status, source（PASTE / MANUAL / ROUTINE）, routineId?, attachmentIds[] |
 | `routines` | id, childId, title, subject, mode, onlineKind?, durationMinutes?, quantity?, weekdays[], active, sortOrder |
 | `submissions` | id, homeworkId, attempt（第几次提交）, fileIds[], submittedAt（设备时间）, receivedAt（服务端时间）, onTime |
@@ -95,7 +99,12 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 
 | 方法与路径 | 角色 | 说明 |
 | --- | --- | --- |
-| `POST /devices/bootstrap` | — | 用 `PARENT_BOOTSTRAP_TOKEN` 换取家长设备凭证 |
+| `POST /accounts/register`、`POST /accounts/login` | — | 家长用手机号和密码注册（可带邀请码加入已有家庭）或登录，换取这台手机的设备凭证 |
+| `POST /accounts/bind` | parent | 用家长密钥连接的手机给家庭补设手机号和密码 |
+| `PUT /account`、`POST /account/password` | parent | 改称呼、改密码（改密码后这个账号的其他手机要重新登录） |
+| `GET /family/parents`、`POST /family/invites`、`DELETE /family/parents/:id` | parent | 查看家长、生成邀请码、把其他家长移出家庭 |
+| `POST /devices/bootstrap` | — | 旧方式：用 `PARENT_BOOTSTRAP_TOKEN` 换取家长设备凭证 |
+| `DELETE /devices/self` | 全部 | 退出登录，这台设备的凭证作废 |
 | `POST /devices/pairing-codes` | parent | 生成孩子设备配对码 |
 | `POST /devices/pair` | — | iPad 用配对码换取孩子设备凭证 |
 | `GET /devices`、`DELETE /devices/:id` | parent | 查看、撤销设备 |
@@ -170,7 +179,7 @@ NOT_STARTED ──提交──▶ SUBMITTED ──批改──▶ REVIEWED
 
 沿用 `ipad/` 工程（XcodeGen），App 改为同时支持 iPhone 和 iPad：
 
-- 首次启动选择“我是家长”（输入家长凭证）或“这是孩子的 iPad”（输入配对码），角色存入 Keychain。
+- 首次启动选择“我是家长”（用手机号登录或注册；注册时可填家人发来的邀请码；也保留“用家长密钥连接”）或“这是孩子的 iPad”（输入配对码），角色存入 Keychain。家长在“设置”里管理孩子、邀请或移出其他家长、改称呼和密码。
 - 根视图按**角色**而不是设备尺寸切换：家长端为底部标签栏（作业 / 录入 / 每天坚持 / 奖励），孩子端为横屏顶部导航（今天 / 全部作业 / 我的进步）。
 - 现有的辅导、练习、知识证据、语音等代码保留，一期孩子端不放入口。
 

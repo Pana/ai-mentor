@@ -34,16 +34,25 @@ final class Phase1E2EUITests: XCTestCase {
         XCTAssertTrue(element.waitForExistence(timeout: timeout), what)
     }
 
-    /// Stage 1 (iPhone): connect as parent, add a child, enter homework.
+    /// Stage 1 (iPhone): register a parent account (a new family), add a child, enter homework.
     func test1ParentConnectsAndEntersHomework() throws {
         let app = try launch(reset: true)
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "我是家长")).firstMatch.waitTap()
+        app.segmentedControls.buttons["注册"].waitTap()
         replace(app.textFields["服务器地址"], with: env["E2E_SERVER"]!)
-        app.secureTextFields["家长密钥"].waitTap()
-        app.secureTextFields["家长密钥"].typeText(env["E2E_PARENT_SECRET"]!)
-        app.buttons["连接"].waitTap()
+        app.textFields["手机号"].waitTap()
+        app.textFields["手机号"].typeText(env["E2E_PARENT_PHONE"]!)
+        for field in ["密码", "再输一次密码"] {
+            app.secureTextFields[field].waitTap()
+            app.secureTextFields[field].typeText(env["E2E_PARENT_PASSWORD"]!)
+        }
+        app.textFields["你的称呼（如 妈妈）"].waitTap()
+        app.textFields["你的称呼（如 妈妈）"].typeText("妈妈")
+        let hide = app.keyboards.buttons["Hide keyboard"]
+        if hide.exists { hide.tap() }
+        app.buttons["account-submit"].waitTap()
         wait(app.navigationBars["作业"], "parent app opened")
-        // iOS offers to save the parent secret as a password; the sheet can take several seconds to appear.
+        // iOS offers to save the password; the sheet can take several seconds to appear.
         let notNow = app.buttons["Not Now"]
         if notNow.waitForExistence(timeout: 10) { notNow.tap() }
         shot(app, "p1-empty")

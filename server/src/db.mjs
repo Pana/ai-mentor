@@ -64,6 +64,19 @@ const migrations = [`
   -- 小熊读诗的讲解（模型生成）。key = 讲解版本 + 诗的 id + 诗文摘要，诗文或提示词改了就是新的一条。
   CREATE TABLE poem_explanations (
     key TEXT PRIMARY KEY, poem_id TEXT NOT NULL, explanation TEXT NOT NULL, created_at TEXT NOT NULL);
+`, `
+  -- Parent accounts (phone number + password). A family is the unit: several parents, several children.
+  -- An account belongs to one family; each parent phone it signs in on gets its own device credential.
+  CREATE TABLE accounts (
+    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, phone TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT '',
+    password_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+  CREATE INDEX accounts_family ON accounts (family_id);
+  -- NULL for child tablets and for parent phones connected with PARENT_BOOTSTRAP_TOKEN before accounts existed.
+  ALTER TABLE devices ADD COLUMN account_id TEXT;
+  -- Invite codes a parent shares so another parent can register into the same family. Single use.
+  CREATE TABLE family_invites (
+    code_hash TEXT PRIMARY KEY, family_id TEXT NOT NULL, created_by TEXT, expires_at INTEGER NOT NULL,
+    used_at TEXT, used_by TEXT);
 `];
 
 export function openDatabase(path) {

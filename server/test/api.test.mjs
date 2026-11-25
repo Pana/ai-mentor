@@ -75,6 +75,105 @@ test('devices: bootstrap needs the secret, pairing codes are single use, roles a
   assert.equal((await call('GET', '/v1/me', { token: child })).status, 401);
 });
 
+const register = (call, fields = {}) => call('POST', '/v1/accounts/register', { body: {
+  phone: '13800138000', password: 'bear-pass-123', name: '妈妈', deviceId: randomUUID(), deviceName: '妈妈的 iPhone', ...fields } });
+const login = (call, fields = {}) => call('POST', '/v1/accounts/login', { body: {
+  phone: '13800138000', password: 'bear-pass-123', deviceId: randomUUID(), deviceName: '新手机', ...fields } });
+
+test('accounts: registering makes a new family, phone numbers are unique, login checks the password', async t => {
+  const { call, childId } = await setup(t);
+  const mom = await register(call, { phone: '138 0013 8000' });
+  assert.equal(mom.status, 200);
+  assert.equal(mom.body.role, 'parent');
+  assert.deepEqual(mom.body.account, { id: mom.body.account.id, phone: '13800138000', name: '妈妈' });
+  const me = (await call('GET', '/v1/me', { token: mom.body.deviceToken })).body;
+  assert.equal(me.account.phone, '13800138000');
+  // A new family, apart from the bootstrap family that setup() made: none of its children are visible.
+  assert.notEqual(me.family.id, (await call('GET', '/v1/me', { token: (await call('POST', '/v1/devices/bootstrap', {
+    body: { token: bootstrapToken, deviceId: randomUUID() } })).body.deviceToken })).body.family.id);
+  assert.deepEqual(me.children, []);
+  assert.equal((await call('GET', `/v1/rewards?childId=${childId}`, { token: mom.body.deviceToken })).status, 404);
+  assert.equal(me.rules.finishTime, '19:30');
+
+  assert.equal((await register(call)).status, 409);
+  assert.equal((await register(call, { phone: '12345' })).body.error, 'invalid_phone');
+  assert.equal((await register(call, { phone: '13900139000', password: 'short' })).body.error, 'weak_password');
+  assert.equal((await register(call, { phone: '13900139000', name: ' ' })).status, 400);
+
+  const again = await login(call);
+  assert.equal(again.status, 200);
+  assert.equal(again.body.familyId, mom.body.familyId);
+  assert.equal((await call('GET', '/v1/me', { token: again.body.deviceToken })).body.family.id, me.family.id);
+  assert.equal((await login(call, { password: 'wrong-password' })).body.error, 'invalid_login');
+  assert.equal((await login(call, { phone: '13900139000' })).body.error, 'invalid_login');
+  for (let i = 0; i < 4; i++) await login(call, { password: 'wrong-password' });
+  // Five wrong passwords in 15 minutes lock the number, even for the right password, until they age out.
+  assert.equal((await login(call)).body.error, 'too_many_attempts');
+});
+
+test('accounts: invite codes add another parent to the family; parents can be listed and removed', async t => {
+  const { call, clock } = await setup(t);
+  const mom = (await register(call)).body;
+  const childId = randomUUID();
+  assert.equal((await call('PUT', `/v1/children/${childId}`, { token: mom.deviceToken, body: { name: '林林', grade: 2 } })).status, 200);
+  const invite = (await call('POST', '/v1/family/invites', { token: mom.deviceToken, body: {} })).body;
+  assert.match(invite.code, /^\d{8}$/);
+  assert.equal((await register(call, { phone: '13900139000', name: '爸爸', inviteCode: '00000000' })).body.error, 'invalid_invite');
+  const dad = await register(call, { phone: '13900139000', name: '爸爸', inviteCode: `${invite.code.slice(0, 4)} ${invite.code.slice(4)}` });
+  assert.equal(dad.status, 200);
+  assert.equal(dad.body.familyId, mom.familyId);
+  const dadMe = (await call('GET', '/v1/me', { token: dad.body.deviceToken })).body;
+  assert.deepEqual(dadMe.children.map(c => c.name), ['林林']);
+  // Dad adds a second child; mom sees it too.
+  assert.equal((await call('PUT', `/v1/children/${randomUUID()}`, { token: dad.body.deviceToken, body: { name: '多多', grade: 1 } })).status, 200);
+  assert.deepEqual((await call('GET', '/v1/me', { token: mom.deviceToken })).body.children.map(c => c.name), ['林林', '多多']);
+  // Single use; and a fresh code expires after 24 hours.
+  assert.equal((await register(call, { phone: '13700137000', inviteCode: invite.code })).body.error, 'invalid_invite');
+  const late = (await call('POST', '/v1/family/invites', { token: mom.deviceToken, body: {} })).body;
+  clock.ms += 25 * 3_600_000;
+  assert.equal((await register(call, { phone: '13700137000', inviteCode: late.code })).body.error, 'invalid_invite');
+
+  const parents = (await call('GET', '/v1/family/parents', { token: mom.deviceToken })).body;
+  assert.deepEqual(parents.parents.map(p => [p.name, p.phone, p.self, p.devices]), [['妈妈', '138****8000', true, 1], ['爸爸', '139****9000', false, 1]]);
+  assert.equal(parents.unboundDevices, 0);
+  const devices = (await call('GET', '/v1/devices', { token: mom.deviceToken })).body.devices;
+  assert.deepEqual(devices.map(d => d.accountName), ['妈妈', '爸爸']);
+
+  assert.equal((await call('DELETE', `/v1/family/parents/${mom.account.id}`, { token: mom.deviceToken })).body.error, 'cannot_remove_self');
+  assert.equal((await call('DELETE', `/v1/family/parents/${dad.body.account.id}`, { token: mom.deviceToken })).status, 200);
+  assert.equal((await call('GET', '/v1/me', { token: dad.body.deviceToken })).status, 401);
+  assert.equal((await login(call, { phone: '13900139000' })).body.error, 'invalid_login');
+  // The number is free again; without a code it registers into a family of its own.
+  const dadAgain = (await register(call, { phone: '13900139000', name: '爸爸' })).body;
+  assert.notEqual(dadAgain.familyId, mom.familyId);
+  assert.equal((await call('DELETE', `/v1/family/parents/${dadAgain.account.id}`, { token: mom.deviceToken })).status, 404);
+  assert.equal((await call('POST', '/v1/family/invites', { token: (await call('POST', '/v1/devices/pair', { body: {
+    code: (await call('POST', '/v1/devices/pairing-codes', { token: mom.deviceToken, body: {} })).body.code, deviceId: randomUUID() } })).body.deviceToken, body: {} })).status, 403);
+});
+
+test('accounts: a bootstrap phone binds an account; password changes sign other phones out; sign out revokes this phone', async t => {
+  const { call, parent } = await setup(t);
+  assert.equal((await call('GET', '/v1/me', { token: parent })).body.account, null);
+  assert.equal((await call('GET', '/v1/family/parents', { token: parent })).body.unboundDevices, 1);
+  const bound = await call('POST', '/v1/accounts/bind', { token: parent, body: { phone: '13800138000', password: 'bear-pass-123', name: '妈妈' } });
+  assert.equal(bound.status, 200);
+  assert.equal((await call('POST', '/v1/accounts/bind', { token: parent, body: { phone: '13900139000', password: 'bear-pass-123', name: '妈妈' } })).body.error, 'already_bound');
+  const familyId = (await call('GET', '/v1/me', { token: parent })).body.family.id;
+  const second = (await login(call)).body;
+  assert.equal(second.familyId, familyId);
+  assert.equal((await call('PUT', '/v1/account', { token: second.deviceToken, body: { name: '林林妈妈' } })).body.account.name, '林林妈妈');
+
+  assert.equal((await call('POST', '/v1/account/password', { token: parent, body: { oldPassword: 'nope-nope', newPassword: 'new-pass-456' } })).body.error, 'wrong_password');
+  assert.equal((await call('POST', '/v1/account/password', { token: parent, body: { oldPassword: 'bear-pass-123', newPassword: 'new-pass-456' } })).status, 200);
+  assert.equal((await call('GET', '/v1/me', { token: second.deviceToken })).status, 401);
+  assert.equal((await call('GET', '/v1/me', { token: parent })).status, 200);
+  assert.equal((await login(call)).body.error, 'invalid_login');
+  assert.equal((await login(call, { password: 'new-pass-456' })).status, 200);
+
+  assert.equal((await call('DELETE', '/v1/devices/self', { token: parent })).status, 200);
+  assert.equal((await call('GET', '/v1/me', { token: parent })).status, 401);
+});
+
 test('homework: batch create is idempotent, validated, and listed by date with the child device', async t => {
   const { call, parent, child, childId } = await setup(t);
   const item = { id: randomUUID(), childId, subject: 'ENGLISH', date: '2026-11-09', dueDate: '2026-11-10',
