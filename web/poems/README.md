@@ -1,6 +1,6 @@
 # 小熊读诗（古诗，网页版）
 
-课本古诗按年级排好，诗库可以按朝代、体裁、选集、题材、诗人查找。每首诗都能请小熊“讲一讲”：诗里的画面、一句一句的意思、难懂的字词、诗人想说什么、写诗的小故事、认识诗人。以后集成到小熊伴学 iPad 端。
+课本古诗按年级排好，学校的古诗考级按 1–6 级排好，诗库可以按朝代、体裁、选集、题材、诗人查找。每首诗都能请小熊“讲一讲”：诗里的画面、一句一句的意思、难懂的字词、诗人想说什么、写诗的小故事、认识诗人。以后集成到小熊伴学 iPad 端。
 
 ## 打开
 
@@ -18,6 +18,7 @@ scripts/lan-gateway.sh             # 同一 Wi-Fi 的 iPad：http://<Mac 的 IP>
 | 部分 | 来源 |
 | --- | --- |
 | 课本古诗 | `server/src/poems-school.json`：统编版小学语文 1–6 年级的课文古诗、日积月累、古诗词诵读，课本版原文（和《全唐诗》常有不同，比如《静夜思》）。每首 `{grade, term, unit, kind, title, author, dynasty, lines, note}`，按课本顺序排，id 按顺序自动编（`s3a02` = 三年级上册第 2 首），所以**插入新诗会让后面的 id 变**，已经生成的讲解要重新生成 |
+| 古诗考级 | `server/src/poems-levels.json`：学校发的古诗考级清单（2026.08 版）1–6 级，每首 `{level, title, author, dynasty, lines, note?}`，按清单顺序排。和课本原文一字不差的直接用课本那一首（id、讲解共用）；课本没有或课本是节选的用自己的 id（`k3a01` = 三级第 1 首自己的诗），原文照清单。页面在“课本古诗”的年级后面多一个“考级” |
 | 诗库 | [chinese-poetry](https://github.com/chinese-poetry/chinese-poetry)（MIT）的全唐诗、全宋诗、全宋词，约 33 万首。`node scripts/poems/import.mjs <仓库目录>` 生成 `server/data/poems.db`（约 100 MB），部署时拷到服务器的 `DATA_DIR`。见下面“导入诗库” |
 | 讲解 | 服务端配置的模型（`POEMS_MODEL_NAME`，默认 `MODEL_NAME`），第一次讲某首诗时生成，存在 `littlebear.db` 的 `poem_explanations` 表，以后直接读 |
 | 拼音 | 讲解时模型一起给出（按课本的读法），存在讲解里；讲过的诗打开就有拼音。某一行的拼音个数和字数对不上时，那一行不显示拼音 |
