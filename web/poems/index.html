@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#fff7ec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1f1915" media="(prefers-color-scheme: dark)">
+  <title>小熊读诗</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%BB%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/"><span class="bear" aria-hidden="true">🐻</span><span>小熊读诗</span></a>
+    <nav class="tabs" id="tabs" aria-label="页面">
+      <a href="#/" data-tab="school">课本古诗</a>
+      <a href="#/library" data-tab="library">诗库</a>
+    </nav>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -861,6 +861,7 @@ private fun Filter.matches(item: RemoteHomework) = when (this) {
             LabeledRow("服务器", state.session?.server ?: "")
             LabeledRow("孩子", state.children.joinToString("、") { it.name })
             TextButton({ StoreHolder.scope.launch { store.sync() } }) { Text("立即同步") }
+            state.session?.let { AppUpdateButton(it.server) }
             RewardLockSection()
             TextButton({ confirmSignOut = true }) { Text("断开这台设备", color = Palette.redPen) }
         } else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {

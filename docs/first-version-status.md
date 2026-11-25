@@ -1,5 +1,7 @@
 # 第一版候选状态
 
+> 历史资料（2026-11-24 标注）：本文保留旧版单机辅导的设计或阶段记录，文中的“当前”“尚未”“暂停”仅适用于当时。现行作业管理见[一期需求](prd-phase1.md)，最新实现见[项目说明](../README.md)，优先级见[路线图](roadmap.md)。Android 已恢复开发，两端均已实现一期作业管理。
+
 版本：1.0.0-beta.1。日期：2026-11-04。
 
 **目标平台：iPad 首发**（2026-11-06 确认）。SwiftUI 客户端位于 `ipad/`，计划与进度见 [iPad 客户端开发计划](ipad-plan.md)。下文的 Android 1.0.0-beta.1 记录保留作为参考，Android 客户端暂停新功能。
@@ -131,4 +133,4 @@ Android 最终命令：`./gradlew --no-daemon --console=plain testDebugUnitTest 
 4. 家长填写服务地址、设备凭证并开启云端辅导；供应商密钥只填写到服务端。
 5. 按 [实机验收清单](device-validation.md) 与网关供应商验收项逐项记录。
 
-原型阶段的构建记录保留在 [原型状态](prototype-status.md)，后续应以本文为当前状态。
+原型阶段的构建记录保留在 [原型状态](prototype-status.md)，本文也已归为历史记录，现行状态见 [项目说明](../README.md)。

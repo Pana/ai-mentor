@@ -771,6 +771,7 @@ fun rewardReason(entry: RewardEntry, state: HomeworkState): String {
             }
             TextButton({ adding = true }) { Icon(Icons.Filled.Add, null); Text("添加孩子") }
         }
+        state.session?.let { AppUpdateButton(it.server) }
         FormSection("连接孩子的设备") {
             code?.let {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {

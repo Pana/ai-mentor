@@ -83,6 +83,22 @@ Caddy 默认不限制请求大小，不用改。
 
 汉字语音识别配置：`VOLC_ASR_API_KEY` 使用火山引擎新版控制台 API Key；`VOLC_ASR_RESOURCE_ID` 推荐从 `volc.seedasr.sauc.duration` 开始。网页会把短句录成 PCM 发给服务端，调用流式语音识别模型 2.0 的 `bigmodel_nostream` 一句话模式并等待最终结果；未配置 ASR 或服务端暂不可用时明确提示，不调用浏览器自带的语音识别。
 
+## 古诗（小熊读诗）
+
+网页在 `/poems/`，源码在 `web/poems/`，说明见 [web/poems/README.md](../web/poems/README.md)。课本古诗在 `src/poems-school.json`（随代码发布）；诗库是 `DATA_DIR/poems.db`（或 `POEMS_DB` 指定的路径），由 `node scripts/poems/import.mjs <chinese-poetry 目录>` 在 Mac 上生成后拷过去，没有这个文件时页面只有课本古诗。
+
+| 接口 | 鉴权 | 说明 |
+| --- | --- | --- |
+| `GET /poems/` | 无 | 网页 |
+| `GET /v1/poems/home` | 无 | `{school:[{grade, term, poems:[…]}], library:{poems, dynasties, forms, books, tags} \| null}` |
+| `GET /v1/poems/search?q=&dynasty=&form=&book=&tag=&author=&offset=` | 无 | `{school:[…], poems:[…], more}`，每页 30 首，按名气排；只按文字或诗人找时课本古诗排在最前面 |
+| `GET /v1/poems/authors?dynasty=&q=&offset=` | 无 | 诗人列表，每页 60 位 |
+| `GET /v1/poems/author?name=&dynasty=` | 无 | `{name, dynasty, intro, poems}`，`intro` 是古书里的文言简介 |
+| `GET /v1/poems/poem/<id>` | 无 | 一首诗；`s…` 是课本古诗，`p…` 是诗库。讲过的诗带着 `explanation`；诗库里和课本同题同作者的带 `textbookId` |
+| `POST /v1/poems/explain` | 同源会话或 `TUTOR_DEVICE_TOKEN` | `{id}` → `{pinyin, scene, lines, words, feeling, story, poet}`。诗文由服务端按 id 查出来再交给模型；最长 24 行、400 字；结果存在 `littlebear.db` 的 `poem_explanations` 表，同一首诗只问一次模型。每分钟最多 30 次新讲解 |
+
+`POEMS_MODEL_NAME` 可单独指定讲诗用的模型，默认用 `MODEL_NAME`；`POEMS_MODEL_THINKING` 同 `HANZI_MODEL_THINKING`，默认 `disabled`。只读接口每分钟最多 600 次。
+
 ## 小熊老师（语音老师）
 
 网页在 `/teacher/`，源码在 `web/teacher/`，打开方式和真机检查清单见 [web/teacher/README.md](../web/teacher/README.md)。孩子直接说话（不用按住按钮），小熊边说边在白板上画；小熊说话时孩子开口或点小熊就能打断。协议、白板 DSL 和分期见 [语音老师技术方案](../docs/voice-teacher.md)。
@@ -133,6 +149,8 @@ npm start
 | `VOLC_TTS_URL` | 默认 `https://openspeech.bytedance.com/api/v3/tts/unidirectional`（HTTP Chunked 单向流式） |
 | `VOLC_TTS_SPEECH_RATE` | 语速，默认 `0`；范围按火山文档，负数更慢 |
 | `TEACHER_MODEL_NAME` | 小熊老师用的模型 ID，默认 `MODEL_NAME` |
+| `POEMS_MODEL_NAME` | 讲古诗用的模型 ID，默认 `MODEL_NAME` |
+| `POEMS_DB` | 诗库文件，默认 `DATA_DIR/poems.db` |
 | `MODEL_VISION_NAME` | 可选。同一供应商下支持图片输入的模型 ID，只用于带照片的请求（拍照识题、带图求助/检查） |
 | `MODEL_SUPPORTS_IMAGES` | 默认 `true`。`MODEL_NAME` 不能看图且未配置 `MODEL_VISION_NAME` 时设为 `false`：带图请求直接返回 422 `images_not_supported`，App 提示改用文字，不再请求上游 |
 | `MODEL_JSON_MODE` | 默认为 `true`，发送 `response_format: {type: "json_object"}`；供应商不支持时设 `false`，仍严格校验返回 JSON |
