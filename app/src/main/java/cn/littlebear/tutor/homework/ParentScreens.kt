@@ -749,7 +749,7 @@ fun rewardReason(entry: RewardEntry, state: HomeworkState): String {
     }
 }
 
-// ---------- Settings: children, pairing, devices ----------
+// ---------- Settings: children, parents, pairing, devices, account ----------
 
 @Composable private fun ParentSettings(onBack: () -> Unit) {
     val store = LocalStore.current
@@ -771,6 +771,7 @@ fun rewardReason(entry: RewardEntry, state: HomeworkState): String {
             }
             TextButton({ adding = true }) { Icon(Icons.Filled.Add, null); Text("添加孩子") }
         }
+        FamilyParentsSection()
         state.session?.let { AppUpdateButton(it.server) }
         FormSection("连接孩子的设备") {
             code?.let {
@@ -786,12 +787,14 @@ fun rewardReason(entry: RewardEntry, state: HomeworkState): String {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(d.name.ifEmpty { if (d.role == "parent") "家长手机" else "孩子设备" })
-                        Text((if (d.role == "parent") "家长" else "孩子") + if (d.isSelf) " · 这台设备" else "", fontSize = 12.sp, color = Palette.ink3)
+                        Text(listOfNotNull(if (d.role == "parent") "家长" else "孩子", d.accountName, if (d.isSelf) "这台设备" else null).joinToString(" · "),
+                            fontSize = 12.sp, color = Palette.ink3)
                     }
                     if (!d.isSelf) TextButton({ store.launch { revoke(d.id); devices = devices() } }) { Text("断开", color = Palette.redPen) }
                 }
             }
         }
+        AccountSection()
         FormSection {
             LabeledRow("服务器", state.session?.server ?: "")
             TextButton({ confirmSignOut = true }) { Text("退出这台设备", color = Palette.redPen) }
@@ -803,7 +806,7 @@ fun rewardReason(entry: RewardEntry, state: HomeworkState): String {
             confirmButton = { TextButton({ deleting = null; store.launch { deleteChild(c.id) } }) { Text("删除", color = Palette.redPen) } },
             dismissButton = { TextButton({ deleting = null }) { Text("取消") } })
     }
-    if (confirmSignOut) AlertDialog(onDismissRequest = { confirmSignOut = false }, title = { Text("退出这台设备？") }, text = { Text("退出后需要用家长密钥重新连接。") },
+    if (confirmSignOut) AlertDialog(onDismissRequest = { confirmSignOut = false }, title = { Text("退出这台设备？") }, text = { Text(if (state.account == null) "退出后需要用家长密钥重新连接。" else "退出后需要用手机号和密码重新登录。") },
         confirmButton = { TextButton({ confirmSignOut = false; store.launch { signOut() } }) { Text("退出", color = Palette.redPen) } },
         dismissButton = { TextButton({ confirmSignOut = false }) { Text("取消") } })
 }

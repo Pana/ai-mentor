@@ -11,24 +11,33 @@
 
 | 变量 | 含义 |
 | --- | --- |
-| `PARENT_BOOTSTRAP_TOKEN` | 至少 24 字符的随机串。家长 iPhone 首次使用时用它换取自己的设备凭证；留空则作业 API 不可用 |
+| `PARENT_BOOTSTRAP_TOKEN` | 选填，旧的连接方式：至少 24 字符的随机串，家长手机用它直接连进服务器上最早的家庭。留空时只能用手机号注册登录 |
 | `DATA_DIR` | 数据库与文件目录，默认 `./data` |
 | `MODEL_*` | 与辅导网关共用，用于“AI 整理作业” |
 
-### 设备与鉴权
+### 家庭、账号与设备
 
-1. 家长 iPhone：`POST /v1/devices/bootstrap {token, deviceId, name}`，`token` 为 `PARENT_BOOTSTRAP_TOKEN`，返回家长设备凭证。第一次调用时自动创建家庭。
-2. 家长生成配对码：`POST /v1/devices/pairing-codes`，返回 6 位数字，10 分钟内有效，只能用一次。
-3. 孩子 iPad：`POST /v1/devices/pair {code, deviceId, name}`，返回孩子设备凭证。
-4. 之后所有请求带 `Authorization: Bearer <设备凭证>`。服务端只保存凭证的哈希；家长可以 `DELETE /v1/devices/:id` 撤销设备。
+家庭是基本单位：一个家庭可以有多位家长、多个孩子，数据按家庭隔离。
 
-未登录的 bootstrap / pair 每分钟最多 10 次，每台设备每分钟最多 300 次请求。
+1. 家长注册：`POST /v1/accounts/register {phone, password, name, inviteCode?, deviceId, deviceName}`。手机号是 11 位大陆手机号，密码至少 8 位，`name` 是家人对他的称呼（妈妈、爸爸）。不带邀请码时新建一个家庭；带邀请码时加入发码的家庭。返回这台手机的设备凭证和 `account`。
+2. 家长登录：`POST /v1/accounts/login {phone, password, deviceId, deviceName}`，每台手机各有自己的设备凭证。
+3. 邀请另一位家长：`POST /v1/family/invites` 返回 8 位数字邀请码，24 小时内有效，只能用一次；对方注册时填上。
+4. 孩子：任何一位家长 `PUT /v1/children/:id` 添加；孩子的平板用 6 位配对码连接（`POST /v1/devices/pairing-codes` 生成，10 分钟内有效，只能用一次；`POST /v1/devices/pair {code, deviceId, name}` 换取孩子设备凭证）。
+5. 之后所有请求带 `Authorization: Bearer <设备凭证>`。服务端只保存凭证的哈希；家长可以 `DELETE /v1/devices/:id` 撤销设备，任何设备可以 `DELETE /v1/devices/self` 退出登录。
+6. 旧的连接方式：`POST /v1/devices/bootstrap {token, deviceId, name}`（`token` 为 `PARENT_BOOTSTRAP_TOKEN`）连进服务器上最早的家庭，第一次调用时创建这个家庭。这样连上的手机可以用 `POST /v1/accounts/bind {phone, password, name}` 给家庭补设账号，之后换手机直接登录。
+
+密码用 scrypt（N=16384）加盐保存。未登录的 bootstrap / pair 每分钟最多 10 次；注册和登录合计整个服务器每分钟最多 30 次；同一手机号 15 分钟内输错 5 次密码后暂停登录，直到最早一次满 15 分钟。每台设备每分钟最多 300 次请求。
 
 ### 接口
 
 | 方法与路径 | 角色 | 说明 |
 | --- | --- | --- |
-| `GET /v1/me` | 全部 | 当前设备、家庭、孩子列表、奖励规则、家庭时区的“今天”；家长还会收到 `locks`：各孩子平板的奖励时间锁定状态 |
+| `GET /v1/me` | 全部 | 当前设备、家庭、孩子列表、奖励规则、家庭时区的“今天”；家长还会收到 `locks`（各孩子平板的奖励时间锁定状态）和 `account`（这台手机登录的账号，用家长密钥连接的为 `null`） |
+| `GET /v1/family/parents` | 家长 | 家庭里的家长：`{parents:[{id, name, phone（中间打码）, self, devices}], unboundDevices}`，`unboundDevices` 是用家长密钥连接、没登录账号的家长手机数 |
+| `POST /v1/family/invites` | 家长 | 生成邀请码 `{code, expiresAt}` |
+| `DELETE /v1/family/parents/:id` | 家长 | 把另一位家长移出家庭：删除账号并让他的手机退出登录，不能移出自己（400 `cannot_remove_self`）；孩子和作业不受影响 |
+| `PUT /v1/account` | 家长 | `{name}` 修改自己的称呼 |
+| `POST /v1/account/password` | 家长 | `{oldPassword, newPassword}`；成功后这个账号的其他手机都要重新登录 |
 | `PUT /v1/devices/self/lock` | 孩子 | `{enabled, lockedApps, stalled, adminActive}`：安卓平板的锁定心跳。家长看到的 `problem`：`off`（锁定关了）、`paused`（被系统暂停过）、`silent`（超过一天没报告）。只有家长看到的内容变了才写入变化流 |
 | `GET /v1/children`、`PUT/DELETE /v1/children/:id` | 读：全部；写：家长 | 孩子档案；删除会一并删除作业、每天坚持、奖励和文件 |
 | `POST /v1/homework/parse` | 家长 | `{text, date?}` → `{items:[{subject, content, mode, dueText, dueDate, parentTodo}], message}`，只整理不保存 |

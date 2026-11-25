@@ -209,6 +209,43 @@ class Phase1ServerTest {
         }
     }
 
+    /** A phone number nobody on the test server has registered yet. */
+    private fun freshPhone(): String = "139" + (0 until 8).map { (0..9).random() }.joinToString("")
+
+    @Test fun parentsRegisterInviteEachOtherAndShareChildren() = runBlocking {
+        assumeTrue("set E2E_SERVER (scripts/android-phase1-e2e.sh)", server != null)
+        val momPhone = freshPhone()
+        val mom = HomeworkStore(tempDir("acct-mom"), MemorySessionStorage(), debug = true)
+        mom.register(server!!, momPhone, "mom-pass-123", "妈妈", "", "妈妈的手机")
+        assertEquals(momPhone, mom.state.value.account!!.phone)
+        mom.sync()
+        assertTrue("a new family starts without children", mom.state.value.children.isEmpty())
+
+        // Dad joins with an invite code and adds a child; mom sees it.
+        val code = mom.inviteCode().code
+        val dad = HomeworkStore(tempDir("acct-dad"), MemorySessionStorage(), debug = true)
+        dad.register(server, freshPhone(), "dad-pass-123", "爸爸", code, "爸爸的手机")
+        assertEquals(mom.state.value.session!!.familyId, dad.state.value.session!!.familyId)
+        dad.saveChild(name = "多多", grade = 1)
+        mom.sync()
+        assertEquals(listOf("多多"), mom.state.value.children.map { it.name })
+        assertEquals(listOf("妈妈" to true, "爸爸" to false), mom.parents().parents.map { it.name to it.isSelf })
+
+        // The code was single use; a wrong password is the person's mistake, not an expired credential.
+        val other = HomeworkStore(tempDir("acct-other"), MemorySessionStorage(), debug = true)
+        val reused = runCatching { other.register(server, freshPhone(), "other-pass-1", "奶奶", code, "奶奶的手机") }.exceptionOrNull()
+        assertEquals("invalid_invite", (reused as ApiException.Rejected).code)
+        val wrong = runCatching { other.login(server, momPhone, "not-the-password", "新手机") }.exceptionOrNull()
+        assertEquals("invalid_login", (wrong as ApiException.Rejected).code)
+        other.login(server, momPhone, "mom-pass-123", "新手机")
+        assertEquals(mom.state.value.session!!.familyId, other.state.value.session!!.familyId)
+
+        // Removing dad signs his phone out.
+        mom.removeParent(mom.parents().parents.single { !it.isSelf }.id)
+        dad.sync()
+        assertTrue(dad.state.value.signedOut)
+    }
+
     @Test fun parentAndChildRunThePhase1LoopThroughTheServer() = runBlocking {
         assumeTrue("set E2E_SERVER and E2E_PARENT_SECRET (scripts/android-phase1-e2e.sh)", server != null && secret != null)
 

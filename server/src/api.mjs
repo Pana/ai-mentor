@@ -1,4 +1,5 @@
-import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomInt, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 import { createReadStream, createWriteStream, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { join } from 'node:path';
@@ -70,6 +71,32 @@ const fileKinds = {
 };
 
 const hash = value => createHash('sha256').update(value).digest('hex');
+
+// ---------- parent accounts ----------
+// Mainland mobile numbers; spaces and dashes typed by the parent are dropped.
+function phoneNumber(value) {
+  const digits = typeof value === 'string' ? value.replace(/[\s-]/g, '') : '';
+  return /^1[3-9]\d{9}$/.test(digits) ? digits : fail(400, 'invalid_phone');
+}
+const password = value => (typeof value === 'string' && value.length >= 8 && value.length <= 64 && value.trim() ? value : fail(400, 'weak_password'));
+const maskPhone = phone => `${phone.slice(0, 3)}****${phone.slice(7)}`;
+// scrypt with N = 2^14, r = 8, p = 1 (about 16 MB and 50 ms per check), stored as scrypt$N$r$p$salt$key.
+const scryptAsync = promisify(scrypt);
+const SCRYPT = { N: 16384, r: 8, p: 1 };
+async function hashPassword(plain) {
+  const salt = randomBytes(16);
+  const key = await scryptAsync(plain, salt, 32, SCRYPT);
+  return `scrypt$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${salt.toString('base64')}$${key.toString('base64')}`;
+}
+// A fixed hash for unknown phone numbers, so a login takes as long whether or not the number has an account.
+const DUMMY_HASH = `scrypt$16384$8$1$${Buffer.alloc(16).toString('base64')}$${Buffer.alloc(32).toString('base64')}`;
+async function checkPassword(plain, stored) {
+  const [scheme, N, r, p, salt, key] = stored.split('$');
+  if (scheme !== 'scrypt') return false;
+  const expected = Buffer.from(key, 'base64');
+  const actual = await scryptAsync(plain, Buffer.from(salt, 'base64'), expected.length, { N: Number(N), r: Number(r), p: Number(p) });
+  return timingSafeEqual(actual, expected);
+}
 const json = value => JSON.stringify(value);
 const list = value => JSON.parse(value || '[]');
 
@@ -193,13 +220,20 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     return count;
   }
 
-  function issueDevice(familyId, deviceId, role, name) {
+  function issueDevice(familyId, deviceId, role, name, accountId = null) {
     const token = randomBytes(32).toString('hex');
     const existing = q('SELECT family_id FROM devices WHERE id = ?').get(deviceId);
     if (existing && existing.family_id !== familyId) fail(409, 'device_conflict');
-    if (existing) q('UPDATE devices SET token_hash = ?, role = ?, name = ?, revoked_at = NULL WHERE id = ?').run(hash(token), role, name, deviceId);
-    else q('INSERT INTO devices (id, family_id, role, name, token_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(deviceId, familyId, role, name, hash(token), iso());
+    if (existing) q('UPDATE devices SET token_hash = ?, role = ?, name = ?, account_id = ?, revoked_at = NULL WHERE id = ?').run(hash(token), role, name, accountId, deviceId);
+    else q('INSERT INTO devices (id, family_id, role, name, token_hash, account_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(deviceId, familyId, role, name, hash(token), accountId, iso());
     return { deviceId, deviceToken: token, role, familyId };
+  }
+
+  function createFamily() {
+    const id = randomUUID();
+    q('INSERT INTO families (id, created_at) VALUES (?, ?)').run(id, iso());
+    q('INSERT INTO reward_rules (family_id, rules) VALUES (?, ?)').run(id, json(defaultRules));
+    return id;
   }
 
   function limitAnonymous() {
@@ -207,6 +241,23 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     if (anonymousAttempts.length >= 10) fail(429, 'rate_limited');
     anonymousAttempts.push(now());
   }
+  // Registration and login together: at most 30 a minute for the whole server (each one costs a scrypt hash).
+  let accountAttempts = [];
+  function limitAccounts() {
+    accountAttempts = accountAttempts.filter(t => now() - t < 60_000);
+    if (accountAttempts.length >= 30) fail(429, 'rate_limited');
+    accountAttempts.push(now());
+  }
+  // Wrong passwords per phone number: after 5 in 15 minutes that number cannot sign in until the oldest one ages out.
+  const loginFailures = new Map();
+  const recentFailures = phone => (loginFailures.get(phone) ?? []).filter(t => now() - t < 15 * 60_000);
+  const serializeAccount = row => ({ id: row.id, phone: row.phone, name: row.name });
+  const accountOf = device => (device.account_id ? q('SELECT * FROM accounts WHERE id = ?').get(device.account_id) : null);
+  const inviteCode = value => {
+    const digits = typeof value === 'string' ? value.replace(/\s/g, '') : '';
+    return /^\d{8}$/.test(digits) ? digits : fail(400, 'invalid_invite');
+  };
+  const openInvite = code => q('SELECT * FROM family_invites WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?').get(hash(code), now());
 
   // ---------- routes ----------
   const routes = [];
@@ -224,17 +275,130 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     const expected = Buffer.from(bootstrapToken);
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) fail(401, 'unauthorized');
     const deviceId = uuid(body.deviceId), name = text(body.name, 60);
+    // From before parent accounts: the secret connects to the server's first family (created on first use).
     return transaction(db, () => {
-      let familyRow = q('SELECT * FROM families ORDER BY created_at LIMIT 1').get();
-      if (!familyRow) {
-        const id = randomUUID();
-        q('INSERT INTO families (id, created_at) VALUES (?, ?)').run(id, iso());
-        q('INSERT INTO reward_rules (family_id, rules) VALUES (?, ?)').run(id, json(defaultRules));
-        familyRow = family(id);
-      }
-      return issueDevice(familyRow.id, deviceId, 'parent', name);
+      const familyId = q('SELECT id FROM families ORDER BY created_at LIMIT 1').get()?.id ?? createFamily();
+      return issueDevice(familyId, deviceId, 'parent', name);
     });
   });
+
+  // ---------- parent accounts and family members ----------
+  // A parent registers with a phone number and password. Without an invite code that makes a new family; with one,
+  // the parent joins the family that made the code. Children are added by any parent of the family (PUT /children/:id),
+  // and child tablets connect with pairing codes as before.
+  route('POST', '/v1/accounts/register', null, async ({ body }) => {
+    limitAccounts();
+    const phone = phoneNumber(body.phone), plain = password(body.password), name = text(body.name, 20, true);
+    const deviceId = uuid(body.deviceId), deviceName = text(body.deviceName, 60);
+    const code = body.inviteCode == null || body.inviteCode === '' ? null : inviteCode(body.inviteCode);
+    if (q('SELECT 1 FROM accounts WHERE phone = ?').get(phone)) fail(409, 'phone_taken');
+    if (code && !openInvite(code)) fail(400, 'invalid_invite');
+    const passwordHash = await hashPassword(plain);
+    return transaction(db, () => {
+      // Checked again: another request may have used the number or the code while the password was hashing.
+      if (q('SELECT 1 FROM accounts WHERE phone = ?').get(phone)) fail(409, 'phone_taken');
+      const accountId = randomUUID();
+      let familyId;
+      if (code) {
+        const invite = openInvite(code) ?? fail(400, 'invalid_invite');
+        q('UPDATE family_invites SET used_at = ?, used_by = ? WHERE code_hash = ?').run(iso(), accountId, invite.code_hash);
+        familyId = invite.family_id;
+      } else familyId = createFamily();
+      q('INSERT INTO accounts (id, family_id, phone, name, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(accountId, familyId, phone, name, passwordHash, iso(), iso());
+      return { ...issueDevice(familyId, deviceId, 'parent', deviceName, accountId), account: { id: accountId, phone, name } };
+    });
+  });
+
+  route('POST', '/v1/accounts/login', null, async ({ body }) => {
+    limitAccounts();
+    const phone = phoneNumber(body.phone);
+    const plain = typeof body.password === 'string' && body.password.length <= 64 ? body.password : fail(400, 'invalid_input');
+    const deviceId = uuid(body.deviceId), deviceName = text(body.deviceName, 60);
+    if (recentFailures(phone).length >= 5) fail(429, 'too_many_attempts');
+    const account = q('SELECT * FROM accounts WHERE phone = ?').get(phone);
+    const matches = await checkPassword(plain, account?.password_hash ?? DUMMY_HASH);
+    if (!account || !matches) {
+      loginFailures.set(phone, [...recentFailures(phone), now()]);
+      fail(401, 'invalid_login');
+    }
+    loginFailures.delete(phone);
+    return transaction(db, () => {
+      // Removed from the family while the password was checked.
+      const current = q('SELECT * FROM accounts WHERE id = ?').get(account.id) ?? fail(401, 'invalid_login');
+      return { ...issueDevice(current.family_id, deviceId, 'parent', deviceName, current.id), account: serializeAccount(current) };
+    });
+  });
+
+  // A parent phone connected with the bootstrap secret sets a phone number and password for its family. After that the
+  // parent signs in with them on other phones, and can stop using the secret.
+  route('POST', '/v1/accounts/bind', PARENT, async ({ familyId, device, body }) => {
+    if (device.account_id) fail(409, 'already_bound');
+    const phone = phoneNumber(body.phone), plain = password(body.password), name = text(body.name, 20, true);
+    if (q('SELECT 1 FROM accounts WHERE phone = ?').get(phone)) fail(409, 'phone_taken');
+    const passwordHash = await hashPassword(plain);
+    return transaction(db, () => {
+      if (q('SELECT 1 FROM accounts WHERE phone = ?').get(phone)) fail(409, 'phone_taken');
+      if (q('SELECT account_id FROM devices WHERE id = ?').get(device.id).account_id) fail(409, 'already_bound');
+      const accountId = randomUUID();
+      q('INSERT INTO accounts (id, family_id, phone, name, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(accountId, familyId, phone, name, passwordHash, iso(), iso());
+      q('UPDATE devices SET account_id = ? WHERE id = ?').run(accountId, device.id);
+      return { account: { id: accountId, phone, name } };
+    });
+  });
+
+  route('PUT', '/v1/account', PARENT, ({ device, body }) => {
+    const account = accountOf(device) ?? fail(404, 'no_account');
+    q('UPDATE accounts SET name = ?, updated_at = ? WHERE id = ?').run(text(body.name, 20, true), iso(), account.id);
+    return { account: serializeAccount(q('SELECT * FROM accounts WHERE id = ?').get(account.id)) };
+  });
+
+  // Changing the password signs the account out everywhere else: its other phones have to sign in again.
+  route('POST', '/v1/account/password', PARENT, async ({ device, body }) => {
+    const account = accountOf(device) ?? fail(404, 'no_account');
+    const old = typeof body.oldPassword === 'string' && body.oldPassword.length <= 64 ? body.oldPassword : fail(400, 'invalid_input');
+    const next = password(body.newPassword);
+    if (recentFailures(account.phone).length >= 5) fail(429, 'too_many_attempts');
+    if (!await checkPassword(old, account.password_hash)) {
+      loginFailures.set(account.phone, [...recentFailures(account.phone), now()]);
+      fail(401, 'wrong_password');
+    }
+    const passwordHash = await hashPassword(next);
+    transaction(db, () => {
+      q('UPDATE accounts SET password_hash = ?, updated_at = ? WHERE id = ?').run(passwordHash, iso(), account.id);
+      q('UPDATE devices SET revoked_at = ? WHERE account_id = ? AND id != ? AND revoked_at IS NULL').run(iso(), account.id, device.id);
+    });
+    return { ok: true };
+  });
+
+  route('GET', '/v1/family/parents', PARENT, ({ familyId, device }) => ({
+    parents: q('SELECT * FROM accounts WHERE family_id = ? ORDER BY created_at').all(familyId).map(a => ({
+      id: a.id, name: a.name, phone: maskPhone(a.phone), createdAt: a.created_at, self: a.id === device.account_id,
+      devices: q("SELECT COUNT(*) AS n FROM devices WHERE account_id = ? AND revoked_at IS NULL").get(a.id).n })),
+    // Parent phones still connected with the bootstrap secret, not signed in to any account.
+    unboundDevices: q("SELECT COUNT(*) AS n FROM devices WHERE family_id = ? AND role = 'parent' AND account_id IS NULL AND revoked_at IS NULL").get(familyId).n
+  }));
+
+  // Eight digits, valid for 24 hours, single use: the parent sends it to the other parent (WeChat, a text message).
+  route('POST', '/v1/family/invites', PARENT, ({ familyId, device }) => {
+    const code = String(randomInt(0, 100_000_000)).padStart(8, '0');
+    const expiresAt = now() + 24 * 3_600_000;
+    q('INSERT OR REPLACE INTO family_invites (code_hash, family_id, created_by, expires_at) VALUES (?, ?, ?, ?)')
+      .run(hash(code), familyId, device.account_id, expiresAt);
+    return { code, expiresAt: new Date(expiresAt).toISOString() };
+  });
+
+  // Removes another parent from the family: the account is deleted and its phones are signed out. The number can register
+  // again later (into a new family, or this one with a new invite code). A parent cannot remove themself.
+  route('DELETE', '/v1/family/parents/:id', PARENT, ({ familyId, device, params }) => transaction(db, () => {
+    const id = uuid(params.id);
+    if (id === device.account_id) fail(400, 'cannot_remove_self');
+    const account = q('SELECT * FROM accounts WHERE id = ? AND family_id = ?').get(id, familyId) ?? fail(404, 'parent_not_found');
+    q('UPDATE devices SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL').run(iso(), account.id);
+    q('DELETE FROM accounts WHERE id = ?').run(account.id);
+    return { ok: true };
+  }));
 
   route('POST', '/v1/devices/pairing-codes', PARENT, ({ familyId }) => {
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
@@ -257,8 +421,15 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
 
   route('GET', '/v1/devices', PARENT, ({ familyId, device }) => ({
     devices: q('SELECT * FROM devices WHERE family_id = ? AND revoked_at IS NULL ORDER BY created_at').all(familyId)
-      .map(d => ({ id: d.id, role: d.role, name: d.name, createdAt: d.created_at, lastSeenAt: d.last_seen_at, self: d.id === device.id, lock: lockStatus(d) }))
+      .map(d => ({ id: d.id, role: d.role, name: d.name, createdAt: d.created_at, lastSeenAt: d.last_seen_at, self: d.id === device.id, lock: lockStatus(d),
+        accountName: d.account_id ? q('SELECT name FROM accounts WHERE id = ?').get(d.account_id)?.name ?? null : null }))
   }));
+
+  // Signing out on this device: its credential stops working.
+  route('DELETE', '/v1/devices/self', ANY, ({ device }) => {
+    q('UPDATE devices SET revoked_at = ? WHERE id = ?').run(iso(), device.id);
+    return { ok: true };
+  });
 
   route('DELETE', '/v1/devices/:id', PARENT, ({ familyId, params }) => {
     const result = q('UPDATE devices SET revoked_at = ? WHERE id = ? AND family_id = ? AND revoked_at IS NULL').run(iso(), uuid(params.id), familyId);
@@ -306,7 +477,9 @@ export function createApi({ dataDir, bootstrapToken = '', model = {}, fetchImpl 
     return { cursor, device: { id: device.id, role: device.role, name: device.name },
       family: { id: f.id, name: f.name, timezone: f.timezone, today: today(familyId).date },
       children: q('SELECT * FROM children WHERE family_id = ? ORDER BY created_at').all(familyId).map(serializeChild),
-      rules: rulesFor(familyId), locks: device.role === 'parent' ? familyLocks(familyId) : [] };
+      rules: rulesFor(familyId), locks: device.role === 'parent' ? familyLocks(familyId) : [],
+      // The signed-in parent account; null on child tablets and on parent phones connected with the bootstrap secret.
+      account: device.role === 'parent' && accountOf(device) ? serializeAccount(accountOf(device)) : null };
   });
 
   route('GET', '/v1/children', ANY, ({ familyId }) => ({

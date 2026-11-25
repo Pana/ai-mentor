@@ -126,6 +126,7 @@ private struct Cache: Codable {
     var rewards: [RewardSummary] = []
     var outbox: [PendingSubmission] = []
     var locks: [LockStatus]?
+    var account: AccountInfo?
 }
 
 // MARK: - Store
@@ -141,6 +142,8 @@ private struct Cache: Codable {
     @Published private(set) var rewards: [UUID: RewardSummary] = [:]
     /// Parent only: each child tablet's reward-time lock, from the tablet's heartbeat.
     @Published private(set) var locks: [LockStatus] = []
+    /// Parent phone: the account signed in here; nil on phones connected with the parent secret (they can set one up).
+    @Published private(set) var account: AccountInfo?
     @Published private(set) var outbox: [PendingSubmission] = []
     /// Homework id → fraction of its queued files uploaded, while a submission is being sent.
     @Published private(set) var uploadProgress: [UUID: Double] = [:]
@@ -214,6 +217,27 @@ private struct Cache: Codable {
         try begin(DeviceSession(server: url.absoluteString, deviceId: grant.deviceId, role: grant.role, familyId: grant.familyId, token: grant.deviceToken))
     }
 
+    /// Registers a parent account. Without an invite code the server makes a new family; with one the parent joins that family.
+    func register(server: String, phone: String, password: String, name: String, inviteCode: String, deviceName: String) async throws {
+        let url = try APIClient.validate(server)
+        let code = inviteCode.filter(\.isNumber)
+        let grant = try await APIClient(baseURL: url, token: nil, transport: transport)
+            .register(phone: phone.filter(\.isNumber), password: password, name: name.trimmingCharacters(in: .whitespaces),
+                      inviteCode: code.isEmpty ? nil : code, deviceId: UUID(), deviceName: deviceName)
+        try begin(DeviceSession(server: url.absoluteString, deviceId: grant.deviceId, role: grant.role, familyId: grant.familyId, token: grant.deviceToken))
+        account = grant.account
+        saveCache()
+    }
+
+    func login(server: String, phone: String, password: String, deviceName: String) async throws {
+        let url = try APIClient.validate(server)
+        let grant = try await APIClient(baseURL: url, token: nil, transport: transport)
+            .login(phone: phone.filter(\.isNumber), password: password, deviceId: UUID(), deviceName: deviceName)
+        try begin(DeviceSession(server: url.absoluteString, deviceId: grant.deviceId, role: grant.role, familyId: grant.familyId, token: grant.deviceToken))
+        account = grant.account
+        saveCache()
+    }
+
     func pairChild(server: String, code: String, name: String) async throws {
         let url = try APIClient.validate(server)
         let grant = try await APIClient(baseURL: url, token: nil, transport: transport).pair(code: code, deviceId: UUID(), name: name)
@@ -228,14 +252,16 @@ private struct Cache: Codable {
         // RootView starts syncing when the session appears.
     }
 
+    /// Forgets this device's credential and tells the server to stop accepting it (best effort: offline, it just forgets).
     func signOut() {
+        if let api = client { Task.detached { let _: OK? = try? await api.send("DELETE", "v1/devices/self") } }
         sessions.clear()
         resetData()
         session = nil
     }
 
     private func resetData() {
-        cursor = 0; family = nil; children = []; homework = [:]; routines = []; rules = RewardRules(); rewards = [:]; locks = []
+        cursor = 0; family = nil; children = []; homework = [:]; routines = []; rules = RewardRules(); rewards = [:]; locks = []; account = nil
         for item in outbox { removeLocalFiles(item) }
         outbox = []
         prefetchTask?.cancel(); prefetchTask = nil
@@ -306,6 +332,7 @@ private struct Cache: Codable {
         children = me.children
         rules = me.rules
         locks = me.locks ?? []
+        account = me.account
     }
 
     private func applyChanges(_ api: APIClient) async throws {
@@ -514,6 +541,36 @@ private struct Cache: Codable {
     }
     func revoke(_ device: UUID) async throws { let _: OK = try await call("DELETE", "v1/devices/\(device.uuidString.lowercased())") }
 
+    // MARK: Account and family members (parent)
+
+    /// Reloads the account and family from the server (the change feed does not carry account changes).
+    func refreshMe() async throws {
+        guard let api = client else { throw APIError.invalidServer }
+        apply(try await api.me())
+        saveCache()
+    }
+    func parents() async throws -> FamilyParents { try await call("GET", "v1/family/parents") }
+    func inviteCode() async throws -> InviteCode { try await call("POST", "v1/family/invites") }
+    func removeParent(_ id: UUID) async throws { let _: OK = try await call("DELETE", "v1/family/parents/\(id.uuidString.lowercased())") }
+    /// A phone connected with the parent secret sets up a phone number and password for its family.
+    func bindAccount(phone: String, password: String, name: String) async throws {
+        struct Body: Encodable { var phone: String; var password: String; var name: String }
+        struct Reply: Decodable, Sendable { var account: AccountInfo }
+        let reply: Reply = try await call("POST", "v1/accounts/bind", json: Body(phone: phone.filter(\.isNumber), password: password, name: name.trimmingCharacters(in: .whitespaces)))
+        account = reply.account
+        saveCache()
+    }
+    func renameAccount(_ name: String) async throws {
+        struct Reply: Decodable, Sendable { var account: AccountInfo }
+        let reply: Reply = try await call("PUT", "v1/account", json: ["name": name.trimmingCharacters(in: .whitespaces)])
+        account = reply.account
+        saveCache()
+    }
+    /// The server signs the account out on its other phones.
+    func changePassword(old: String, new: String) async throws {
+        let _: OK = try await call("POST", "v1/account/password", json: ["oldPassword": old, "newPassword": new])
+    }
+
     func parse(text: String) async throws -> ParseResult {
         struct Body: Encodable { var text: String; var date: String }
         return try await call("POST", "v1/homework/parse", json: Body(text: text, date: today))
@@ -716,11 +773,12 @@ private struct Cache: Codable {
         rewards = Dictionary(cache.rewards.map { ($0.childId, $0) }, uniquingKeysWith: { $1 })
         outbox = cache.outbox
         locks = cache.locks ?? []
+        account = cache.account
     }
 
     private func saveCache() {
         let cache = Cache(cursor: cursor, family: family, children: children, homework: Array(homework.values), routines: routines,
-                          rules: rules, rewards: Array(rewards.values), outbox: outbox, locks: locks)
+                          rules: rules, rewards: Array(rewards.values), outbox: outbox, locks: locks, account: account)
         if let data = try? JSONEncoder().encode(cache) { try? data.write(to: cacheURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
     }
 

@@ -803,7 +803,7 @@ func clockBinding(_ text: Binding<String>) -> Binding<Date> {
     }
 }
 
-// MARK: - Settings: children, pairing, devices
+// MARK: - Settings: children, parents, pairing, devices, account
 
 struct ParentSettings: View {
     @EnvironmentObject private var store: HomeworkStore
@@ -826,6 +826,7 @@ struct ParentSettings: View {
                     }
                     Button { editingChild = ChildDraft() } label: { Label("添加孩子", systemImage: "plus") }
                 }
+                FamilyParentsSection()
                 Section {
                     if let code {
                         VStack(spacing: 6) {
@@ -839,15 +840,20 @@ struct ParentSettings: View {
                     ForEach(devices) { device in
                         HStack {
                             Image(systemName: device.role == "parent" ? "iphone" : "ipad.landscape")
-                            VStack(alignment: .leading) { Text(device.name.isEmpty ? (device.role == "parent" ? "家长手机" : "孩子 iPad") : device.name); if device.self_ { Text("这台设备").font(.caption).foregroundStyle(Color.ink3) } }
+                            VStack(alignment: .leading) {
+                                Text(device.name.isEmpty ? (device.role == "parent" ? "家长手机" : "孩子 iPad") : device.name)
+                                let detail = [device.accountName, device.self_ ? "这台设备" : nil].compactMap { $0 }.joined(separator: " · ")
+                                if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(Color.ink3) }
+                            }
                         }
                         .swipeActions { if !device.self_ { Button("断开", role: .destructive) { Task { await perform(store) { try await store.revoke(device.id); devices = try await store.devices() } } } } }
                     }
                 }
+                AccountSection()
                 Section {
                     LabeledContent("服务器", value: store.session?.server ?? "")
                     Button("退出这台手机", role: .destructive) { confirmingSignOut = true }
-                        .confirmationDialog("退出后需要用家长密钥重新连接。", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+                        .confirmationDialog(store.account == nil ? "退出后需要用家长密钥重新连接。" : "退出后需要用手机号和密码重新登录。", isPresented: $confirmingSignOut, titleVisibility: .visible) {
                             Button("退出", role: .destructive) { store.signOut() }
                             Button("取消", role: .cancel) {}
                         }

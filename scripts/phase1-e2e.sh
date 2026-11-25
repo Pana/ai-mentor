@@ -10,6 +10,9 @@ phone="${1:-iPhone 18 Pro}"
 pad="${2:-iPad Air 11-inch (M4)}"
 port=18797
 secret="e2e-parent-secret-$(openssl rand -hex 12)"
+# The phone registers this parent account in stage 1; the script then signs in to it for a pairing code.
+parent_phone="139$(printf '%08d' $((RANDOM * RANDOM % 100000000)))"
+parent_password="e2e-pass-$(openssl rand -hex 6)"
 out="$(mktemp -d)"
 if lsof -ti "tcp:$port" >/dev/null 2>&1; then echo "port $port is busy; stop the old process first"; exit 1; fi
 
@@ -30,7 +33,7 @@ cd "$root/ipad"
 command -v xcodegen >/dev/null && xcodegen generate >/dev/null
 stage() { # stage <device> <test> [extra env...]
   local device="$1" test="$2"; shift 2
-  env TEST_RUNNER_E2E_SERVER="http://127.0.0.1:$port" TEST_RUNNER_E2E_PARENT_SECRET="$secret" TEST_RUNNER_E2E_AI="${E2E_AI:-0}" "$@" \
+  env TEST_RUNNER_E2E_SERVER="http://127.0.0.1:$port" TEST_RUNNER_E2E_PARENT_PHONE="$parent_phone" TEST_RUNNER_E2E_PARENT_PASSWORD="$parent_password" TEST_RUNNER_E2E_AI="${E2E_AI:-0}" "$@" \
     xcodebuild -project LittleBearTutor.xcodeproj -scheme LittleBearTutor -destination "platform=iOS Simulator,name=$device" \
     -resultBundlePath "$out/$test.xcresult" -only-testing:"LittleBearTutorUITests/Phase1E2EUITests/$test" test >"$out/$test.log" 2>&1 \
     || { grep -E "error:|failed" "$out/$test.log" | head -20; echo "stage $test failed, logs in $out"; exit 1; }
@@ -41,9 +44,9 @@ stage() { # stage <device> <test> [extra env...]
 }
 
 stage "$phone" test1ParentConnectsAndEntersHomework
-# A pairing code for the iPad, made with a second parent credential so the phone's stays untouched.
-parent=$(curl -sf -X POST "http://127.0.0.1:$port/v1/devices/bootstrap" -H 'Content-Type: application/json' \
-  -d "{\"token\":\"$secret\",\"deviceId\":\"$(uuidgen)\",\"name\":\"e2e script\"}" | node -pe 'JSON.parse(require("fs").readFileSync(0)).deviceToken')
+# A pairing code for the iPad, made by signing in to the same account as a second phone, so the phone's credential stays untouched.
+parent=$(curl -sf -X POST "http://127.0.0.1:$port/v1/accounts/login" -H 'Content-Type: application/json' \
+  -d "{\"phone\":\"$parent_phone\",\"password\":\"$parent_password\",\"deviceId\":\"$(uuidgen)\",\"deviceName\":\"e2e script\"}" | node -pe 'JSON.parse(require("fs").readFileSync(0)).deviceToken')
 code=$(curl -sf -X POST "http://127.0.0.1:$port/v1/devices/pairing-codes" -H "Authorization: Bearer $parent" -H 'Content-Type: application/json' -d '{}' \
   | node -pe 'JSON.parse(require("fs").readFileSync(0)).code')
 stage "$pad" test2ChildPairsAndSubmitsPhoto TEST_RUNNER_E2E_PAIR_CODE="$code"
