@@ -77,6 +77,12 @@ proxy_send_timeout 1800s;
 
 Caddy 默认不限制请求大小，不用改。
 
+如果 Nginx 是按路径分别转发的（`/v1/`、`/teacher/`、`/hanzi/` 等），家长管理网页 `/parent/` 也要转发到网关。
+
+### 家长管理网页
+
+`/parent/` 是家长在浏览器里用的管理页面（`web/parent/`）：手机号登录注册、孩子、家长和邀请码、孩子设备配对码、已连接设备、我的账号，接口和家长 App 相同。页面带严格的 CSP、不能被其他网站嵌入。说明见 [web/parent/README.md](../web/parent/README.md)。
+
 ## 汉字笔顺字典（小熊写字）
 
 网页在 `/hanzi/`，源码在 `web/hanzi/`，说明见 [web/hanzi/README.md](../web/hanzi/README.md)。
