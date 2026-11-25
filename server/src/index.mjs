@@ -1,6 +1,7 @@
 import { createGateway } from './gateway.mjs';
 import { createApi } from './api.mjs';
 import { createHanzi } from './hanzi.mjs';
+import { createPoems } from './poems.mjs';
 import { createVolcAsr } from './volc-asr.mjs';
 import { createVolcTts } from './volc-tts.mjs';
 
@@ -14,16 +15,19 @@ const tts = createVolcTts({ apiKey: process.env.VOLC_TTS_API_KEY || process.env.
   speechRate: Number(process.env.VOLC_TTS_SPEECH_RATE || 0) });
 const hanzi = createHanzi({ token: process.env.TUTOR_DEVICE_TOKEN, dataDir: process.env.DATA_DIR || './data',
   model: { ...model, model: process.env.HANZI_MODEL_NAME || model.model, thinking: process.env.HANZI_MODEL_THINKING || 'disabled' }, asr });
+const poems = createPoems({ token: process.env.TUTOR_DEVICE_TOKEN, dataDir: process.env.DATA_DIR || './data',
+  libraryPath: process.env.POEMS_DB || undefined,
+  model: { ...model, model: process.env.POEMS_MODEL_NAME || model.model, thinking: process.env.POEMS_MODEL_THINKING || 'disabled' } });
 const server = createGateway({ updateDir: process.env.ANDROID_UPDATE_DIR || (process.env.DATA_DIR || './data') + '/android-updates', token: process.env.TUTOR_DEVICE_TOKEN, ...model,
   visionModel: process.env.MODEL_VISION_NAME || '', imagesSupported: process.env.MODEL_SUPPORTS_IMAGES !== 'false',
-  voice: { token: process.env.TUTOR_DEVICE_TOKEN, mock: process.env.VOICE_MOCK === 'true' }, api, hanzi,
+  voice: { token: process.env.TUTOR_DEVICE_TOKEN, mock: process.env.VOICE_MOCK === 'true' }, api, hanzi, poems,
   teacher: { asr, tts, model: { apiUrl: model.apiUrl, apiKey: model.apiKey, model: process.env.TEACHER_MODEL_NAME || model.model,
     thinking: process.env.TEACHER_MODEL_THINKING || 'disabled' }, log: process.env.TEACHER_LOG === '1' } });
 const host = process.env.HOST || '127.0.0.1';
 const port = Number(process.env.PORT || 8787);
 server.listen(port, host, () => console.log(`LittleBear gateway listening on ${host}:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
-  const exit = () => { try { api.close(); hanzi.close(); } catch { /* already closed */ } process.exit(0); };
+  const exit = () => { try { api.close(); hanzi.close(); poems.close(); } catch { /* already closed */ } process.exit(0); };
   server.close(exit);
   // An open voice session (WebSocket) keeps the server from ever closing; give requests a moment, then stop.
   setTimeout(exit, 2000).unref();

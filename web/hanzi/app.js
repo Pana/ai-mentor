@@ -590,3 +590,15 @@ window.addEventListener('resize', () => {
 
 renderHistory();
 if (!navigator.mediaDevices?.getUserMedia || !AudioContextImpl) setHint('当前浏览器不支持录音，请使用最新版 Chrome、Safari 或其他支持麦克风的浏览器。', true);
+
+// 别的页面（比如小熊读诗）用 /hanzi/#q=字 打开时，直接查这个字。
+function queryFromHash() {
+  const match = /(?:^#|&)q=([^&]+)/.exec(location.hash);
+  if (!match) return;
+  let text = '';
+  try { text = decodeURIComponent(match[1]); } catch { /* 坏的地址就不查 */ }
+  history.replaceState(null, '', location.pathname + location.search);
+  if (text) { $('#query').value = text; search(text, { typed: true }); }
+}
+queryFromHash();
+window.addEventListener('hashchange', queryFromHash);

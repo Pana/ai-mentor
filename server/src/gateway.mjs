@@ -129,6 +129,8 @@ export function createGateway(config, { fetchImpl = fetch, now = Date.now } = {}
     if (req.method === 'GET' && req.url === '/health') return send(200, { ok: true });
     // Hanzi dictionary: the /hanzi/ page, its stroke data and /v1/hanzi/lookup.
     if (config.hanzi && await config.hanzi(req, res)) return;
+    // 小熊读诗: the /poems/ page and /v1/poems/*.
+    if (config.poems && await config.poems(req, res)) return;
     // Voice teacher web page at /teacher/ (its WebSocket is attached below).
     if (teacherPage && await teacherPage(req, res)) return;
     // Phase-1 homework API: everything under /v1/ except the tutor endpoint.

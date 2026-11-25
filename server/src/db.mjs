@@ -60,6 +60,10 @@ const migrations = [`
   -- The parent app shows a warning when the lock is off, was paused by the system, or the tablet stopped reporting.
   ALTER TABLE devices ADD COLUMN lock_state TEXT;
   ALTER TABLE devices ADD COLUMN lock_reported_at TEXT;
+`, `
+  -- 小熊读诗的讲解（模型生成）。key = 讲解版本 + 诗的 id + 诗文摘要，诗文或提示词改了就是新的一条。
+  CREATE TABLE poem_explanations (
+    key TEXT PRIMARY KEY, poem_id TEXT NOT NULL, explanation TEXT NOT NULL, created_at TEXT NOT NULL);
 `];
 
 export function openDatabase(path) {
