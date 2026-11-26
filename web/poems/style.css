@@ -141,8 +141,6 @@ rt { font-family: -apple-system, "PingFang SC", sans-serif; font-size: .42em; co
 /* 讲解 */
 .explain { display: grid; gap: 14px; }
 .ex h2 { display: flex; align-items: center; gap: 8px; }
-.ex h2 .say { margin-left: auto; }
-.say { border: 0; background: var(--accent-soft); border-radius: 999px; min-width: 40px; min-height: 36px; font-size: 17px; }
 .ex p { margin: 0; font-size: 18px; }
 .scene p { font-size: 19px; line-height: 1.8; }
 .picture {

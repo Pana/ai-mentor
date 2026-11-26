@@ -125,7 +125,6 @@ function speakParts(parts, { rate = 0.85, onPart = () => {} } = {}) {
     speechSynthesis.speak(u);
   })), Promise.resolve()).then(() => { if (run === speakRun) onPart(-1); });
 }
-const sayButton = (text, label = '读一读') => el('button', { class: 'say', type: 'button', 'aria-label': label, onclick: () => speakParts([text], { rate: 0.95 }) }, '🔊');
 
 // ---------- 路由 ----------
 let home = null;   // /v1/poems/home 的结果
@@ -505,8 +504,8 @@ async function loadExplanation(box, button, linesBox) {
 
 function renderExplanation(box, ex, linesBox) {
   const { poem } = poemState;
-  const section = (cls, icon, title, speakText, ...content) => el('section', { class: `card ex ${cls}` },
-    el('h2', {}, `${icon} ${title}`, speakText ? sayButton(speakText) : null), ...content);
+  // 讲解各段不再有 🔊：浏览器自带的语音读得不好，只有“读诗”用云端语音。
+  const section = (cls, icon, title, ...content) => el('section', { class: `card ex ${cls}` }, el('h2', {}, `${icon} ${title}`), ...content);
   const highlight = word => {
     linesBox.querySelectorAll('.ch.mark').forEach(n => n.classList.remove('mark'));
     if (!word) return;
@@ -528,15 +527,15 @@ function renderExplanation(box, ex, linesBox) {
 
   // 没有的段落（比如没有“写诗的小故事”）是 null：replaceChildren 会把 null 当成文字“null”显示，先去掉。
   box.replaceChildren(...[
-    section('scene', '🎨', '诗里的画面', ex.scene, el('p', {}, ex.scene),
+    section('scene', '🎨', '诗里的画面', el('p', {}, ex.scene),
       // 有配图的课本诗，画在诗的上面；其他诗先留个位置。
       poemState.poem?.art?.length ? null : el('div', { class: 'picture', 'aria-hidden': 'true' }, '这里以后会有一幅画')),
-    section('', '📖', '一句一句读懂', ex.lines.join(''),
+    section('', '📖', '一句一句读懂',
       el('ol', { class: 'meanings' }, poem.lines.map((line, i) => el('li', {}, el('span', { class: 'orig' }, line), el('span', { class: 'mean' }, ex.lines[i]))))),
-    words ? section('', '🔍', '难懂的字词', '', words) : null,
-    ex.feeling ? section('', '💭', '诗人想告诉我们', ex.feeling, el('p', {}, ex.feeling)) : null,
-    ex.story ? section('', '📜', '写诗的小故事', ex.story, el('p', {}, ex.story)) : null,
-    ex.poet ? section('', '👤', `认识${poem.author}`, ex.poet, el('p', {}, ex.poet),
+    words ? section('', '🔍', '难懂的字词', words) : null,
+    ex.feeling ? section('', '💭', '诗人想告诉我们', el('p', {}, ex.feeling)) : null,
+    ex.story ? section('', '📜', '写诗的小故事', el('p', {}, ex.story)) : null,
+    ex.poet ? section('', '👤', `认识${poem.author}`, el('p', {}, ex.poet),
       el('p', { class: 'note' }, el('a', { href: `#/author/${encodeURIComponent(poem.author)}?d=${encodeURIComponent(poem.dynasty || '')}` }, `看看${poem.author}的其他诗 →`))) : null
   ].filter(Boolean));
 }
