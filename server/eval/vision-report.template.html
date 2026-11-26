@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>视觉模型测评</title>
+<style>
+  :root { --bg: #faf9f6; --panel: #fff; --ink: #1f2328; --muted: #6b7280; --line: #e4e1d9; --bad: #b93815; --bad-bg: #fdeee6; --odd-bg: #fff7d6; --ok: #177a3c; --accent: #1d4ed8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171a; --panel: #1d2025; --ink: #e7e7e4; --muted: #9aa0a6; --line: #34383f; --bad: #ff9a6b; --bad-bg: #3b2417; --odd-bg: #383219; --ok: #5fd68a; --accent: #9bb8ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 80px; background: var(--bg); color: var(--ink); font: 15px/1.55 -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+  .page { max-width: 1440px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 12px; overflow-wrap: anywhere; }
+  h2 small, .meta { color: var(--muted); font-weight: 400; font-size: 13px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  .howto { color: var(--muted); font-size: 14px; margin: 10px 0 0; max-width: 72em; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th.live, td.live { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+  .warn { color: var(--bad); }
+  .split { display: grid; grid-template-columns: minmax(280px, 5fr) 7fr; gap: 16px; align-items: start; }
+  .split > * { min-width: 0; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+  .shot { position: sticky; top: 8px; }
+  @media (max-width: 900px) { .shot { position: static; } }
+  .frame { position: relative; line-height: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .frame img { width: 100%; height: auto; cursor: zoom-in; }
+  .box { position: absolute; border: 2px solid; border-radius: 3px; pointer-events: none; }
+  .box.thin { border-width: 1px; opacity: .7; }
+  .legend { margin-top: 8px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .legend label { white-space: nowrap; }
+  td.no { white-space: nowrap; }
+  td.cell { min-width: 132px; }
+  td.cell.odd { background: var(--odd-bg); }
+  td.cell.marked { background: var(--bad-bg); }
+  td.cell.none, tr.bogus td.cell { color: var(--muted); }
+  tr.bogus .q, tr.bogus .a { text-decoration: line-through; }
+  .q { overflow-wrap: anywhere; }
+  .a { font-weight: 600; overflow-wrap: anywhere; }
+  .j { font-size: 12px; color: var(--muted); }
+  .j .bad { color: var(--bad); font-weight: 600; }
+  .tag { font-size: 11px; font-weight: 500; color: var(--bad); border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; margin-left: 4px; }
+  button { font: inherit; font-size: 12px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; margin: 4px 4px 0 0; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button[aria-pressed="true"] { color: #fff; background: var(--bad); border-color: var(--bad); }
+  button.main { font-size: 14px; color: var(--ink); padding: 5px 12px; margin: 0; }
+  .foot { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; font-size: 14px; }
+  .foot input[type="number"] { width: 4.5em; font: inherit; padding: 2px 4px; }
+  .foot .done { font-weight: 600; }
+  .runs { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+  section.photo.done { opacity: .72; }
+  textarea { width: 100%; height: 160px; margin-top: 10px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>视觉模型测评</h1>
+  <div class="meta" id="meta"></div>
+  <div class="panel">
+    <div class="scroll"><table id="summary"></table></div>
+    <p class="howto">蓝底的几列要靠人看：每张照片对着图检查每一格，读错了就点格子里的“题目读错”或“答案读错”。照片上有、模型却没读到的题自动算漏题；哪个模型都没读到的题，在照片下面填个数；照片上根本没有的一行，点题号下面的“照片上没有”。看完勾上“这张看完了”，读对率只统计看完的照片。黄底的格子和多数模型读得不一样，优先看。鼠标停在一行上，照片里会框出这道题。标注只存在这个浏览器里。</p>
+    <p style="margin: 12px 0 0"><button class="main" id="export">导出标注结果</button></p>
+    <div id="exported"></div>
+  </div>
+  <div id="photos"></div>
+</div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById('data').textContent);
+const colors = ['#2563eb', '#d97706', '#059669', '#db2777', '#7c3aed', '#0891b2'];
+const colorOf = name => colors[data.models.findIndex(m => m.name === name) % colors.length];
+const storeKey = 'vision-eval:' + data.runId;
+let marks = {};
+try { marks = JSON.parse(localStorage.getItem(storeKey) || '{}') || {}; } catch { marks = {}; }
+const save = () => { try { localStorage.setItem(storeKey, JSON.stringify(marks)); } catch { /* private window: marks last until the tab closes */ } };
+const marksOf = name => (marks[name] ??= { done: false, allMissed: 0, cells: {}, rows: {} });
+
+function el(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (key === 'class') node.className = value;
+    else if (key === 'text') node.textContent = value;
+    else if (key === 'style') node.style.cssText = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  node.append(...children.filter(child => child !== null && child !== undefined && child !== false));
+  return node;
+}
+const dot = name => el('span', { class: 'dot', style: 'background:' + colorOf(name) });
+const show = value => (value === null || value === undefined ? '—' : String(value));
+const verdict = { correct: '✓', incorrect: '✗', unknown: '—' };
+
+/** What the person reviewing has marked so far, per model, over the photos they finished. */
+function reviewed() {
+  return data.models.map(model => {
+    const s = { name: model.name, photos: 0, items: 0, wrongQuestion: 0, wrongAnswer: 0, wrong: 0, missed: 0 };
+    for (const photo of data.photos) {
+      const m = marks[photo.name];
+      if (!m || !m.done) continue;
+      s.photos++;
+      for (const row of photo.rows) {
+        const mark = m.cells[row.key + '|' + model.name] || {}, bogus = (m.rows[row.key] || {}).bogus;
+        if (row.cells[model.name]) {
+          s.items++;
+          if (bogus || mark.q) s.wrongQuestion++;
+          if (!bogus && mark.a) s.wrongAnswer++;
+          if (bogus || mark.q || mark.a) s.wrong++;
+        } else if (!bogus && !mark.notMissed) s.missed++;
+      }
+      s.missed += Number(m.allMissed) || 0;
+    }
+    const total = s.items + s.missed;
+    s.rate = total ? (s.items - s.wrong) / total : null;
+    return s;
+  });
+}
+
+function renderSummary() {
+  const table = document.getElementById('summary'), live = reviewed();
+  const head = [['模型'], ['成功', 'num'], ['题数', 'num'], ['平均耗时', 'num'], ['平均 tokens 入 / 出', 'num'], ['每张约', 'num'], ['判错', 'num'], ['与多数不同', 'num'],
+    ['已看', 'num live'], ['题目读错', 'num live'], ['答案读错', 'num live'], ['漏题', 'num live'], ['整题读对率', 'num live']];
+  const rows = data.summary.map((s, index) => {
+    const r = live[index];
+    return el('tr', null,
+      el('td', null, dot(s.name), s.name, el('div', { class: 'meta', text: s.model })),
+      el('td', { class: 'num' + (s.ok < s.photos ? ' warn' : ''), text: s.ok + ' / ' + s.photos }),
+      el('td', { class: 'num', text: show(s.items) }),
+      el('td', { class: 'num', text: s.meanMs === null ? '—' : (s.meanMs / 1000).toFixed(1) + ' 秒' }),
+      el('td', { class: 'num', text: show(s.meanInput) + ' / ' + show(s.meanOutput) }),
+      el('td', { class: 'num', text: s.costPerPhoto === null ? '—' : '¥' + s.costPerPhoto }),
+      el('td', { class: 'num' + (s.misjudged ? ' warn' : ''), text: s.judged ? s.misjudged + ' / ' + s.judged : '—' }),
+      el('td', { class: 'num', text: data.models.length > 2 ? show(s.outliers) : '—' }),
+      el('td', { class: 'num live', text: r.photos + ' / ' + data.photos.length }),
+      el('td', { class: 'num live', text: r.photos ? r.wrongQuestion : '—' }),
+      el('td', { class: 'num live', text: r.photos ? r.wrongAnswer : '—' }),
+      el('td', { class: 'num live', text: r.photos ? r.missed : '—' }),
+      el('td', { class: 'num live', text: r.rate === null ? '—' : (r.rate * 100).toFixed(1) + '%' }));
+  });
+  table.replaceChildren(el('thead', null, el('tr', null, ...head.map(([text, cls]) => el('th', { class: cls || '', text })))), el('tbody', null, ...rows));
+}
+
+function toggle(button, target, key, after) {
+  const set = pressed => button.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  set(!!target()[key]);
+  button.addEventListener('click', () => { const t = target(); t[key] = !t[key]; set(t[key]); save(); after(); renderSummary(); });
+  return button;
+}
+
+function renderPhoto(photo, index) {
+  const always = new Set();
+  const boxes = el('div', { class: 'boxes' });
+  let hovered = null;
+  function draw() {
+    const out = [];
+    // Boxes are told apart by colour only: the models' boxes for one question sit on top of each other, so labels would too.
+    const add = (name, box, thin) => box && out.push(el('div', { class: 'box' + (thin ? ' thin' : ''),
+      style: `left:${box[0] * 100}%;top:${box[1] * 100}%;width:${(box[2] - box[0]) * 100}%;height:${(box[3] - box[1]) * 100}%;border-color:${colorOf(name)}` }));
+    for (const row of photo.rows) for (const name of always) if (row !== hovered && row.cells[name]) add(name, row.cells[name].box, true);
+    if (hovered) for (const model of data.models) if (hovered.cells[model.name]) add(model.name, hovered.cells[model.name].box, false);
+    boxes.replaceChildren(...out);
+  }
+  const usable = data.models.filter(model => photo.results[model.name] && photo.results[model.name].ok);
+
+  const body = el('tbody');
+  for (const row of photo.rows) {
+    const tr = el('tr', { onmouseenter: () => { hovered = row; draw(); }, onmouseleave: () => { hovered = null; draw(); } });
+    const rowMark = () => (marksOf(photo.name).rows[row.key] ??= {});
+    const cells = [];
+    const refresh = () => {
+      tr.classList.toggle('bogus', !!rowMark().bogus);
+      for (const cell of cells) cell.update();
+    };
+    tr.append(el('td', { class: 'no' }, el('div', { text: row.no }), toggle(el('button', { text: '照片上没有' }), rowMark, 'bogus', refresh)));
+    for (const model of data.models) {
+      const result = photo.results[model.name], item = row.cells[model.name];
+      const mark = () => (marksOf(photo.name).cells[row.key + '|' + model.name] ??= {});
+      let td;
+      if (!result || !result.ok) td = el('td', { class: 'cell none', text: '这张没读出来' });
+      else if (!item) td = el('td', { class: 'cell none' }, el('div', { text: '没读到' }), toggle(el('button', { text: '不算漏题' }), mark, 'notMissed', () => {}));
+      else {
+        const check = item.check, wrongJudge = check && item.judgement !== 'unknown' && item.judgement !== check.verdict;
+        td = el('td', { class: 'cell' },
+          el('div', { class: 'q', text: item.question || '（空）' }),
+          el('div', { class: 'a' }, item.answer === null ? '（没写）' : item.answer, item.answer !== null && !item.answerClear ? el('span', { class: 'tag', text: '没把握' }) : null),
+          el('div', { class: 'j' }, el('span', { class: wrongJudge ? 'bad' : '', text: '模型判 ' + verdict[item.judgement] }),
+            check ? ' · 验算 ' + verdict[check.verdict] + (check.verdict === 'incorrect' ? '（应为 ' + check.expected + '）' : '') : ''),
+          toggle(el('button', { text: '题目读错' }), mark, 'q', () => refresh()),
+          toggle(el('button', { text: '答案读错' }), mark, 'a', () => refresh()));
+        cells.push({ update: () => {
+          td.classList.toggle('marked', !!(mark().q || mark().a));
+          td.classList.toggle('odd', !(mark().q || mark().a) && row.outliers.includes(model.name));
+        } });
+      }
+      tr.append(td);
+    }
+    refresh();
+    body.append(tr);
+  }
+
+  const m = marksOf(photo.name);
+  const section = el('section', { class: 'panel photo', id: 'photo-' + (index + 1) });
+  const missed = el('input', { type: 'number', min: '0', max: '99', value: String(m.allMissed || 0),
+    oninput: () => { marksOf(photo.name).allMissed = Math.max(0, Number(missed.value) || 0); save(); renderSummary(); } });
+  const done = el('input', { type: 'checkbox', onchange: () => { marksOf(photo.name).done = done.checked; section.classList.toggle('done', done.checked); save(); renderSummary(); } });
+  done.checked = !!m.done;
+  section.classList.toggle('done', !!m.done);
+
+  section.append(
+    el('h2', null, (index + 1) + '. ' + photo.name + ' ', el('small', { text: (photo.width || '?') + '×' + (photo.height || '?') + (photo.orientation > 1 ? ' · 照片带旋转标记，框可能对不上' : '') })),
+    el('div', { class: 'split' },
+      el('div', { class: 'shot' },
+        el('div', { class: 'frame' }, el('img', { src: photo.src, alt: photo.name, loading: 'lazy', title: '点一下在新标签页里看原图', onclick: () => window.open(photo.src, '_blank', 'noopener') }), boxes),
+        el('div', { class: 'legend' }, '一直显示框：', ...usable.map(model => {
+          const box = el('input', { type: 'checkbox', onchange: () => { if (box.checked) always.add(model.name); else always.delete(model.name); draw(); } });
+          return el('label', null, box, ' ', dot(model.name), model.name);
+        }))),
+      el('div', { class: 'read' },
+        el('div', { class: 'scroll' }, el('table', null,
+          el('thead', null, el('tr', null, el('th', { text: '题号' }), ...data.models.map(model => el('th', null, dot(model.name), model.name)))), body)),
+        photo.rows.length ? null : el('p', { class: 'meta', text: '没有模型从这张照片里读出题目。' }),
+        el('ul', { class: 'runs' }, ...data.models.map(model => {
+          const r = photo.results[model.name];
+          const text = !r ? '没有运行' : !r.ok ? '失败：' + r.error
+            : (r.ms / 1000).toFixed(1) + ' 秒，' + r.reading.items.length + ' 题' + (r.reading.legible ? '' : '，模型说看不清') + (r.reading.note ? '，' + r.reading.note : '');
+          return el('li', { class: r && !r.ok ? 'warn' : '' }, dot(model.name), model.name + '：' + text);
+        })),
+        el('div', { class: 'foot' },
+          el('label', null, '哪个模型都没读到的题：', missed, ' 道'),
+          el('label', { class: 'done' }, done, ' 这张看完了')))));
+  return section;
+}
+
+document.getElementById('meta').textContent = data.startedAt + ' · ' + data.photos.length + ' 张照片 · ' + data.models.length + ' 个模型';
+document.getElementById('photos').replaceChildren(...data.photos.map(renderPhoto));
+document.getElementById('export').addEventListener('click', () => {
+  const text = JSON.stringify({ runId: data.runId, reviewed: reviewed(), marks }, null, 1);
+  const area = el('textarea', { readonly: '' });
+  area.value = text;
+  document.getElementById('exported').replaceChildren(area);
+  area.select();
+  if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+});
+renderSummary();
+</script>
+</body>
+</html>
