@@ -172,7 +172,7 @@ dialog::backdrop { background: rgba(40, 25, 15, .35); }
 /* 只有真正能悬停的设备才有悬停效果，触屏点过之后不会一直亮着 */
 @media (hover: hover) {
   .icon-btn:hover { background: var(--accent-soft); }
-  .chip:hover { border-color: var(--accent); }
+  button.chip:hover { border-color: var(--accent); }
 }
 
 /* 手机竖屏：话筒和提示并排，示例横向滑动，查完后田字格尽量落在第一屏 */

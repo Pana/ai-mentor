@@ -55,24 +55,6 @@ function tokenFromHash() {
 tokenFromHash();
 window.addEventListener('hashchange', tokenFromHash);
 
-// ---------- 朗读 ----------
-let zhVoice = null;
-function pickVoice() {
-  if (!('speechSynthesis' in window)) return;
-  const voices = speechSynthesis.getVoices();
-  zhVoice = voices.find(v => /zh[-_]CN/i.test(v.lang) && /Tingting|婷婷|Xiaoxiao|晓晓/i.test(v.name))
-    || voices.find(v => /zh[-_]CN/i.test(v.lang)) || voices.find(v => /^zh/i.test(v.lang)) || null;
-}
-if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
-function speak(text) {
-  if (!('speechSynthesis' in window) || !text) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'zh-CN'; u.rate = 0.75;
-  if (zhVoice) u.voice = zhVoice;
-  speechSynthesis.speak(u);
-}
-
 // ---------- 语音输入 ----------
 const AudioContextImpl = window.AudioContext || window.webkitAudioContext;
 let recognizer = null;
@@ -437,7 +419,6 @@ function trace() {
       setCounter(total(), '写完啦');
       const words = totalMistakes === 0 ? '太棒了，一笔都没错！' : totalMistakes <= 2 ? '写得真好！' : '写完啦，再练一遍会更好！';
       praise(words);
-      speak(words);
     }
   });
 }
@@ -485,8 +466,7 @@ function renderInfo(entry, data) {
   const box = $('#info');
   const top = el('div', { class: 'info-top' },
     el('span', { class: 'big-ch' }, glyph(entry.char)),
-    el('div', {}, el('div', { class: 'pinyin' }, entry.pinyin || ''),
-      el('button', { type: 'button', class: 'btn small', onclick: () => speak(entry.char) }, '🔊 读一读')));
+    el('div', {}, el('div', { class: 'pinyin' }, entry.pinyin || '')));
   // 部首和田字格里变色的笔画出自服务端同一张部首表；笔顺数据先到时（字典还没回来、或离线）也能先显示
   const rad = entry.radical ? entry : data?.radical ? data : null;
   const facts = el('div', { class: 'facts' },
@@ -496,8 +476,8 @@ function renderInfo(entry, data) {
   const parts = [top, facts];
   if (entry.meaning) parts.push(el('div', {}, el('p', { class: 'section-k' }, '意思'), el('p', { class: 'meaning' }, entry.meaning)));
   if (entry.words?.length) {
-    parts.push(el('div', {}, el('p', { class: 'section-k' }, '组词（点一下听读音）'),
-      el('div', { class: 'words' }, entry.words.map(w => el('button', { type: 'button', class: 'chip', onclick: () => speak(w) },
+    parts.push(el('div', {}, el('p', { class: 'section-k' }, '组词'),
+      el('div', { class: 'words' }, entry.words.map(w => el('span', { class: 'chip' },
         [...w].map(c => (c === entry.char ? el('mark', {}, glyph(c)) : glyph(c))))))));
   }
   if (entry.tip) parts.push(el('div', { class: 'tip' }, el('span', { 'aria-hidden': 'true' }, '🐻'), el('span', {}, entry.tip)));
@@ -568,7 +548,6 @@ $('#settings-btn').addEventListener('click', () => openSettings());
 $('#play').addEventListener('click', play);
 $('#next').addEventListener('click', nextStroke);
 $('#trace').addEventListener('click', trace);
-$('#speak-word').addEventListener('click', () => speak(state.result?.word));
 $('#radical-toggle').addEventListener('change', event => state.writer?.updateColor('radicalColor', event.target.checked ? COLORS.radical : null));
 const speedButton = $('#speed');
 speedButton.textContent = SPEEDS[state.speed].label;
