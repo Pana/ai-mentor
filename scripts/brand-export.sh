@@ -43,6 +43,6 @@ for page in site teacher parent hanzi poems; do
   resize "$tmp/logo-square-rounded.png" 64 "$dir/favicon.png"
   opaque "$tmp/logo-square.png" 180 "$dir/apple-touch-icon.png"
 done
-for page in site teacher parent; do resize "$tmp/logo-round.png" 144 "$root/web/$page/brand/logo-round.png"; done
+for page in site teacher parent hanzi poems; do resize "$tmp/logo-round.png" 144 "$root/web/$page/brand/logo-round.png"; done
 
 echo "brand assets exported"
