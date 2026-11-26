@@ -44,8 +44,8 @@ const config = {
   model: option('model', 'claude-opus-5-5')
 };
 
-// Claude Opus 5.5 的价格（美元 / 百万 token）。缓存写入用的是 1 小时缓存（2 倍输入价）。别的模型只报 token 数。
-const PRICES = { 'claude-opus-5-5': { input: 4, output: 20, cacheRead: .2, cacheWrite: 8 } };
+// Claude Opus 5.5 的价格（美元 / 百万 token）。缓存是 5 分钟的（写入 1.25 倍输入价），批量跑时一直在读，不会过期。别的模型只报 token 数。
+const PRICES = { 'claude-opus-5-5': { input: 4, output: 20, cacheRead: .2, cacheWrite: 5 } };
 
 // ---------- 画法说明和样张 ----------
 const styleDir = join(here, 'art-style');
@@ -72,7 +72,7 @@ lines 是句子在输入 sentences 数组里的下标（从 0 开始）。每张
 const system = [
   { type: 'text', text: instructions },
   { type: 'text', text: `《画法说明》\n\n${guide}` },
-  { type: 'text', text: `定稿样张（两首诗各四张，SVG 原文）：\n\n${exampleText}`, cache_control: { type: 'ephemeral', ttl: '1h' } }
+  { type: 'text', text: `定稿样张（两首诗各四张，SVG 原文）：\n\n${exampleText}`, cache_control: { type: 'ephemeral' } }
 ];
 
 // ---------- 诗 ----------
@@ -145,13 +145,16 @@ function checkPlan(plan, poem) {
 // ---------- 调用 Claude ----------
 let client = null;
 let Anthropic = null;
-const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, requests: 0 };
-function addUsage(usage) {
-  totals.requests++;
-  totals.input += usage?.input_tokens ?? 0;
-  totals.output += usage?.output_tokens ?? 0;
-  totals.cacheRead += usage?.cache_read_input_tokens ?? 0;
-  totals.cacheWrite += usage?.cache_creation_input_tokens ?? 0;
+const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, requests: 0 });
+const totals = emptyUsage();
+function addUsage(into, usage) {
+  for (const t of [totals, into]) {
+    t.requests++;
+    t.input += usage?.input_tokens ?? 0;
+    t.output += usage?.output_tokens ?? 0;
+    t.cacheRead += usage?.cache_read_input_tokens ?? 0;
+    t.cacheWrite += usage?.cache_creation_input_tokens ?? 0;
+  }
 }
 function cost(t = totals) {
   const price = PRICES[config.model];
@@ -159,7 +162,7 @@ function cost(t = totals) {
   return (t.input * price.input + t.output * price.output + t.cacheRead * price.cacheRead + t.cacheWrite * price.cacheWrite) / 1e6;
 }
 
-async function ask(userText) {
+async function ask(userText, usage) {
   // 流式：一次画三四张 SVG 输出很长，不流式会超时。fallbacks：被安全分类器拒绝时服务端自动换模型重来一次。
   const message = await client.beta.messages.stream({
     model: config.model,
@@ -171,7 +174,7 @@ async function ask(userText) {
     system,
     messages: [{ role: 'user', content: userText }]
   }).finalMessage();
-  addUsage(message.usage);
+  addUsage(usage, message.usage);
   if (message.stop_reason === 'refusal') throw new Error(`模型拒绝了（${message.stop_details?.category ?? '没有说明'}）`);
   if (message.stop_reason === 'max_tokens') throw new Error('输出太长，被截断了');
   const text = message.content.filter(b => b.type === 'text').map(b => b.text).join('');
@@ -182,9 +185,10 @@ const poemInput = poem => JSON.stringify({ title: poem.title, author: poem.autho
 
 /** 画一首诗：整首画一次；分镜不对就整首重画（最多两次）；单张不合格就单独重画那一张（最多两次）。 */
 async function illustrate(poem) {
+  const usage = emptyUsage();
   let plan = null, scenes = null, model = config.model;
   for (let attempt = 1; attempt <= 2 && !plan; attempt++) {
-    const reply = await ask(`请给这首诗画配图：${poemInput(poem)}`);
+    const reply = await ask(`请给这首诗画配图：${poemInput(poem)}`, usage);
     const parsed = parseReply(reply.text);
     const problem = checkPlan(parsed.plan, poem);
     if (problem) { log(poem, `分镜不对（${problem}），${attempt < 2 ? '重画' : '放弃'}`); continue; }
@@ -207,7 +211,7 @@ async function illustrate(poem) {
       const reply = await ask(`请重画这首诗的第 ${n} 张：${poemInput(poem)}
 上次的问题：${last.join('；')}。
 分镜：${JSON.stringify(plan)}
-${reference ? `下面是同一首诗已经画好的第 ${reference[0]} 张，人物和配色要和它一致：\n${reference[1]}\n` : ''}只输出 <scene n="${n}"><svg …>…</svg></scene>，不要输出别的。`);
+${reference ? `下面是同一首诗已经画好的第 ${reference[0]} 张，人物和配色要和它一致：\n${reference[1]}\n` : ''}只输出 <scene n="${n}"><svg …>…</svg></scene>，不要输出别的。`, usage);
       const svg = parseReply(reply.text).scenes.get(n);
       last = svg ? checkSvg(svg) : ['没有画出来'];
       if (!last.length) fixed = svg;
@@ -215,7 +219,7 @@ ${reference ? `下面是同一首诗已经画好的第 ${reference[0]} 张，人
     if (!fixed) throw new Error(`第 ${n} 张重画两次还是不合格（${last.join('；')}）`);
     done.set(n, fixed);
   }
-  return { plan, svgs: plan.scenes.map(s => done.get(s.n)), model };
+  return { plan, svgs: plan.scenes.map(s => done.get(s.n)), model, usage };
 }
 
 // ---------- 保存 ----------
@@ -283,6 +287,12 @@ export { checkPlan, checkSvg, parseReply, prefixIds, sentences };
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
 
 async function main() {
+// Node 自带的 fetch 默认不走 HTTP(S)_PROXY。在国内直连 Claude 会被 403（地区不支持），所以有代理时带上开关重新跑自己。
+const proxied = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy'].some(k => process.env[k]);
+if (proxied && !process.env.NODE_USE_ENV_PROXY && !config.dryRun) {
+  const child = spawnSync(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, NODE_USE_ENV_PROXY: '1' } });
+  process.exit(child.status ?? 1);
+}
 mkdirSync(config.out, { recursive: true });
 seedExamples();
 const todo = poems.filter(p => config.redo.has(p.id) || !isDone(p));
@@ -291,11 +301,11 @@ console.log(`共 ${poems.length} 首，要画 ${todo.length} 首；输出到 ${c
 console.log(`模型 ${config.model}，effort ${config.effort}，同时 ${config.concurrency} 首；${hasRsvg ? '会用 rsvg-convert 检查并导出 PNG' : '没有 rsvg-convert：只做文本检查，不导出 PNG（brew install librsvg）'}`);
 
 if (config.dryRun) {
-  // 粗估：系统提示按 2.5 个字符一个 token；每首诗输出（含思考）按 4.5 万 token 估（按 3 张左右）。实际以运行后的统计为准。
+  // 粗估：系统提示按 2.5 个字符一个 token；每首诗输出（含思考）按 2.5 万 token 估（试画两首是 2.1 万和 2.7 万）。实际以运行后的统计为准。
   const systemTokens = Math.round(systemChars / 2.5);
-  const estimate = { input: todo.length * 400, output: todo.length * 45_000, cacheRead: todo.length * systemTokens, cacheWrite: systemTokens * 2 };
+  const estimate = { input: todo.length * 400, output: todo.length * 25_000, cacheRead: todo.length * systemTokens, cacheWrite: systemTokens };
   const money = cost(estimate);
-  console.log(`系统提示约 ${systemTokens.toLocaleString()} token（缓存）。粗估输出 ${(estimate.output / 1e6).toFixed(1)}M token${money != null ? `，约 $${money.toFixed(0)}` : ''}（按每首 4.5 万 token 估，实际可能差一倍）。`);
+  console.log(`系统提示约 ${systemTokens.toLocaleString()} token（缓存）。粗估输出 ${(estimate.output / 1e6).toFixed(1)}M token${money != null ? `，约 $${money.toFixed(0)}` : ''}（按每首 2.5 万 token 估）。`);
   for (const p of todo) console.log(`  ${p.id} ${p.title}（${p.author}，${sentences(p).length} 句）`);
   writeIndex();
   return;
@@ -314,26 +324,30 @@ try { client = new Anthropic({ maxRetries: 4 }); } catch (error) {
 const failures = [];
 let finished = 0, stop = false;
 const queue = [...todo];
-async function worker() {
+async function worker(once = false) {
   while (queue.length && !stop) {
     const poem = queue.shift();
-    const before = { ...totals };
     try {
       const result = await illustrate(poem);
-      const usage = Object.fromEntries(Object.keys(totals).map(k => [k, totals[k] - before[k]]));
-      const meta = save(poem, { ...result, source: 'claude', usage });
-      const spent = cost(usage);
+      const meta = save(poem, { ...result, source: 'claude' });
+      const spent = cost(result.usage);
       log(poem, `画好了 ${meta.images} 张（${++finished}/${todo.length}）${spent != null ? `，约 $${spent.toFixed(2)}` : ''}${meta.warnings.length ? `；注意：${meta.warnings.join('；')}` : ''}`);
     } catch (error) {
       if (Anthropic && error instanceof Anthropic.AuthenticationError) { stop = true; console.error('API key 不对，停下。'); }
-      else if (Anthropic && error instanceof Anthropic.PermissionDeniedError) { stop = true; console.error(`没有权限：${error.message}`); }
+      else if (Anthropic && error instanceof Anthropic.PermissionDeniedError) {
+        stop = true;
+        console.error(`没有权限：${error.message}\n“Request not allowed” 多半是网络所在地区不支持：要通过代理访问（设置 HTTPS_PROXY，脚本会自动让 Node 走代理）。`);
+      }
       failures.push(`${poem.id} ${poem.title}：${error.message}`);
       log(poem, `没画成：${error.message}`);
     }
     writeIndex();
+    if (once) return;
   }
 }
-await Promise.all(Array.from({ length: config.concurrency }, worker));
+// 先单独画一首，把样张那部分的缓存建好；几首同时开始的话每个请求都会各写一次缓存。
+await worker(true);
+await Promise.all(Array.from({ length: config.concurrency }, () => worker()));
 writeIndex();
 const money = cost();
 console.log(`\n画好 ${finished} 首，失败 ${failures.length} 首。请求 ${totals.requests} 次；输入 ${totals.input} + 缓存读 ${totals.cacheRead} + 缓存写 ${totals.cacheWrite}，输出 ${totals.output} token${money != null ? `，约 $${money.toFixed(2)}` : ''}。`);
