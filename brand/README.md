@@ -35,7 +35,7 @@ scripts/brand-export.sh
 - `brand/png/`
 - iPad / iPhone 图标：`ipad/LittleBearTutor/Assets.xcassets/AppIcon.appiconset/AppIcon.png`
 - 安卓启动图标：`app/src/main/res/mipmap-*/ic_launcher_{background,foreground}.png`，由 `mipmap-anydpi-v26/ic_launcher.xml` 组合
-- 网页图标：`web/{site,teacher,parent,hanzi,poems}/brand/` 里的 favicon、apple-touch-icon，以及圆形 logo（site / teacher / parent 的导航品牌位）
+- 网页图标：`web/{site,teacher,parent,hanzi,poems}/brand/` 里的 favicon、apple-touch-icon，以及圆形 logo（各页面顶栏或导航的品牌位）
 
 App 里的小熊形象（iPad `BearView` / `BearOrb`，安卓 `Bear` / `BearView`）和网页里的大插画小熊（官网首屏、语音老师的光环）是吉祥物，不是 logo，还是原来用代码画的那一套。
 
