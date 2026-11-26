@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node --env-file=.env src/index.mjs",
     "test": "node --test",
-    "eval:teacher": "node --env-file=.env eval/teacher-eval.mjs"
+    "eval:teacher": "node --env-file=.env eval/teacher-eval.mjs",
+    "eval:vision": "node --env-file=.env eval/vision-eval.mjs"
   },
   "dependencies": {
     "ws": "^8.22.2"

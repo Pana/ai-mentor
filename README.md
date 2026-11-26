@@ -79,6 +79,8 @@ Windows 使用 `gradlew.bat`。项目通过 Wrapper 固定 Gradle 8.9，不需�
 
 小熊老师：`scripts/teacher-web.sh` 用替身上游在 Chromium 里跑网页版的完整对话；`cd server && npm run eval:teacher` 用 `.env` 里的模型跑评测集，报告写到 `server/eval/teacher-report.md`。
 
+视觉模型测评（给“小熊看得见”和 AI 预批改选模型用）：把作业照片放进 `server/data/vision-eval/photos/`，`cd server && npm run eval:vision` 会把每张照片交给 `server/eval/vision-models.json` 里配了密钥的模型，读出每道题和孩子写的答案，口算题的对错由代码重算。报告写到 `server/data/vision-eval/report.html`，用浏览器打开，对着照片逐张点出读错的地方，页面顶部会算出每个模型的读对率。先加 `-- --dry-run` 可以只看会把哪些照片发给哪家，不发送。照片和报告里都是孩子的作业，只放在不提交的 `server/data/` 下。
+
 旧版实时语音 Demo（`/v1/voice`，和小熊老师的 `/v1/teacher` 是两套协议）：启动网关后，在仓库根目录运行 `node scripts/voice-demo.mjs http://127.0.0.1:8787 <设备凭证> "小熊，帮我看看这道题"`。旧版辅导界面使用同一个协议。
 
 完成构建后运行 `python3 scripts/package-release.py`，生成带版本号的 Debug APK、源码迁移包与校验值，输出到 `artifacts/`。迁移包包含 App、网关、测试、文档及 Wrapper，不包含密钥或本地数据。
