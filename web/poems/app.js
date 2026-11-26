@@ -83,6 +83,7 @@ function route() {
   if (parts[0] === 'library') return showLibrary(params);
   if (parts[0] === 'authors') return showAuthors(params);
   if (parts[0] === 'author' && parts[1]) return showAuthor(parts[1], params.get('d') || '');
+  if (params.has('level')) return showLevel(Number(params.get('level')) || store.get('level', 1));
   return showSchool(Number(params.get('grade')) || store.get('grade', 2));
 }
 window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
@@ -100,15 +101,40 @@ async function showSchool(grade) {
   try { data = await loadHome(); } catch { return view.replaceChildren(status('打不开诗词服务，请稍后再试。', true)); }
   store.set('grade', grade);
   const books = data.school.filter(b => b.grade === grade);
-  const grades = el('div', { class: 'grades', role: 'tablist' }, GRADES.map((g, i) =>
-    el('a', { class: `chip${i + 1 === grade ? ' on' : ''}`, href: `#/?grade=${i + 1}`, role: 'tab', 'aria-selected': String(i + 1 === grade) }, `${g}年级`)));
-  view.replaceChildren(grades, ...(books.length ? books.map(b => el('section', { class: 'card term' },
+  view.replaceChildren(schoolBar(data, grade), ...(books.length ? books.map(b => el('section', { class: 'card term' },
     el('h2', {}, `${GRADES[b.grade - 1]}年级${b.term}册`, el('small', {}, `${b.poems.length} 首`)),
     el('ul', { class: 'list' }, b.poems.map(p => el('li', {}, poemItem(p)))))) : [status(data.school.length ? '这个年级还没有整理好的古诗。' : '课本古诗还没有整理好。')]));
 }
 
-function poemItem(p, { showGrade = false } = {}) {
+/** 一到六年级，再加上“考级”（学校的古诗考级清单，有的时候才显示）。 */
+function schoolBar(data, grade, level = 0) {
+  const chip = (on, href, text) => el('a', { class: `chip${on ? ' on' : ''}`, href, role: 'tab', 'aria-selected': String(on) }, text);
+  return el('div', { class: 'grades', role: 'tablist' },
+    ...GRADES.map((g, i) => chip(!level && i + 1 === grade, `#/?grade=${i + 1}`, `${g}年级`)),
+    ...(data.levels?.length ? [chip(!!level, `#/?level=${store.get('level', 1)}`, '考级')] : []));
+}
+
+// ---------- 古诗考级 ----------
+async function showLevel(level) {
+  view.replaceChildren(waiting('正在打开……'));
+  let data;
+  try { data = await loadHome(); } catch { return view.replaceChildren(status('打不开诗词服务，请稍后再试。', true)); }
+  const levels = data.levels ?? [];
+  if (!levels.some(l => l.level === level)) level = levels[0]?.level ?? 1;
+  store.set('level', level);
+  const current = levels.find(l => l.level === level);
+  const tabs = el('div', { class: 'chips', role: 'tablist' }, levels.map(l =>
+    el('a', { class: `chip${l.level === level ? ' on' : ''}`, href: `#/?level=${l.level}`, role: 'tab', 'aria-selected': String(l.level === level) }, `${GRADES[l.level - 1]}级`)));
+  view.replaceChildren(schoolBar(data, 0, level), ...(current ? [el('section', { class: 'card term' },
+    el('h2', {}, `古诗考级 · ${GRADES[level - 1]}级`, el('small', {}, `${current.poems.length} 首`)),
+    tabs,
+    el('p', { class: 'muted level-tip' }, '学校发的古诗考级清单（2026.08 版）。标着年级的是课本里也有的。'),
+    el('ul', { class: 'list' }, current.poems.map(p => el('li', {}, poemItem(p, { showGrade: true })))))] : [status('古诗考级清单还没有整理好。')]));
+}
+
+function poemItem(p, { showGrade = false, showLevel = false } = {}) {
   const badges = [];
+  if (p.level && showLevel) badges.push(el('span', { class: 'badge' }, `考级${GRADES[p.level - 1]}级`));
   if (p.school?.kind && p.school.kind !== '课文') badges.push(el('span', { class: 'badge' }, p.school.kind));
   if (p.school && showGrade) badges.push(el('span', { class: 'badge' }, `${GRADES[p.school.grade - 1]}年级${p.school.term}`));
   for (const b of p.books ?? []) if (b !== '水墨唐诗') badges.push(el('span', { class: 'badge done' }, b));
@@ -179,7 +205,8 @@ async function loadResults(params, box, offset) {
   try { found = await api(`/v1/poems/search?${q}`); } catch { loading.replaceWith(status('没找到，可能是网络不好，再试一次吧。', true)); return; }
   loading.remove();
   if (!offset && found.school.length) {
-    box.append(el('p', { class: 'section-label' }, '课本里的'), el('ul', { class: 'list' }, found.school.map(p => el('li', {}, poemItem(p, { showGrade: true })))));
+    box.append(el('p', { class: 'section-label' }, found.school.some(p => p.level) ? '课本和考级里的' : '课本里的'),
+      el('ul', { class: 'list' }, found.school.map(p => el('li', {}, poemItem(p, { showGrade: true, showLevel: true })))));
   }
   if (!offset && found.school.length && found.poems.length) box.append(el('p', { class: 'section-label' }, '诗库里的'));
   if (found.poems.length) box.append(el('ul', { class: 'list' }, found.poems.map(p => el('li', {}, poemItem(p)))));
@@ -259,7 +286,13 @@ async function showPoem(id) {
   const explainButton = el('button', { class: 'btn primary', type: 'button', onclick: () => loadExplanation(explainBox, explainButton, linesBox) }, '🐻 小熊讲一讲');
 
   const notes = [];
-  if (poem.textbookId) notes.push(el('p', { class: 'note' }, '诗库里的字句来自《全唐诗》，和课本可能不同。', el('a', { href: `#/poem/${poem.textbookId}` }, '看课本版 →')));
+  if (poem.textbookId) {
+    const exam = poem.textbookId.startsWith('k');
+    notes.push(el('p', { class: 'note' }, `诗库里的字句来自古籍，和${exam ? '考级清单' : '课本'}可能不同。`,
+      el('a', { href: `#/poem/${poem.textbookId}` }, exam ? '看考级版 →' : '看课本版 →')));
+  }
+  if (poem.level) notes.push(el('p', { class: 'note' }, el('a', { href: `#/?level=${poem.level}` }, `古诗考级 · ${GRADES[poem.level - 1]}级`),
+    poem.note ? ` · ${poem.note}` : ''));
   if (poem.school) notes.push(el('p', { class: 'note' }, `${GRADES[poem.school.grade - 1]}年级${poem.school.term}册${poem.school.kind === '课文' ? '' : ` · ${poem.school.kind}`}`));
 
   view.replaceChildren(

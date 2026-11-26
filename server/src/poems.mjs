@@ -1,5 +1,5 @@
 /**
- * 小熊读诗：课本古诗（poems-school.json，随代码发布）+ 诗库（DATA_DIR/poems.db，由 scripts/poems/import.mjs 从
+ * 小熊读诗：课本古诗（poems-school.json，随代码发布）、古诗考级 1–6 级（poems-levels.json）+ 诗库（DATA_DIR/poems.db，由 scripts/poems/import.mjs 从
  * chinese-poetry 生成，没有这个文件时只有课本古诗），以及给孩子讲诗的“讲解”（模型生成，按诗缓存在 littlebear.db）。
  *
  * 浏览和查找是公开的（只读、不调用模型）；讲解要调用模型，和写字页一样需要设备凭证或同源页面的会话。
@@ -15,6 +15,7 @@ import { openDatabase } from './db.mjs';
 
 const defaultWebDir = fileURLToPath(new URL('../../web/poems/', import.meta.url));
 const defaultSchool = fileURLToPath(new URL('./poems-school.json', import.meta.url));
+const defaultLevels = fileURLToPath(new URL('./poems-levels.json', import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json; charset=utf-8' };
 
@@ -47,6 +48,36 @@ export function loadSchoolPoems(path = defaultSchool) {
     return { id: `s${book}${String(n).padStart(2, '0')}`, title: p.title, author: p.author, dynasty: p.dynasty || '',
       form: p.form || '', tags: [], lines: p.lines, school: { grade: p.grade, term: p.term, unit: p.unit ?? null, kind: p.kind || '课文' } };
   });
+}
+
+const hanOnly = s => s.replace(/[^\p{Script=Han}]/gu, '');
+
+/**
+ * 古诗考级 1–6 级（学校发的背诵清单，按级排）。和课本原文一字不差的直接用课本那一首（id、讲解都共用）；
+ * 不一样的（课本没有、或课本是节选）按级编自己的 id，如 k3a02 = 三级第 2 首自己的诗。
+ */
+export function loadLevelPoems(path = defaultLevels, school = []) {
+  if (!existsSync(path)) return { levels: [], own: [] };
+  const list = JSON.parse(readFileSync(path, 'utf8'));
+  const levels = [], own = [];
+  const counters = new Map();
+  list.forEach((p, i) => {
+    if (!Number.isInteger(p.level) || p.level < 1 || p.level > 6 || !p.title || !p.author
+      || !Array.isArray(p.lines) || !p.lines.length) throw new Error(`poems-levels.json 第 ${i + 1} 条不完整`);
+    const text = hanOnly(p.lines.join(''));
+    let poem = school.find(s => hanOnly(s.lines.join('')) === text);
+    if (!poem) {
+      const n = (counters.get(p.level) ?? 0) + 1;
+      counters.set(p.level, n);
+      poem = { id: `k${p.level}a${String(n).padStart(2, '0')}`, title: p.title, author: p.author, dynasty: p.dynasty || '',
+        form: p.form || '', tags: [], lines: p.lines, level: p.level, note: p.note || '' };
+      own.push(poem);
+    }
+    const last = levels.at(-1);
+    if (last?.level === p.level) last.poems.push(poem);
+    else levels.push({ level: p.level, poems: [poem] });
+  });
+  return { levels, own };
 }
 
 /** 把查找词里的 LIKE 通配符转义掉。 */
@@ -190,9 +221,12 @@ async function readJson(stream, max) {
  * POST /v1/poems/explain accepts the tutor device token or the HttpOnly session issued to the same-origin page.
  */
 export function createPoems({ token, model = {}, dataDir, libraryPath = join(dataDir, 'poems.db'), schoolPath = defaultSchool,
-  webDir = defaultWebDir, fetchImpl = fetch, now = Date.now }) {
+  levelsPath = defaultLevels, webDir = defaultWebDir, fetchImpl = fetch, now = Date.now }) {
   const school = loadSchoolPoems(schoolPath);
-  const schoolById = new Map(school.map(p => [p.id, p]));
+  const levels = loadLevelPoems(levelsPath, school);
+  // 课本古诗加上考级里课本没有的诗：都是整理过的版本，按 id 能打开，查找时排在诗库前面。
+  const curated = [...school, ...levels.own];
+  const schoolById = new Map(curated.map(p => [p.id, p]));
   const library = openLibrary(libraryPath);
   const db = openDatabase(join(dataDir, 'littlebear.db'));
   const cacheGet = db.prepare('SELECT explanation FROM poem_explanations WHERE key = ?');
@@ -235,17 +269,23 @@ export function createPoems({ token, model = {}, dataDir, libraryPath = join(dat
     return (!!token && received.length === expected.length && timingSafeEqual(received, expected)) || sessionFor(req);
   }
 
-  /** 课本古诗或诗库里的诗；诗库里和课本同作者同题的，附上课本版的 id（全唐诗的字句常和课本不同）。 */
+  /**
+   * 整理过的诗（课本、考级）或诗库里的诗；诗库里和整理版同作者同题的，附上整理版的 id（全唐诗的字句常和课本不同，
+   * 比如《静夜思》）。同题的不止一首时（李清照的两首《如梦令》）再比开头四个字。
+   */
   function poemById(id) {
     if (schoolById.has(id)) return schoolById.get(id);
     const match = /^p(\d{1,9})$/.exec(id);
     const poem = match && library?.poem(Number(match[1]));
     if (!poem) return null;
-    const textbook = school.find(s => s.author === poem.author && s.title === poem.title);
+    const same = curated.filter(s => s.author === poem.author && s.title.replace(/（.*）$/, '') === poem.title);
+    const start = hanOnly(poem.lines.join('')).slice(0, 4);
+    const textbook = same.length > 1 ? same.find(s => hanOnly(s.lines.join('')).startsWith(start)) : same[0];
     return textbook ? { ...poem, textbookId: textbook.id } : poem;
   }
 
-  const schoolSummary = p => ({ id: p.id, title: p.title, author: p.author, dynasty: p.dynasty, first: p.lines[0], school: p.school });
+  const schoolSummary = p => ({ id: p.id, title: p.title, author: p.author, dynasty: p.dynasty, first: p.lines[0],
+    ...(p.school ? { school: p.school } : { level: p.level }) });
 
   function home() {
     const books = [];
@@ -254,7 +294,8 @@ export function createPoems({ token, model = {}, dataDir, libraryPath = join(dat
       if (last?.grade === p.school.grade && last.term === p.school.term) last.poems.push(schoolSummary(p));
       else books.push({ grade: p.school.grade, term: p.school.term, poems: [schoolSummary(p)] });
     }
-    return { school: books, library: library ? { poems: Number(library.meta.poems) || 0, ...library.facets } : null };
+    return { school: books, levels: levels.levels.map(l => ({ level: l.level, poems: l.poems.map(schoolSummary) })),
+      library: library ? { poems: Number(library.meta.poems) || 0, ...library.facets } : null };
   }
 
   function search(params) {
@@ -264,7 +305,7 @@ export function createPoems({ token, model = {}, dataDir, libraryPath = join(dat
     // 只按文字找时，课本古诗排在最前面（只在第一页）。
     const plain = !filters.dynasty && !filters.form && !filters.book && !filters.tag;
     const textbook = plain && !filters.offset && (q || filters.author)
-      ? school.filter(p => (!filters.author || p.author === filters.author)
+      ? curated.filter(p => (!filters.author || p.author === filters.author)
         && (!q || p.title.includes(q) || p.author.includes(q) || p.lines.some(l => l.includes(q)))).map(schoolSummary)
       : [];
     const found = library ? library.search(filters) : { poems: [], more: false };

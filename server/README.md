@@ -105,11 +105,11 @@ Caddy 默认不限制请求大小，不用改。
 | 接口 | 鉴权 | 说明 |
 | --- | --- | --- |
 | `GET /poems/` | 无 | 网页 |
-| `GET /v1/poems/home` | 无 | `{school:[{grade, term, poems:[…]}], library:{poems, dynasties, forms, books, tags} \| null}` |
+| `GET /v1/poems/home` | 无 | `{school:[{grade, term, poems:[…]}], levels:[{level, poems:[…]}], library:{poems, dynasties, forms, books, tags} \| null}`；考级清单在 `src/poems-levels.json` |
 | `GET /v1/poems/search?q=&dynasty=&form=&book=&tag=&author=&offset=` | 无 | `{school:[…], poems:[…], more}`，每页 30 首，按名气排；只按文字或诗人找时课本古诗排在最前面 |
 | `GET /v1/poems/authors?dynasty=&q=&offset=` | 无 | 诗人列表，每页 60 位 |
 | `GET /v1/poems/author?name=&dynasty=` | 无 | `{name, dynasty, intro, poems}`，`intro` 是古书里的文言简介 |
-| `GET /v1/poems/poem/<id>` | 无 | 一首诗；`s…` 是课本古诗，`p…` 是诗库。讲过的诗带着 `explanation`；诗库里和课本同题同作者的带 `textbookId` |
+| `GET /v1/poems/poem/<id>` | 无 | 一首诗；`s…` 是课本古诗，`k…` 是考级里课本没有的，`p…` 是诗库。讲过的诗带着 `explanation`；诗库里和课本同题同作者的带 `textbookId` |
 | `POST /v1/poems/explain` | 同源会话或 `TUTOR_DEVICE_TOKEN` | `{id}` → `{pinyin, scene, lines, words, feeling, story, poet}`。诗文由服务端按 id 查出来再交给模型；最长 24 行、400 字；结果存在 `littlebear.db` 的 `poem_explanations` 表，同一首诗只问一次模型。每分钟最多 30 次新讲解 |
 
 `POEMS_MODEL_NAME` 可单独指定讲诗用的模型，默认用 `MODEL_NAME`；`POEMS_MODEL_THINKING` 同 `HANZI_MODEL_THINKING`，默认 `disabled`。只读接口每分钟最多 600 次。

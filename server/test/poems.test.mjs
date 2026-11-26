@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createGateway } from '../src/gateway.mjs';
-import { createPoems, loadSchoolPoems, validateExplanation, explainKey, explainBody } from '../src/poems.mjs';
+import { createPoems, loadSchoolPoems, loadLevelPoems, validateExplanation, explainKey, explainBody } from '../src/poems.mjs';
 
 const token = 'device-test-token-not-a-secret-12345';
 const model = { apiUrl: 'https://model.test/chat/completions', apiKey: 'k', model: 'm', jsonMode: true };
@@ -15,6 +15,12 @@ const school = [
   { grade: 1, term: '下', kind: '课文', title: '静夜思', author: '李白', dynasty: '唐', lines: ['床前明月光，疑是地上霜。', '举头望明月，低头思故乡。'] },
   { grade: 2, term: '上', kind: '课文', title: '登鹳雀楼', author: '王之涣', dynasty: '唐', lines: ['白日依山尽，黄河入海流。', '欲穷千里目，更上一层楼。'] },
   { grade: 2, term: '上', kind: '日积月累', title: '梅花', author: '王安石', dynasty: '宋', lines: ['墙角数枝梅，凌寒独自开。', '遥知不是雪，为有暗香来。'] }
+];
+
+const levelList = [
+  { level: 1, title: '静夜思', author: '李白', dynasty: '唐', lines: ['床前明月光，疑是地上霜。', '举头望明月，低头思故乡。'] },
+  { level: 1, title: '如梦令', author: '李清照', dynasty: '宋', lines: ['常记溪亭日暮，沉醉不知归路。', '兴尽晚回舟，误入藕花深处。', '争渡，争渡，惊起一滩鸥鹭。'], note: '考级版' },
+  { level: 2, title: '如梦令', author: '李清照', dynasty: '宋', lines: ['昨夜雨疏风骤，浓睡不消残酒。', '试问卷帘人，却道海棠依旧。', '知否，知否，应是绿肥红瘦。'] }
 ];
 
 /** 和 scripts/poems/import.mjs 写出来的表结构一样的小诗库。 */
@@ -33,6 +39,8 @@ function makeLibrary(path) {
   insert.run('春晓', '孟浩然', '唐', '五言绝句', ' 唐诗三百首 春天 ', '春眠不觉晓，处处闻啼鸟。\n夜来风雨声，花落知多少。', 1500);
   insert.run('句', '无名氏', '唐', '杂言诗', '', '明月100%_好', 0);
   insert.run('水调歌头', '苏轼', '宋', '词', ' 宋词三百首 ', '明月几时有？把酒问青天。\n不知天上宫阙，今夕是何年。', 1800);
+  insert.run('如梦令', '李清照', '宋', '词', '', '昨夜雨疏风骤。浓睡不消残酒。\n试问卷帘人，却道海棠依旧。\n知否。知否。应是绿肥红瘦。', 10);
+  insert.run('如梦令', '李清照', '宋', '词', '', '常记溪亭日暮。沈醉不知归路。\n兴尽晚回舟，误入藕花深处。\n争渡。争渡。惊起一滩鸥鹭。', 10);
   db.prepare('INSERT INTO authors VALUES (?, ?, ?, ?, ?)').run('李白', '唐', '字太白。', 1, 2000);
   db.prepare('INSERT INTO authors VALUES (?, ?, ?, ?, ?)').run('苏轼', '宋', '字子瞻。', 1, 1800);
   db.close();
@@ -45,13 +53,15 @@ const goodExplanation = lines => ({
   feeling: '想家。', story: '', poet: '唐朝诗人。'
 });
 
-async function setup(t, { replies = [], library = true, schoolList = school } = {}) {
+async function setup(t, { replies = [], library = true, schoolList = school, levels = levelList } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), 'poems-'));
   const webDir = join(dataDir, 'web');
   mkdirSync(webDir);
   writeFileSync(join(webDir, 'index.html'), '<!doctype html><title>小熊读诗</title>');
   const schoolPath = join(dataDir, 'school.json');
   writeFileSync(schoolPath, JSON.stringify(schoolList));
+  const levelsPath = join(dataDir, 'levels.json');
+  writeFileSync(levelsPath, JSON.stringify(levels));
   if (library) makeLibrary(join(dataDir, 'poems.db'));
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -59,7 +69,7 @@ async function setup(t, { replies = [], library = true, schoolList = school } = 
     const content = replies.shift();
     return new Response(JSON.stringify({ choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }] }));
   };
-  const poems = createPoems({ token, model, dataDir, schoolPath, webDir, fetchImpl });
+  const poems = createPoems({ token, model, dataDir, schoolPath, levelsPath, webDir, fetchImpl });
   const server = createGateway({ token, poems });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -105,12 +115,45 @@ test('search puts textbook poems first and filters the library', async t => {
   ({ body } = await get(`/v1/poems/search?book=${encodeURIComponent('唐诗三百首')}&tag=${encodeURIComponent('思乡')}`));
   assert.deepEqual(body.poems.map(p => p.title), ['静夜思']);
   ({ body } = await get(`/v1/poems/search?form=${encodeURIComponent('词')}`));
-  assert.deepEqual(body.poems.map(p => p.author), ['苏轼']);
+  assert.deepEqual(body.poems.map(p => p.author), ['苏轼', '李清照', '李清照']);
   // LIKE 的通配符按普通字符找。
   ({ body } = await get(`/v1/poems/search?q=${encodeURIComponent('%_')}`));
   assert.deepEqual(body.poems.map(p => p.title), ['句']);
   ({ body } = await get(`/v1/poems/search?author=${encodeURIComponent('李白')}`));
   assert.deepEqual([body.school.length, body.poems.length], [1, 1]);
+});
+
+test('level poems reuse identical textbook poems and number the rest by level', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'poems-levels-'));
+  try {
+    writeFileSync(join(dir, 's.json'), JSON.stringify(school));
+    writeFileSync(join(dir, 'l.json'), JSON.stringify(levelList));
+    const { levels, own } = loadLevelPoems(join(dir, 'l.json'), loadSchoolPoems(join(dir, 's.json')));
+    assert.deepEqual(levels.map(l => [l.level, l.poems.map(p => p.id)]), [[1, ['s1b01', 'k1a01']], [2, ['k2a01']]]);
+    assert.deepEqual(own.map(p => [p.id, p.level, p.note]), [['k1a01', 1, '考级版'], ['k2a01', 2, '']]);
+    writeFileSync(join(dir, 'bad.json'), JSON.stringify([{ level: 7, title: 'x', author: 'y', lines: ['a'] }]));
+    assert.throws(() => loadLevelPoems(join(dir, 'bad.json')), /第 1 条/);
+    assert.deepEqual(loadLevelPoems(join(dir, 'missing.json')), { levels: [], own: [] });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('home lists the levels; level poems open, are found first, and library versions link to them', async t => {
+  const { get } = await setup(t);
+  const { body: home } = await get('/v1/poems/home');
+  assert.deepEqual(home.levels.map(l => [l.level, l.poems.map(p => [p.id, p.school?.grade ?? null, p.level ?? null])]),
+    [[1, [['s1b01', 1, null], ['k1a01', null, 1]]], [2, [['k2a01', null, 2]]]]);
+  const { status, body: poem } = await get('/v1/poems/poem/k2a01');
+  assert.equal(status, 200);
+  assert.equal(poem.level, 2);
+  assert.equal(poem.explainable, true);
+  const { body: found } = await get(`/v1/poems/search?q=${encodeURIComponent('如梦令')}`);
+  assert.deepEqual(found.school.map(p => p.id), ['k1a01', 'k2a01']);
+  // 同题的两首《如梦令》各自连到考级里对应的那首。
+  const links = await Promise.all(found.poems.map(p => get(`/v1/poems/poem/${p.id}`)));
+  assert.deepEqual(links.map(r => [r.body.lines[0].slice(0, 4), r.body.textbookId]).sort(), [['常记溪亭', 'k1a01'], ['昨夜雨疏', 'k2a01']]);
+  // 只有一首同题的照旧连到课本版，开头不同也一样（全唐诗是“床前看月光”）。
+  const { body: library } = await get(`/v1/poems/search?dynasty=${encodeURIComponent('唐')}&q=${encodeURIComponent('床前')}`);
+  assert.equal((await get(`/v1/poems/poem/${library.poems[0].id}`)).body.textbookId, 's1b01');
 });
 
 test('authors and author pages come from the library', async t => {
