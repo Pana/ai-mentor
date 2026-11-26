@@ -59,6 +59,23 @@ node --env-file=server/.env scripts/poems/pregenerate.mjs --redo s1a01     # 重
 
 “诗里的画面”下面留了插图的位置，现在显示“这里以后会有一幅画”。
 
+## 配图（批量生成，还没接到页面）
+
+画法定为古风工笔：张数按诗的意思定（一个独立的画面一张），一句或几句一张，SVG。画法说明和定稿样张（《静夜思》《咏鹅》各四张）在 `scripts/poems/art-style/`。其余课本古诗用 Claude 照着样张画：
+
+```sh
+cd scripts/poems && npm install && cd ../..                            # 第一次：装 Claude 的 SDK
+node --env-file=server/.env scripts/poems/illustrate.mjs --dry-run     # 要画哪些、粗估花费，不调用模型
+node --env-file=server/.env scripts/poems/illustrate.mjs --only s1a02  # 先画一两首看看
+node --env-file=server/.env scripts/poems/illustrate.mjs               # 全部课本古诗；--levels 连考级里补的诗一起
+```
+
+- 需要 `ANTHROPIC_API_KEY`（加在 `server/.env` 里），默认用 `claude-opus-5-5`。
+- 结果在 `server/data/poem-art/`（不进 git）：每首诗一个目录，`1.svg`… 加上 PNG 预览和 `meta.json`（分镜、用的模型、花了多少 token）。打开 `server/data/poem-art/index.html` 就能翻看全部。
+- 画过、诗文也没变的诗会跳过，失败的再跑一次会接着画；`--redo id` 重画某一首。
+- 每张都检查：只能是 800×600 的纯 SVG，没有脚本、外部链接和图片；装了 `rsvg-convert`（`brew install librsvg`）还会实际渲染一遍。不合格的那张单独重画。
+- 画法要调整时改 `art-style/guide.md` 或换样张，再 `--redo` 重画。
+
 ## 已知限制
 
 - 诗库的字句来自《全唐诗》，和课本、通行本常有不同；同题同作者的会提示“看课本版”。
