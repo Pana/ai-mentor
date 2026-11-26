@@ -240,14 +240,16 @@ async function showLibrary(params) {
 
   const top = el('section', { class: 'card filters' }, form);
   if (lib) {
-    top.append(
+    // 没有可选项的那一行 filterRow 返回 null，append 会把它写成文字“null”，先去掉。
+    top.append(...[
       filterRow('朝代', 'dynasty', lib.dynasties),
       filterRow('体裁', 'form', lib.forms),
       filterRow('选集', 'book', lib.books),
       filterRow('题材', 'tag', lib.tags, { limit: 12 }),
       el('div', { class: 'chips' }, el('span', { class: 'chips-label' }, '诗人'),
         params.get('author') ? el('a', { class: 'chip on', href: libraryHash(new URLSearchParams([...params].filter(([k]) => k !== 'author'))) }, `${params.get('author')} ✕`) : null,
-        el('a', { class: 'chip', href: `#/authors${params.get('dynasty') ? `?dynasty=${encodeURIComponent(params.get('dynasty'))}` : ''}` }, '按诗人找 →')));
+        el('a', { class: 'chip', href: `#/authors${params.get('dynasty') ? `?dynasty=${encodeURIComponent(params.get('dynasty'))}` : ''}` }, '按诗人找 →'))
+    ].filter(Boolean));
   }
   const results = el('div', { class: 'filters' });
   view.replaceChildren(top, results);
@@ -524,7 +526,8 @@ function renderExplanation(box, ex, linesBox) {
     if (on) linesBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } }, el('b', {}, w.word, w.pinyin ? el('small', {}, w.pinyin) : null), el('span', {}, w.meaning)))) : null;
 
-  box.replaceChildren(
+  // 没有的段落（比如没有“写诗的小故事”）是 null：replaceChildren 会把 null 当成文字“null”显示，先去掉。
+  box.replaceChildren(...[
     section('scene', '🎨', '诗里的画面', ex.scene, el('p', {}, ex.scene),
       // 有配图的课本诗，画在诗的上面；其他诗先留个位置。
       poemState.poem?.art?.length ? null : el('div', { class: 'picture', 'aria-hidden': 'true' }, '这里以后会有一幅画')),
@@ -534,7 +537,8 @@ function renderExplanation(box, ex, linesBox) {
     ex.feeling ? section('', '💭', '诗人想告诉我们', ex.feeling, el('p', {}, ex.feeling)) : null,
     ex.story ? section('', '📜', '写诗的小故事', ex.story, el('p', {}, ex.story)) : null,
     ex.poet ? section('', '👤', `认识${poem.author}`, ex.poet, el('p', {}, ex.poet),
-      el('p', { class: 'note' }, el('a', { href: `#/author/${encodeURIComponent(poem.author)}?d=${encodeURIComponent(poem.dynasty || '')}` }, `看看${poem.author}的其他诗 →`))) : null);
+      el('p', { class: 'note' }, el('a', { href: `#/author/${encodeURIComponent(poem.author)}?d=${encodeURIComponent(poem.dynasty || '')}` }, `看看${poem.author}的其他诗 →`))) : null
+  ].filter(Boolean));
 }
 
 route();
