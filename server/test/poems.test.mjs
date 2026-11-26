@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createGateway } from '../src/gateway.mjs';
-import { createPoems, loadSchoolPoems, loadLevelPoems, validateExplanation, validatePinyin, explainKey, explainBody, pinyinBody } from '../src/poems.mjs';
+import { createPoems, loadSchoolPoems, loadLevelPoems, validateExplanation, validatePinyin, explainKey, explainBody, pinyinBody, poemDigest } from '../src/poems.mjs';
 
 const token = 'device-test-token-not-a-secret-12345';
 const model = { apiUrl: 'https://model.test/chat/completions', apiKey: 'k', model: 'm', jsonMode: true };
@@ -53,7 +53,7 @@ const goodExplanation = lines => ({
   feeling: '想家。', story: '', poet: '唐朝诗人。'
 });
 
-async function setup(t, { replies = [], library = true, schoolList = school, levels = levelList, shippedFile = {}, tts = null } = {}) {
+async function setup(t, { replies = [], library = true, schoolList = school, levels = levelList, shippedFile = {}, artFile = {}, tts = null } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), 'poems-'));
   const webDir = join(dataDir, 'web');
   mkdirSync(webDir);
@@ -65,13 +65,15 @@ async function setup(t, { replies = [], library = true, schoolList = school, lev
   if (library) makeLibrary(join(dataDir, 'poems.db'));
   const explanationsPath = join(dataDir, 'explanations.json');
   writeFileSync(explanationsPath, JSON.stringify(typeof shippedFile === 'function' ? shippedFile(loadSchoolPoems(schoolPath)) : shippedFile));
+  const artPath = join(dataDir, 'art.json');
+  writeFileSync(artPath, JSON.stringify(typeof artFile === 'function' ? artFile(loadSchoolPoems(schoolPath)) : artFile));
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push(JSON.parse(init.body));
     const content = replies.shift();
     return new Response(JSON.stringify({ choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }] }));
   };
-  const poems = createPoems({ token, model, dataDir, schoolPath, levelsPath, explanationsPath, tts, webDir, fetchImpl });
+  const poems = createPoems({ token, model, dataDir, schoolPath, levelsPath, explanationsPath, artPath, tts, webDir, fetchImpl });
   const server = createGateway({ token, poems });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -344,4 +346,29 @@ test('pinyin split by clause instead of by line is put back on the lines', () =>
   assert.deepEqual(validatePinyin(JSON.stringify({ pinyin: clauses }), poem), [clauses[0].concat(clauses[1]), clauses[2].concat(clauses[3])]);
   // 总数不对就不硬分，对不上的行照旧不显示。
   assert.throws(() => validatePinyin(JSON.stringify({ pinyin: clauses.slice(0, 3) }), poem));
+});
+
+test('textbook poems come with their pictures, placed by sentence', async t => {
+  const svg = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><rect width="800" height="600"/></svg>';
+  const { base, get, dataDir } = await setup(t, { artFile: poems => ({
+    // 静夜思：四句四张，一行两张。
+    s1b01: { key: poemDigest(poems[0]), scenes: [0, 1, 2, 3].map(i => ({ lines: [i], caption: `第${i + 1}句`, v: 'abc12345' })) },
+    // 诗文改过（摘要对不上）的不用。
+    s2a01: { key: '0000000000000000', scenes: [{ lines: [0, 1, 2, 3], caption: '整首' }] }
+  }) });
+  mkdirSync(join(dataDir, 'web/art/s1b01'), { recursive: true });
+  writeFileSync(join(dataDir, 'web/art/s1b01/1.svg'), svg);
+
+  const { body } = await get('/v1/poems/poem/s1b01');
+  assert.deepEqual(body.art.map(a => [a.line, a.at]), [[0, 0], [0, 0.5], [1, 0], [1, 0.5]]);
+  assert.equal(body.art[0].src, '/poems/art/s1b01/1.svg?v=abc12345');
+  assert.equal(body.art[1].caption, '第2句');
+  assert.deepEqual((await get('/v1/poems/poem/s2a01')).body.art, []);
+  assert.deepEqual((await get('/v1/poems/poem/s2a02')).body.art, []);
+
+  const image = await fetch(`${base}${body.art[0].src}`);
+  assert.equal(image.headers.get('content-type'), 'image/svg+xml');
+  assert.match(image.headers.get('cache-control'), /max-age/);
+  assert.match(image.headers.get('content-security-policy'), /default-src 'none'/);
+  assert.equal(await image.text(), svg);
 });

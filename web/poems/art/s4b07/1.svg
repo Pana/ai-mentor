@@ -1,0 +1,59 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="古风工笔插画：众鸟高飞尽，孤云独去闲"><defs><linearGradient id="s4b07-1-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe0d6"/><stop offset="1" stop-color="#eef0dc"/></linearGradient><linearGradient id="s4b07-1-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa999"/><stop offset="1" stop-color="#2f7276"/></linearGradient><filter id="s4b07-1-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" seed="9"/><feColorMatrix type="matrix" values="0 0 0 0 0.5 0 0 0 0 0.42 0 0 0 0 0.28 .9 0 0 0 -.38"/></filter></defs>
+<rect width="800" height="600" fill="#efe3c6"/>
+<rect width="800" height="470" fill="url(#s4b07-1-sky)"/>
+<path d="M0 330 Q80 270 160 300 Q240 250 330 290 Q420 240 520 280 Q620 230 720 270 L800 260 L800 470 L0 470Z" fill="#a9c5b4"/>
+<g stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+<path d="M360 470 Q420 380 480 330 Q530 250 590 230 Q630 220 660 260 Q700 230 740 250 Q780 280 810 300 L810 470Z" fill="#7aa68f"/>
+<path d="M560 262 q-20 40 -50 70 M622 252 q-10 50 -40 90 M700 262 q0 40 -30 80 M760 290 q-6 40 -24 70" fill="none" stroke="#5c9a7c" stroke-width="2.4"/>
+</g>
+<g fill="#c0582f" opacity=".85"><circle cx="520" cy="330" r="8"/><circle cx="534" cy="338" r="6"/><circle cx="600" cy="300" r="7"/><circle cx="660" cy="330" r="8"/><circle cx="674" cy="322" r="5"/><circle cx="730" cy="310" r="7"/><circle cx="470" cy="400" r="7"/><circle cx="560" cy="400" r="8"/></g>
+<rect y="470" width="800" height="130" fill="url(#s4b07-1-water)"/>
+<path d="M0 470 H800" fill="none" stroke="#2a1f17" stroke-width="1.4"/>
+<path d="M330 452 q40 -10 80 0 t80 0 t80 0 t80 0 t80 0 t80 0 L810 470 L330 470Z" fill="#eef0dc" opacity=".6"/>
+<g fill="none" stroke="#e3f1ea" stroke-width="2.2" stroke-linecap="round" opacity=".75"><path d="M520 500 h60"/><path d="M640 530 h50"/><path d="M700 490 h40"/><path d="M560 570 h70"/></g>
+<g fill="none" stroke="#2a1f17" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M430 200 q9 -9 18 0 q9 -9 18 0"/><path d="M482 172 q7.5 -7.5 15 0 q7.5 -7.5 15 0"/><path d="M524 150 q6.5 -6.5 13 0 q6.5 -6.5 13 0" opacity=".9"/><path d="M572 124 q5.5 -5.5 11 0 q5.5 -5.5 11 0" opacity=".8"/><path d="M612 102 q4.5 -4.5 9 0 q4.5 -4.5 9 0" stroke-width="1.5" opacity=".65"/><path d="M652 84 q3.5 -3.5 7 0 q3.5 -3.5 7 0" stroke-width="1.3" opacity=".5"/><path d="M690 66 q3 -3 6 0 q3 -3 6 0" stroke-width="1.1" opacity=".35"/></g>
+<g stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M300 150 Q290 128 312 122 Q318 100 344 106 Q360 90 382 104 Q404 102 404 124 Q418 136 400 150Z" fill="#fbf8ef"/><path d="M330 140 q10 -12 22 -2 q6 8 -4 10 M368 120 q8 -8 16 0" fill="none" stroke-width="1.5"/></g>
+<path d="M414 128 h30 M412 140 h46 M420 116 h18" fill="none" stroke="#fbf8ef" stroke-width="2.4" stroke-linecap="round" opacity=".85"/>
+<g stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+<path d="M0 600 L0 450 Q160 420 320 470 Q420 500 470 600Z" fill="#c7b086"/>
+<path d="M0 458 Q160 428 312 476" fill="none" stroke="#7fa86a" stroke-width="8"/>
+<path d="M48 455 Q62 340 40 200 L56 200 Q78 330 70 455Z" fill="#552619"/>
+<path d="M56 290 Q100 258 150 244 M46 232 Q20 206 -4 196" fill="none" stroke="#552619" stroke-width="6"/>
+<circle cx="40" cy="190" r="26" fill="#c0582f"/><circle cx="72" cy="208" r="20" fill="#b9442f"/><circle cx="10" cy="206" r="20" fill="#c0582f"/><circle cx="120" cy="252" r="18" fill="#d8a443"/><circle cx="152" cy="238" r="22" fill="#c0582f"/>
+</g>
+<g fill="#c0582f" stroke="#2a1f17" stroke-width="1"><ellipse cx="236" cy="316" rx="5" ry="2.6" transform="rotate(30 236 316)"/><ellipse cx="270" cy="356" rx="5" ry="2.6" transform="rotate(-20 270 356)"/><ellipse cx="200" cy="300" rx="4.5" ry="2.4" transform="rotate(60 200 300)" fill="#d8a443"/></g>
+<g fill="none" stroke="#7fa86a" stroke-width="2.4" stroke-linecap="round"><path d="M60 520 q-4 -16 -10 -22 M60 520 q2 -18 0 -26 M60 520 q5 -14 12 -20"/><path d="M360 560 q-4 -16 -10 -22 M360 560 q2 -18 0 -26 M360 560 q5 -14 12 -20"/><path d="M200 580 q-4 -16 -10 -22 M200 580 q2 -18 0 -26 M200 580 q5 -14 12 -20"/></g>
+<g stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+<path d="M110 500 Q100 450 140 432 Q190 420 250 428 Q282 440 284 470 Q286 500 270 506Z" fill="#a99a7a"/>
+<path d="M150 450 q20 10 14 34 M240 446 q-8 20 6 40" fill="none" stroke="#7d6e55" stroke-width="1.6"/>
+<path d="M130 440 q16 -8 30 -6" fill="none" stroke="#7aa68f" stroke-width="5"/>
+</g>
+<g transform="translate(190 430) scale(1.35)" stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+<path d="M-20 -112 Q-32 -60 -28 0 L28 0 Q28 -60 18 -112Z" fill="#2f7276"/>
+<path d="M-28 -4 Q10 -34 70 -30 Q88 -26 86 -8 L90 40 L60 40 L58 6 Q14 12 -28 8Z" fill="#2f7276"/>
+<path d="M60 32 L89.5 32 L90 40 L60 40Z" fill="#1d4a4d"/>
+<path d="M0 -14 Q30 -24 62 -22 M72 0 L75 28" fill="none" stroke="#245b5f" stroke-width="1.4"/>
+<ellipse cx="84" cy="42" rx="14" ry="5" fill="#1d1a18"/>
+<rect x="-3" y="-124" width="10" height="14" fill="#f3dcc2"/>
+<path d="M-8 -112 L12 -80" fill="none" stroke="#f4ecd8" stroke-width="5"/><path d="M12 -112 L4 -98" fill="none" stroke="#f4ecd8" stroke-width="4.4"/>
+<rect x="-27" y="-64" width="52" height="8" fill="#b9442f"/>
+<path d="M14 -56 L18 -34 M8 -56 L10 -40" fill="none" stroke="#b9442f" stroke-width="3.5"/>
+<ellipse cx="60" cy="-32" rx="6" ry="4.6" fill="#f3dcc2"/>
+<path d="M14 -106 Q20 -86 16 -68 Q30 -46 50 -42 L54 -24 Q24 -4 -4 -14 Q-18 -34 -14 -70 Q-12 -98 14 -106Z" fill="#2f7276"/>
+<path d="M50 -42 L54 -24" fill="none" stroke="#1d4a4d" stroke-width="3.4"/>
+<path d="M2 -80 Q4 -50 20 -30" fill="none" stroke="#245b5f" stroke-width="1.3"/>
+<g transform="translate(2 -132) scale(-1 1) rotate(18)">
+<path d="M13.3 -5.7 C26.6 -1.9 27.55 11.4 35.15 19.95" fill="none" stroke="#1d1a18" stroke-width="3.2"/><path d="M11.78 -2.28 C21.85 1.9 20.9 14.25 26.6 22.8" fill="none" stroke="#1d1a18" stroke-width="2.85"/>
+<circle cx="2.28" cy="-19.38" r="7.6" fill="#1d1a18"/><circle r="19" fill="#f3dcc2"/><circle cx="4.56" cy="1.9" r="3.23" fill="#f3dcc2"/>
+<path d="M-19.76 -0.38 A19.76 19.76 0 0 1 19.38 1.9 L18.62 6.08 Q11.78 0.95 5.7 -3.42 Q-5.7 -5.7 -19.76 -0.38Z" fill="#1d1a18"/>
+<path d="M-14.44 -2.85 Q-10.45 -4.56 -6.08 -3.61" fill="none" stroke-width="1.6"/>
+<ellipse cx="-9.88" cy="1.52" rx="2.28" ry="1.43" fill="#2a1f17" stroke="none"/>
+<path d="M-18.24 0.38 Q-20.9 4.94 -21.28 6.46 Q-19.38 7.6 -17.67 7.6" fill="none" stroke-width="1.5"/>
+<path d="M-18.62 10.26 q4.18 -1.9 9.12 0.38 M-16.34 12.54 q2.28 0.76 4.56 0" fill="none" stroke="#1d1a18" stroke-width="1.4"/>
+<path d="M-15.2 14.82 Q-14.82 26.22 -8.74 28.5 Q-10.26 20.52 -6.08 16.34Z" fill="#1d1a18" stroke="none"/>
+</g></g>
+<rect width="800" height="600" filter="url(#s4b07-1-grain)" opacity=".4"/>
+<rect x="12" y="12" width="776" height="576" fill="none" stroke="#7b3b2a" stroke-width="3"/><rect x="20" y="20" width="760" height="560" fill="none" stroke="#7b3b2a" stroke-width="1"/>
+<rect x="4" y="4" width="16" height="16" fill="#7b3b2a"/><rect x="8" y="8" width="8" height="8" fill="none" stroke="#efe3c6" stroke-width="1.4"/><rect x="780" y="4" width="16" height="16" fill="#7b3b2a"/><rect x="784" y="8" width="8" height="8" fill="none" stroke="#efe3c6" stroke-width="1.4"/><rect x="4" y="580" width="16" height="16" fill="#7b3b2a"/><rect x="8" y="584" width="8" height="8" fill="none" stroke="#efe3c6" stroke-width="1.4"/><rect x="780" y="580" width="16" height="16" fill="#7b3b2a"/><rect x="784" y="584" width="8" height="8" fill="none" stroke="#efe3c6" stroke-width="1.4"/>
+<g transform="translate(732 514) rotate(-3)"><rect width="40" height="44" rx="3" fill="#b3372b" opacity=".92"/><text x="20" y="19" text-anchor="middle" font-size="16" font-family="STKaiti, KaiTi, 'Kaiti SC', serif" fill="#f7ead8">李</text><text x="20" y="37" text-anchor="middle" font-size="16" font-family="STKaiti, KaiTi, 'Kaiti SC', serif" fill="#f7ead8">白</text></g>
+</svg>

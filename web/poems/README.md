@@ -57,9 +57,9 @@ node --env-file=server/.env scripts/poems/pregenerate.mjs --redo s1a01     # 重
 
 结果写进 `server/src/poems-explanations.json`（`{id: {key, title, author, explanation}}`），按课本、考级的顺序排。可以直接改这个文件来修正讲解或拼音，改完提交就行；`key` 别动，它和诗文对不上时（诗文改了）这条就不用了，重新跑一次脚本。服务端先用这个文件，没有才查数据库、问模型。
 
-“诗里的画面”下面留了插图的位置，现在显示“这里以后会有一幅画”。
+“诗里的画面”下面留了插图的位置：有配图的课本诗配图放在诗的上面（见下），没有配图的诗这里显示“这里以后会有一幅画”。
 
-## 配图（批量生成，还没接到页面）
+## 配图
 
 画法定为古风工笔：张数按诗的意思定（一个独立的画面一张），一句或几句一张，SVG。画法说明和定稿样张（《静夜思》《咏鹅》各四张）在 `scripts/poems/art-style/`。其余课本古诗用 Claude 照着样张画：
 
@@ -71,10 +71,20 @@ node --env-file=server/.env scripts/poems/illustrate.mjs               # 全部�
 ```
 
 - 需要 `ANTHROPIC_API_KEY`（加在 `server/.env` 里），默认用 `claude-opus-5-5`。
-- 结果在 `server/data/poem-art/`（不进 git）：每首诗一个目录，`1.svg`… 加上 PNG 预览和 `meta.json`（分镜、用的模型、花了多少 token）。打开 `server/data/poem-art/index.html` 就能翻看全部。
+- 结果先在 `server/data/poem-art/`（不进 git）：每首诗一个目录，`1.svg`… 和 `meta.json`（分镜、用的模型、花了多少 token）；`--png` 另外导出 PNG 预览。打开 `server/data/poem-art/index.html` 就能翻看全部。
 - 画过、诗文也没变的诗会跳过，失败的再跑一次会接着画；`--redo id` 重画某一首。
 - 每张都检查：只能是 800×600 的纯 SVG，没有脚本、外部链接和图片；装了 `rsvg-convert`（`brew install librsvg`）还会实际渲染一遍。不合格的那张单独重画。
 - 画法要调整时改 `art-style/guide.md` 或换样张，再 `--redo` 重画。
+
+看过满意了，发布到仓库，随代码一起部署：
+
+```sh
+node scripts/poems/publish-art.mjs
+```
+
+- SVG 拷到 `web/poems/art/<id>/<n>.svg`（全部约 3.6 MB，一首几十 KB），配图清单写到 `server/src/poems-art.json`：每张图对应哪几句（按标点分的句子）和图的摘要。只发布诗文没改过的；`web/poems/art/` 每次整个重写。
+- 打开课本诗时接口带上 `art`：每张图的网址（带 `?v=摘要`，可以长缓存）、诗句、从第几行的哪里开始。页面把图放在诗的上面（iPad 横屏和电脑上在左边），左右滑动；点一个字翻到画那一句的图，读诗时读到哪句翻到哪张（一行两句两张图时，按这一行读到一半换）。
+- 重画几张后再发布一次，只有那几张和清单里的那几行会变。别反复整批重画再提交，旧版本会一直留在 git 历史里。
 
 ## 已知限制
 

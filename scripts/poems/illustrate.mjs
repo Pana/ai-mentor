@@ -1,5 +1,6 @@
 /**
- * 批量给课本古诗画配图（古风工笔，SVG），用 Claude 画。结果放在单独的目录，不进 git，之后再定怎么接到页面。
+ * 批量给课本古诗画配图（古风工笔，SVG），用 Claude 画。结果先放在单独的目录（不进 git）看一遍，满意了再用 publish-art.mjs
+ * 把 SVG 和配图清单放进仓库（web/poems/art/、server/src/poems-art.json）。
  *
  *   cd scripts/poems && npm install && cd ../..                              # 第一次：装 Claude 的 SDK
  *   node --env-file=server/.env scripts/poems/illustrate.mjs --dry-run       # 看要画哪些、大概花多少钱，不调用模型
@@ -12,21 +13,21 @@
  *   --out 目录        默认 server/data/poem-art（已在 .gitignore 里）
  *   --concurrency N  同时画几首，默认 2     --effort low|medium|high   默认 medium
  *   --model 模型      默认 claude-opus-5-5
+ *   --png            另外导出 800×600 的 PNG 预览（默认不导出，SVG 浏览器直接能看）
  *
  * 需要 ANTHROPIC_API_KEY（放在 server/.env 里，用 --env-file 读）。
  *
  * 每首诗一次请求：模型先按诗意给出分镜（几张由诗的内容定，每张对应哪几句、人物什么样），再一次画完所有 SVG，这样同一首诗里人物前后一致。
  * 画法说明和定稿样张（art-style/）放在系统提示里并开缓存，每首诗都一样，只在第一次计全价。
- * 每张图检查：只能是 800×600 的纯 SVG，没有脚本、外链、外部图片；装了 rsvg-convert 的话实际渲染一遍并导出 PNG 预览。
- * 不合格的那一张单独重画。结果：<out>/<诗id>/<n>.svg（id 加了前缀，放进同一页面不会重名）、<n>.png、meta.json，
+ * 每张图检查：只能是 800×600 的纯 SVG，没有脚本、外链、外部图片；装了 rsvg-convert 的话实际渲染一遍。
+ * 不合格的那一张单独重画。结果：<out>/<诗id>/<n>.svg（id 加了前缀，放进同一页面不会重名）、meta.json，
  * 以及 <out>/index.html（所有画好的诗，浏览器直接打开看）。
  */
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadLevelPoems, loadSchoolPoems } from '../../server/src/poems.mjs';
+import { loadLevelPoems, loadSchoolPoems, poemDigest as textKey, poemSentences as sentences } from '../../server/src/poems.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = join(here, '../..');
@@ -38,14 +39,14 @@ const option = (name, fallback) => { const i = args.indexOf(`--${name}`); return
 const list = name => new Set((option(name, '') || '').split(',').map(s => s.trim()).filter(Boolean));
 const config = {
   out: option('out', join(repo, 'server/data/poem-art')),
-  only: list('only'), redo: list('redo'), levels: flag('levels'), dryRun: flag('dry-run'),
+  only: list('only'), redo: list('redo'), levels: flag('levels'), dryRun: flag('dry-run'), png: flag('png'),
   concurrency: Math.max(1, Math.min(6, Number(option('concurrency', 2)) || 2)),
   effort: ['low', 'medium', 'high', 'xhigh', 'max'].includes(option('effort', 'medium')) ? option('effort', 'medium') : 'medium',
   model: option('model', 'claude-opus-5-5')
 };
 
-// Claude Opus 5.5 的价格（美元 / 百万 token）。缓存写入用的是 1 小时缓存（2 倍输入价）。别的模型只报 token 数。
-const PRICES = { 'claude-opus-5-5': { input: 4, output: 20, cacheRead: .2, cacheWrite: 8 } };
+// Claude Opus 5.5 的价格（美元 / 百万 token）。缓存是 5 分钟的（写入 1.25 倍输入价），批量跑时一直在读，不会过期。别的模型只报 token 数。
+const PRICES = { 'claude-opus-5-5': { input: 4, output: 20, cacheRead: .2, cacheWrite: 5 } };
 
 // ---------- 画法说明和样张 ----------
 const styleDir = join(here, 'art-style');
@@ -72,7 +73,7 @@ lines 是句子在输入 sentences 数组里的下标（从 0 开始）。每张
 const system = [
   { type: 'text', text: instructions },
   { type: 'text', text: `《画法说明》\n\n${guide}` },
-  { type: 'text', text: `定稿样张（两首诗各四张，SVG 原文）：\n\n${exampleText}`, cache_control: { type: 'ephemeral', ttl: '1h' } }
+  { type: 'text', text: `定稿样张（两首诗各四张，SVG 原文）：\n\n${exampleText}`, cache_control: { type: 'ephemeral' } }
 ];
 
 // ---------- 诗 ----------
@@ -80,9 +81,6 @@ const school = loadSchoolPoems();
 let poems = school.map(p => ({ ...p, where: `${p.school.grade}年级${p.school.term}册` }));
 if (config.levels) poems.push(...loadLevelPoems(undefined, school).own.map(p => ({ ...p, where: `古诗考级${p.level}级` })));
 if (config.only.size) poems = poems.filter(p => config.only.has(p.id));
-/** 按标点分句：课本一行常是两句（“春眠不觉晓，处处闻啼鸟。”），分图按句来。 */
-const sentences = poem => poem.lines.flatMap(line => line.match(/[^，。？！；]+[，。？！；]*/g) ?? [line]);
-const textKey = p => createHash('sha256').update(JSON.stringify([p.title, p.author, p.lines])).digest('hex').slice(0, 16);
 
 // ---------- SVG 检查和整理 ----------
 const hasRsvg = spawnSync('rsvg-convert', ['--version']).status === 0;
@@ -145,13 +143,16 @@ function checkPlan(plan, poem) {
 // ---------- 调用 Claude ----------
 let client = null;
 let Anthropic = null;
-const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, requests: 0 };
-function addUsage(usage) {
-  totals.requests++;
-  totals.input += usage?.input_tokens ?? 0;
-  totals.output += usage?.output_tokens ?? 0;
-  totals.cacheRead += usage?.cache_read_input_tokens ?? 0;
-  totals.cacheWrite += usage?.cache_creation_input_tokens ?? 0;
+const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, requests: 0 });
+const totals = emptyUsage();
+function addUsage(into, usage) {
+  for (const t of [totals, into]) {
+    t.requests++;
+    t.input += usage?.input_tokens ?? 0;
+    t.output += usage?.output_tokens ?? 0;
+    t.cacheRead += usage?.cache_read_input_tokens ?? 0;
+    t.cacheWrite += usage?.cache_creation_input_tokens ?? 0;
+  }
 }
 function cost(t = totals) {
   const price = PRICES[config.model];
@@ -159,7 +160,7 @@ function cost(t = totals) {
   return (t.input * price.input + t.output * price.output + t.cacheRead * price.cacheRead + t.cacheWrite * price.cacheWrite) / 1e6;
 }
 
-async function ask(userText) {
+async function ask(userText, usage) {
   // 流式：一次画三四张 SVG 输出很长，不流式会超时。fallbacks：被安全分类器拒绝时服务端自动换模型重来一次。
   const message = await client.beta.messages.stream({
     model: config.model,
@@ -171,7 +172,7 @@ async function ask(userText) {
     system,
     messages: [{ role: 'user', content: userText }]
   }).finalMessage();
-  addUsage(message.usage);
+  addUsage(usage, message.usage);
   if (message.stop_reason === 'refusal') throw new Error(`模型拒绝了（${message.stop_details?.category ?? '没有说明'}）`);
   if (message.stop_reason === 'max_tokens') throw new Error('输出太长，被截断了');
   const text = message.content.filter(b => b.type === 'text').map(b => b.text).join('');
@@ -182,9 +183,10 @@ const poemInput = poem => JSON.stringify({ title: poem.title, author: poem.autho
 
 /** 画一首诗：整首画一次；分镜不对就整首重画（最多两次）；单张不合格就单独重画那一张（最多两次）。 */
 async function illustrate(poem) {
+  const usage = emptyUsage();
   let plan = null, scenes = null, model = config.model;
   for (let attempt = 1; attempt <= 2 && !plan; attempt++) {
-    const reply = await ask(`请给这首诗画配图：${poemInput(poem)}`);
+    const reply = await ask(`请给这首诗画配图：${poemInput(poem)}`, usage);
     const parsed = parseReply(reply.text);
     const problem = checkPlan(parsed.plan, poem);
     if (problem) { log(poem, `分镜不对（${problem}），${attempt < 2 ? '重画' : '放弃'}`); continue; }
@@ -207,7 +209,7 @@ async function illustrate(poem) {
       const reply = await ask(`请重画这首诗的第 ${n} 张：${poemInput(poem)}
 上次的问题：${last.join('；')}。
 分镜：${JSON.stringify(plan)}
-${reference ? `下面是同一首诗已经画好的第 ${reference[0]} 张，人物和配色要和它一致：\n${reference[1]}\n` : ''}只输出 <scene n="${n}"><svg …>…</svg></scene>，不要输出别的。`);
+${reference ? `下面是同一首诗已经画好的第 ${reference[0]} 张，人物和配色要和它一致：\n${reference[1]}\n` : ''}只输出 <scene n="${n}"><svg …>…</svg></scene>，不要输出别的。`, usage);
       const svg = parseReply(reply.text).scenes.get(n);
       last = svg ? checkSvg(svg) : ['没有画出来'];
       if (!last.length) fixed = svg;
@@ -215,7 +217,7 @@ ${reference ? `下面是同一首诗已经画好的第 ${reference[0]} 张，人
     if (!fixed) throw new Error(`第 ${n} 张重画两次还是不合格（${last.join('；')}）`);
     done.set(n, fixed);
   }
-  return { plan, svgs: plan.scenes.map(s => done.get(s.n)), model };
+  return { plan, svgs: plan.scenes.map(s => done.get(s.n)), model, usage };
 }
 
 // ---------- 保存 ----------
@@ -228,7 +230,7 @@ function save(poem, { plan, svgs, model, source, usage }) {
   svgs.forEach((svg, i) => {
     const file = join(temp, `${i + 1}.svg`);
     writeFileSync(file, `${prefixIds(svg, `${poem.id}-${i + 1}`)}\n`);
-    if (hasRsvg && spawnSync('rsvg-convert', ['-w', '800', file, '-o', join(temp, `${i + 1}.png`)]).status !== 0) warnings.push(`第 ${i + 1} 张导出 PNG 失败`);
+    if (config.png && hasRsvg && spawnSync('rsvg-convert', ['-w', '800', file, '-o', join(temp, `${i + 1}.png`)]).status !== 0) warnings.push(`第 ${i + 1} 张导出 PNG 失败`);
     if (!svg.includes('#b3372b')) warnings.push(`第 ${i + 1} 张好像没有印章`);
     if (!svg.includes('#7b3b2a')) warnings.push(`第 ${i + 1} 张好像没有边框`);
   });
@@ -283,19 +285,25 @@ export { checkPlan, checkSvg, parseReply, prefixIds, sentences };
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
 
 async function main() {
+// Node 自带的 fetch 默认不走 HTTP(S)_PROXY。在国内直连 Claude 会被 403（地区不支持），所以有代理时带上开关重新跑自己。
+const proxied = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy'].some(k => process.env[k]);
+if (proxied && !process.env.NODE_USE_ENV_PROXY && !config.dryRun) {
+  const child = spawnSync(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, NODE_USE_ENV_PROXY: '1' } });
+  process.exit(child.status ?? 1);
+}
 mkdirSync(config.out, { recursive: true });
 seedExamples();
 const todo = poems.filter(p => config.redo.has(p.id) || !isDone(p));
 const systemChars = system.reduce((n, b) => n + b.text.length, 0);
 console.log(`共 ${poems.length} 首，要画 ${todo.length} 首；输出到 ${config.out}`);
-console.log(`模型 ${config.model}，effort ${config.effort}，同时 ${config.concurrency} 首；${hasRsvg ? '会用 rsvg-convert 检查并导出 PNG' : '没有 rsvg-convert：只做文本检查，不导出 PNG（brew install librsvg）'}`);
+console.log(`模型 ${config.model}，effort ${config.effort}，同时 ${config.concurrency} 首；${hasRsvg ? '会用 rsvg-convert 检查' + (config.png ? '并导出 PNG' : '') : '没有 rsvg-convert：只做文本检查（brew install librsvg）'}`);
 
 if (config.dryRun) {
-  // 粗估：系统提示按 2.5 个字符一个 token；每首诗输出（含思考）按 4.5 万 token 估（按 3 张左右）。实际以运行后的统计为准。
+  // 粗估：系统提示按 2.5 个字符一个 token；每首诗输出（含思考）按 2.5 万 token 估（试画两首是 2.1 万和 2.7 万）。实际以运行后的统计为准。
   const systemTokens = Math.round(systemChars / 2.5);
-  const estimate = { input: todo.length * 400, output: todo.length * 45_000, cacheRead: todo.length * systemTokens, cacheWrite: systemTokens * 2 };
+  const estimate = { input: todo.length * 400, output: todo.length * 25_000, cacheRead: todo.length * systemTokens, cacheWrite: systemTokens };
   const money = cost(estimate);
-  console.log(`系统提示约 ${systemTokens.toLocaleString()} token（缓存）。粗估输出 ${(estimate.output / 1e6).toFixed(1)}M token${money != null ? `，约 $${money.toFixed(0)}` : ''}（按每首 4.5 万 token 估，实际可能差一倍）。`);
+  console.log(`系统提示约 ${systemTokens.toLocaleString()} token（缓存）。粗估输出 ${(estimate.output / 1e6).toFixed(1)}M token${money != null ? `，约 $${money.toFixed(0)}` : ''}（按每首 2.5 万 token 估）。`);
   for (const p of todo) console.log(`  ${p.id} ${p.title}（${p.author}，${sentences(p).length} 句）`);
   writeIndex();
   return;
@@ -314,26 +322,30 @@ try { client = new Anthropic({ maxRetries: 4 }); } catch (error) {
 const failures = [];
 let finished = 0, stop = false;
 const queue = [...todo];
-async function worker() {
+async function worker(once = false) {
   while (queue.length && !stop) {
     const poem = queue.shift();
-    const before = { ...totals };
     try {
       const result = await illustrate(poem);
-      const usage = Object.fromEntries(Object.keys(totals).map(k => [k, totals[k] - before[k]]));
-      const meta = save(poem, { ...result, source: 'claude', usage });
-      const spent = cost(usage);
+      const meta = save(poem, { ...result, source: 'claude' });
+      const spent = cost(result.usage);
       log(poem, `画好了 ${meta.images} 张（${++finished}/${todo.length}）${spent != null ? `，约 $${spent.toFixed(2)}` : ''}${meta.warnings.length ? `；注意：${meta.warnings.join('；')}` : ''}`);
     } catch (error) {
       if (Anthropic && error instanceof Anthropic.AuthenticationError) { stop = true; console.error('API key 不对，停下。'); }
-      else if (Anthropic && error instanceof Anthropic.PermissionDeniedError) { stop = true; console.error(`没有权限：${error.message}`); }
+      else if (Anthropic && error instanceof Anthropic.PermissionDeniedError) {
+        stop = true;
+        console.error(`没有权限：${error.message}\n“Request not allowed” 多半是网络所在地区不支持：要通过代理访问（设置 HTTPS_PROXY，脚本会自动让 Node 走代理）。`);
+      }
       failures.push(`${poem.id} ${poem.title}：${error.message}`);
       log(poem, `没画成：${error.message}`);
     }
     writeIndex();
+    if (once) return;
   }
 }
-await Promise.all(Array.from({ length: config.concurrency }, worker));
+// 先单独画一首，把样张那部分的缓存建好；几首同时开始的话每个请求都会各写一次缓存。
+await worker(true);
+await Promise.all(Array.from({ length: config.concurrency }, () => worker()));
 writeIndex();
 const money = cost();
 console.log(`\n画好 ${finished} 首，失败 ${failures.length} 首。请求 ${totals.requests} 次；输入 ${totals.input} + 缓存读 ${totals.cacheRead} + 缓存写 ${totals.cacheWrite}，输出 ${totals.output} token${money != null ? `，约 $${money.toFixed(2)}` : ''}。`);
