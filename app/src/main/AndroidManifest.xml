@@ -8,7 +8,12 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Saving a video homework to the gallery (for the DingTalk check-in). Android 10+ uses MediaStore and needs no permission. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- The USB desk camera is shown inside the app (Camera2), which needs CAMERA. Declaring it also means the system
+         camera app may only be opened once it is granted, so every capture intent asks first (rememberCameraGate). -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.external" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <queries>
         <intent><action android:name="android.speech.RecognitionService" /></intent>

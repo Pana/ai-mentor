@@ -505,6 +505,7 @@ suspend fun HomeworkStore.saveDrafts(drafts: List<DraftItem>, images: List<Prepa
         cameraFile?.let { path -> val file = java.io.File(path); if (ok) scope.launch { Photos.prepare(context, Uri.fromFile(file))?.let { form.addImage(it) }; file.delete() } else file.delete() }
         cameraFile = null
     }
+    val cameraGate = rememberCameraGate { store.reportError("没有相机权限，请从相册选择。") }
     Column(Modifier.fillMaxSize()) {
         PageHeader("录入作业")
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = 640.dp),
@@ -547,8 +548,10 @@ suspend fun HomeworkStore.saveDrafts(drafts: List<DraftItem>, images: List<Prepa
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton({ gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = form.images.size < 6) { Text("从相册选图片") }
                     OutlinedButton({
-                        val file = Photos.captureFile(context); cameraFile = file.absolutePath
-                        try { camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", file)) } catch (_: Exception) { store.reportError("无法打开相机，请从相册选择。") }
+                        cameraGate {
+                            val file = Photos.captureFile(context); cameraFile = file.absolutePath
+                            try { camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", file)) } catch (_: Exception) { store.reportError("无法打开相机，请从相册选择。") }
+                        }
                     }, enabled = form.images.size < 6) { Text("拍作业单") }
                 }
             }

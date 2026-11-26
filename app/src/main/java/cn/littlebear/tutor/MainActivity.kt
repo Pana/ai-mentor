@@ -511,6 +511,7 @@ enum class Page { ENTRY, HOME, TASKS, PRACTICE, KNOWLEDGE, STUDY, PARENT }
         if (success) cameraURI?.let { importImage(Uri.parse(it)) }
         else File(context.cacheDir, "capture/capture.jpg").delete()
     }
+    val cameraGate = cn.littlebear.tutor.homework.rememberCameraGate { store.reportError("没有相机权限，请尝试从相册选择图片。") }
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.widthIn(max = 680.dp), title = { Text("为${child.name}添加作业") }, text = {
         Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Subject.entries.forEach { s -> FilterChip(subject == s, { subject = s }, label = { Text(s.label) }) } }
@@ -522,11 +523,13 @@ enum class Page { ENTRY, HOME, TASKS, PRACTICE, KNOWLEDGE, STUDY, PARENT }
                     catch (e: Exception) { onExternalActivity(false); store.reportError("没有可用的图片选择应用。") }
                 }) { Text("从相册选图") }
                 OutlinedButton(enabled = !importing, onClick = {
-                    try {
-                        val dir = File(context.cacheDir, "capture").apply { mkdirs() }
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", File(dir, "capture.jpg"))
-                        cameraURI = uri.toString(); onExternalActivity(true); camera.launch(uri)
-                    } catch (e: Exception) { onExternalActivity(false); store.reportError("无法打开系统相机，请尝试从相册选择图片。") }
+                    cameraGate {
+                        try {
+                            val dir = File(context.cacheDir, "capture").apply { mkdirs() }
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", File(dir, "capture.jpg"))
+                            cameraURI = uri.toString(); onExternalActivity(true); camera.launch(uri)
+                        } catch (e: Exception) { onExternalActivity(false); store.reportError("无法打开系统相机，请尝试从相册选择图片。") }
+                    }
                 }) { Text("拍照") }
             }
             if (photo != null) {

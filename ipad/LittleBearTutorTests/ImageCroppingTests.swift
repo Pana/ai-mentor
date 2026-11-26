@@ -48,6 +48,39 @@ final class ImageCroppingTests: XCTestCase {
         XCTAssertEqual(top.imageOrientation, .up)
     }
 
+    func testExternalCameraPhotoTurnsClockwise() throws {
+        // Left half red, right half blue: a quarter turn clockwise puts red on top.
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 200), format: format).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+            UIColor.blue.setFill(); context.fill(CGRect(x: 200, y: 0, width: 200, height: 200))
+        }
+        let turned = ImageCropper.rotated(image, clockwise: 90)
+        XCTAssertEqual(turned.size, CGSize(width: 200, height: 400))
+        let top = try XCTUnwrap(ImageCropper.crop(turned, to: CGRect(x: 0, y: 0, width: 1, height: 0.5)))
+        XCTAssertGreaterThan(try redness(top), 0.9)
+        XCTAssertEqual(ImageCropper.rotated(image, clockwise: 180).size, image.size)
+        XCTAssertEqual(ImageCropper.rotated(image, clockwise: 0).size, image.size)
+    }
+
+    func testExternalCameraRotationStaysAQuarterTurn() {
+        XCTAssertEqual(ExternalCamera.normalized(0), 0)
+        XCTAssertEqual(ExternalCamera.normalized(90), 90)
+        XCTAssertEqual(ExternalCamera.normalized(360), 0)
+        XCTAssertEqual(ExternalCamera.normalized(450), 90)
+        XCTAssertEqual(ExternalCamera.normalized(-90), 270)
+    }
+
+    /// Share of red in the image's average colour.
+    private func redness(_ image: UIImage) throws -> Double {
+        let cg = try XCTUnwrap(image.cgImage)
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = try XCTUnwrap(CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return Double(pixel[0]) / Double(max(1, Int(pixel[0]) + Int(pixel[2])))
+    }
+
     private func solid(_ size: CGSize) -> UIImage {
         let format = UIGraphicsImageRendererFormat(); format.scale = 1
         return UIGraphicsImageRenderer(size: size, format: format).image { context in

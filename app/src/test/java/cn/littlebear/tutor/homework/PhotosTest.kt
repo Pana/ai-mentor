@@ -137,4 +137,45 @@ class PhotosTest {
         assertEquals(1400 to 1050, Photos.fit(4000, 3000, Photos.PAGE_SIDE))
         assertEquals(800 to 600, Photos.fit(800, 600, Photos.PAGE_SIDE))
     }
+
+    /** The USB desk camera's JPEGs have no orientation; the child's chosen turn is applied when the page is made. */
+    @Test fun aDeskCameraPhotoIsTurnedClockwise() {
+        // Left half red, right half blue: a quarter turn clockwise puts red on top.
+        val bitmap = Bitmap.createBitmap(1600, 900, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).apply {
+            drawRect(0f, 0f, 800f, 900f, Paint().apply { color = android.graphics.Color.RED })
+            drawRect(800f, 0f, 1600f, 900f, Paint().apply { color = android.graphics.Color.BLUE })
+        }
+        val jpeg = java.io.ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) }.toByteArray()
+        val photo = Photos.prepare(90) { jpeg.inputStream() }!!
+        val page = BitmapFactory.decodeByteArray(photo.data, 0, photo.data.size)
+        assertEquals(788, page.width); assertEquals(1400, page.height)
+        val top = page.getPixel(page.width / 2, page.height / 4)
+        assertTrue("top should be red, was ${Integer.toHexString(top)}", android.graphics.Color.red(top) > 200 && android.graphics.Color.blue(top) < 60)
+        assertEquals(1400, bounds(Photos.prepare(0) { jpeg.inputStream() }!!.data).outWidth)
+    }
+
+    @Test fun deskCameraRotationAndSize() {
+        assertEquals(listOf(0, 90, 0, 90, 270), listOf(0, 90, 360, 450, -90).map(DeskCameras::normalized))
+        val s = { w: Int, h: Int -> android.util.Size(w, h) }
+        // Prefers the largest size both streams share, up to about 1080p.
+        assertEquals(s(1920, 1080), DeskCameras.chooseSize(listOf(s(3840, 2160), s(1920, 1080), s(1280, 720)), listOf(s(3840, 2160), s(1920, 1080), s(640, 480))))
+        assertEquals(s(1280, 720), DeskCameras.chooseSize(listOf(s(1920, 1080), s(1280, 720)), listOf(s(1280, 720))))
+        assertEquals(s(2592, 1944), DeskCameras.chooseSize(listOf(s(2592, 1944)), listOf(s(2592, 1944))))
+        assertEquals(null, DeskCameras.chooseSize(emptyList(), emptyList()))
+    }
+
+    @Test fun deskCameraPreviewFitsTurnedPicture() {
+        // A 1920×1080 picture turned a quarter in a 1000×1000 view: 562.5 wide, 1000 tall, centred.
+        val m = DeskCameras.previewTransform(1000f, 1000f, android.util.Size(1920, 1080), 90)
+        val corners = floatArrayOf(0f, 0f, 1000f, 0f, 0f, 1000f, 1000f, 1000f).also { m.mapPoints(it) }
+        val xs = corners.filterIndexed { i, _ -> i % 2 == 0 }; val ys = corners.filterIndexed { i, _ -> i % 2 == 1 }
+        assertEquals(562.5f, xs.max() - xs.min(), 0.5f)
+        assertEquals(1000f, ys.max() - ys.min(), 0.5f)
+        assertEquals(500f, (xs.max() + xs.min()) / 2, 0.5f)
+        // Unturned in a wide view: full width, letterboxed height.
+        val flat = DeskCameras.previewTransform(1600f, 1000f, android.util.Size(1920, 1080), 0)
+        val c2 = floatArrayOf(0f, 0f, 1600f, 1000f).also { flat.mapPoints(it) }
+        assertEquals(1600f, c2[2] - c2[0], 0.5f); assertEquals(900f, c2[3] - c2[1], 0.5f)
+    }
 }

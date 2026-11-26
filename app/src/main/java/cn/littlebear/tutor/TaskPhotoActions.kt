@@ -46,14 +46,17 @@ import java.io.File
             else { file.delete(); cameraName = null }
         }
     }
+    val cameraGate = cn.littlebear.tutor.homework.rememberCameraGate { store.reportError("没有相机权限，请从相册选择图片。") }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(enabled = enabled && !importing, onClick = {
-            try {
-                val dir = File(context.cacheDir, "capture").apply { mkdirs() }
-                val name = "${newID()}.jpg"
-                cameraName = name
-                camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", File(dir, name)))
-            } catch (_: Exception) { store.reportError("无法打开相机，请从相册选择图片。") }
+            cameraGate {
+                try {
+                    val dir = File(context.cacheDir, "capture").apply { mkdirs() }
+                    val name = "${newID()}.jpg"
+                    cameraName = name
+                    camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", File(dir, name)))
+                } catch (_: Exception) { store.reportError("无法打开相机，请从相册选择图片。") }
+            }
         }) { Text("拍摄当前题目") }
         OutlinedButton(enabled = enabled && !importing, onClick = {
             try { picker.launch("image/*") } catch (_: Exception) { store.reportError("没有可用的相册应用。") }
