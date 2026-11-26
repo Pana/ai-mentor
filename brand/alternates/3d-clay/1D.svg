@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 400 400"><defs>
+<radialGradient id="fur" cx=".36" cy=".26" r=".88"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#f6e9d8"/><stop offset="1" stop-color="#cfae8c"/></radialGradient>
+<radialGradient id="ear" cx=".4" cy=".32" r=".78"><stop offset="0" stop-color="#fff8ee"/><stop offset="1" stop-color="#d7b896"/></radialGradient>
+<radialGradient id="inear" cx=".45" cy=".35" r=".7"><stop offset="0" stop-color="#ffc9b8"/><stop offset="1" stop-color="#f29f8c"/></radialGradient>
+<radialGradient id="muz" cx=".42" cy=".28" r=".85"><stop offset="0" stop-color="#fffdf9"/><stop offset=".68" stop-color="#f3dcc0"/><stop offset="1" stop-color="#d9b48d"/></radialGradient>
+<radialGradient id="eye" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#5a3a2a"/><stop offset="1" stop-color="#1b0f0a"/></radialGradient>
+<radialGradient id="blush" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff8676" stop-opacity=".8"/><stop offset="1" stop-color="#ff8676" stop-opacity="0"/></radialGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity=".55"/></linearGradient>
+<filter id="sh" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="16" stdDeviation="15" flood-color="#a8541a" flood-opacity=".38"/></filter>
+<filter id="sh2" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#6a3a18" flood-opacity=".32"/></filter>
+<filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"/></filter>
+<filter id="fuzzT" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="2" seed="7"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .22 -.02"/></filter>
+<clipPath id="headc"><ellipse cx="200" cy="222" rx="134" ry="124"/></clipPath><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffcf86"/><stop offset="1" stop-color="#f5913a"/></linearGradient><clipPath id="sq"><rect width="400" height="400" rx="88"/></clipPath></defs><g clip-path="url(#sq)"><rect width="400" height="400" fill="url(#bg)"/><g filter="url(#sh)">
+<circle cx="110" cy="120" r="50" fill="url(#ear)"/><circle cx="290" cy="120" r="50" fill="url(#ear)"/>
+<circle cx="113" cy="123" r="26" fill="url(#inear)"/><circle cx="287" cy="123" r="26" fill="url(#inear)"/>
+<ellipse cx="200" cy="222" rx="134" ry="124" fill="url(#fur)"/></g>
+<ellipse cx="200" cy="222" rx="134" ry="124" fill="url(#rim)"/>
+<ellipse cx="162" cy="144" rx="58" ry="22" fill="#fff" opacity=".3" filter="url(#soft)"/>
+<ellipse cx="126" cy="258" rx="28" ry="19" fill="url(#blush)"/><ellipse cx="274" cy="258" rx="28" ry="19" fill="url(#blush)"/>
+<ellipse cx="200" cy="268" rx="65" ry="53" fill="url(#muz)" filter="url(#sh2)"/>
+<ellipse cx="186" cy="248" rx="26" ry="10" fill="#fff" opacity=".5" filter="url(#soft)"/>
+<circle cx="148" cy="204" r="19" fill="url(#eye)"/><circle cx="252" cy="204" r="19" fill="url(#eye)"/>
+<circle cx="155" cy="196" r="7.5" fill="#fff"/><circle cx="259" cy="196" r="7.5" fill="#fff"/>
+<circle cx="142" cy="212" r="3" fill="#fff" opacity=".85"/><circle cx="246" cy="212" r="3" fill="#fff" opacity=".85"/>
+<ellipse cx="200" cy="246" rx="21" ry="15" fill="url(#eye)"/><ellipse cx="193" cy="240" rx="7.5" ry="3.8" fill="#fff" opacity=".75"/>
+<path d="M180 278q20 20 40 0" stroke="#3a2216" stroke-width="7.5" fill="none" stroke-linecap="round"/></g></svg>
