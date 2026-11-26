@@ -78,10 +78,10 @@ async function fetchAudio(id, part) {
   return URL.createObjectURL(await response.blob());
 }
 /**
- * 用云端语音读一首诗，读到第 i 段时调用 onPart(i)。第一段就取不到时返回 false（调用方改用系统语音）；
- * 中途被打断或出错就停下。必须在点击里同步调用（见 silence）。
+ * 用云端语音读一首诗，读到第 i 段时调用 onPart(i)，读的过程中调用 onProgress(i, 0–1)（配图按它在一行中间换图）。
+ * 第一段就取不到时返回 false（调用方改用系统语音）；中途被打断或出错就停下。必须在点击里同步调用（见 silence）。
  */
-async function playPoem(poem, onPart) {
+async function playPoem(poem, onPart, onProgress = () => {}) {
   stopSpeaking();
   const run = speakRun;
   const audio = new Audio(silence);
@@ -97,6 +97,7 @@ async function playPoem(poem, onPart) {
     onPart(i);
     const ok = await new Promise(resolve => {
       player = { audio, done: () => resolve(false) };
+      audio.ontimeupdate = () => { if (audio.duration > 0) onProgress(i, audio.currentTime / audio.duration); };
       audio.onended = () => resolve(true);
       audio.onerror = () => resolve(false);
       audio.src = url;
@@ -106,6 +107,7 @@ async function playPoem(poem, onPart) {
     if (!ok || run !== speakRun) return true;
   }
   player = null;
+  audio.ontimeupdate = null;
   onPart(-1);
   return true;
 }
@@ -330,6 +332,7 @@ async function showPoem(id) {
   }
   poemState.poem = poem; poemState.explanation = poem.explanation; poemState.rows = poem.pinyin ?? null;
   const linesBox = el('div', { class: 'poem-lines', lang: 'zh-CN' });
+  const gallery = poem.art?.length ? makeGallery(poem) : null;
   const pickedBar = el('div', { class: 'picked-bar', hidden: true });
   const pinyinButton = el('button', { class: 'btn', type: 'button', 'aria-pressed': String(poemState.pinyin), onclick: () => {
     poemState.pinyin = !poemState.pinyin; store.set('pinyin', poemState.pinyin);
@@ -337,11 +340,15 @@ async function showPoem(id) {
     if (poemState.pinyin) loadPinyin(linesBox, pinyinButton);
   } }, '拼音');
   const readButton = el('button', { class: 'btn', type: 'button', onclick: async () => {
-    const highlight = i => linesBox.querySelectorAll('.line').forEach((n, k) => n.classList.toggle('reading', k === i - 1));
+    const highlight = i => {
+      linesBox.querySelectorAll('.line').forEach((n, k) => n.classList.toggle('reading', k === i - 1));
+      if (i >= 0) gallery?.follow(i - 1, 0);
+    };
     const parts = [`${poem.title}，${poem.dynasty ? poem.dynasty + '，' : ''}${poem.author}`, ...poem.lines];
     if (!poem.speakable) return speakParts(parts, { onPart: highlight });
     readButton.textContent = '🔊 准备中…';
-    const played = await playPoem(poem, i => { readButton.textContent = '🔊 读诗'; highlight(i); });
+    const played = await playPoem(poem, i => { readButton.textContent = '🔊 读诗'; highlight(i); },
+      (i, progress) => { if (i > 0) gallery?.follow(i - 1, progress); });
     readButton.textContent = '🔊 读诗';
     if (!played) speakParts(parts, { onPart: highlight });
   } }, '🔊 读诗');
@@ -360,7 +367,9 @@ async function showPoem(id) {
 
   view.replaceChildren(
     el('button', { class: 'back', type: 'button', onclick: () => history.length > 1 ? history.back() : go('#/') }, '‹ 返回'),
-    el('article', { class: 'card poem' },
+    el('article', { class: `card poem${gallery ? ' with-art' : ''}` },
+      gallery?.node,
+      el('div', { class: 'poem-text' },
       el('h1', { class: 'poem-title' }, poem.title),
       el('p', { class: 'poem-meta' }, poem.dynasty ? `〔${poem.dynasty}〕` : '',
         el('a', { href: `#/author/${encodeURIComponent(poem.author)}?d=${encodeURIComponent(poem.dynasty || '')}` }, poem.author),
@@ -368,12 +377,64 @@ async function showPoem(id) {
       linesBox, pickedBar,
       el('div', { class: 'poem-tools' }, readButton, pinyinButton, poem.explainable && !poem.explanation ? explainButton : null),
       !poem.explainable ? el('p', { class: 'note' }, '这首诗太长了，小熊暂时还讲不了。') : null,
-      notes),
+      notes)),
     explainBox);
   renderLines(linesBox);
   if (poemState.pinyin) loadPinyin(linesBox, pinyinButton);
-  linesBox.addEventListener('click', event => pickChar(event, linesBox, pickedBar));
+  linesBox.addEventListener('click', event => {
+    pickChar(event, linesBox, pickedBar);
+    // 点到哪个字，就翻到画那一句的图。
+    const node = event.target.closest('.ch');
+    if (node && gallery) gallery.show(gallery.sceneAt(Number(node.dataset.line), Number(node.dataset.at)));
+  });
   if (poem.explanation) renderExplanation(explainBox, poem.explanation, linesBox);
+}
+
+/**
+ * 课本诗的配图：一张一屏，左右滑动，下面的小圆点也能点。每张图从 art[n].line 行的 art[n].at 处开始（服务端按句算好），
+ * 点字、读诗时 follow/show 翻到对应的那张。
+ */
+function makeGallery(poem) {
+  const art = poem.art;
+  const smooth = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  const track = el('div', { class: 'art-track' }, art.map((a, n) =>
+    el('img', { src: a.src, alt: `第 ${n + 1} 幅画：${a.caption}`, width: 800, height: 600, decoding: 'async', draggable: 'false' })));
+  const dots = art.length > 1 ? el('div', { class: 'art-dots' }, art.map((a, n) =>
+    el('button', { type: 'button', 'aria-label': `第 ${n + 1} 幅：${a.caption}`, onclick: () => show(n) }))) : null;
+  let current = -1, followed = -1;
+  // 程序翻页的平滑滚动途中，滚动位置还在半路，不按它改圆点（否则会闪一下）；到了或过一会儿再跟着手指走。
+  let target = null, targetTimer = 0;
+  const mark = n => {
+    if (n === current) return;
+    current = n;
+    dots?.querySelectorAll('button').forEach((b, k) => b.setAttribute('aria-current', String(k === n)));
+  };
+  function show(n) {
+    if (n < 0 || n >= art.length) return;
+    target = n; clearTimeout(targetTimer); targetTimer = setTimeout(() => { target = null; }, 1000);
+    track.scrollTo({ left: n * track.clientWidth, behavior: smooth() });
+    mark(n);
+  }
+  /** 第 line 行、at 处（0–1）对应的是哪张图：开始位置不晚于它的最后一张。 */
+  function sceneAt(line, at) {
+    let found = 0;
+    art.forEach((a, n) => { if (a.line < line || (a.line === line && a.at <= at + 1e-6)) found = n; });
+    return found;
+  }
+  // 读诗时只在该换图的时候翻，孩子自己滑走了也不会每一下都被拉回来。
+  function follow(line, at) {
+    const n = line < 0 ? 0 : sceneAt(line, at);
+    if (n !== followed) { followed = n; show(n); }
+  }
+  track.addEventListener('scroll', () => {
+    if (!track.clientWidth) return;
+    const at = track.scrollLeft / track.clientWidth;
+    if (target !== null) { if (Math.abs(at - target) > .02) return; target = null; }
+    mark(Math.round(at));
+  }, { passive: true });
+  mark(0);
+  const node = el('figure', { class: 'art', 'aria-label': `《${poem.title}》的配图，共 ${art.length} 幅` }, track, dots);
+  return { node, show, follow, sceneAt };
 }
 
 /** 没讲过的诗打开时还没有拼音：单独请小熊标一下（几秒），标好的服务端会存下来。 */
@@ -398,13 +459,15 @@ function renderLines(box) {
   box.classList.toggle('with-pinyin', poemState.pinyin && !!pinyin);
   box.replaceChildren(...poem.lines.map((line, i) => {
     const syllables = pinyin?.[i] ?? null;
-    let k = 0;
+    let k = 0, pos = 0;
     // 一句一个不断行的块：屏幕窄时只在逗号、句号后面换行，不会把“入海流”拆开。
     const clauses = line.match(/[^，。？！；、]+[，。？！；、]*/g) ?? [line];
     return el('div', { class: 'line' }, clauses.map(clause => el('span', { class: 'clause' }, [...clause].map(c => {
+      const at = pos / line.length;
+      pos += c.length;
       if (!isHan(c)) return c;
       const py = syllables?.[k++];
-      const node = el('span', { class: 'ch', 'data-ch': c }, c);
+      const node = el('span', { class: 'ch', 'data-ch': c, 'data-line': i, 'data-at': at.toFixed(3) }, c);
       return py ? el('ruby', {}, node, el('rt', {}, py)) : node;
     }))));
   }));
@@ -463,8 +526,8 @@ function renderExplanation(box, ex, linesBox) {
 
   box.replaceChildren(
     section('scene', '🎨', '诗里的画面', ex.scene, el('p', {}, ex.scene),
-      // 插图以后放在这里（按 scene 画），现在先留位置。
-      el('div', { class: 'picture', 'aria-hidden': 'true' }, '这里以后会有一幅画')),
+      // 有配图的课本诗，画在诗的上面；其他诗先留个位置。
+      poemState.poem?.art?.length ? null : el('div', { class: 'picture', 'aria-hidden': 'true' }, '这里以后会有一幅画')),
     section('', '📖', '一句一句读懂', ex.lines.join(''),
       el('ol', { class: 'meanings' }, poem.lines.map((line, i) => el('li', {}, el('span', { class: 'orig' }, line), el('span', { class: 'mean' }, ex.lines[i]))))),
     words ? section('', '🔍', '难懂的字词', '', words) : null,
