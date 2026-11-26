@@ -110,7 +110,9 @@ Caddy 默认不限制请求大小，不用改。
 | `GET /v1/poems/authors?dynasty=&q=&offset=` | 无 | 诗人列表，每页 60 位 |
 | `GET /v1/poems/author?name=&dynasty=` | 无 | `{name, dynasty, intro, poems}`，`intro` 是古书里的文言简介 |
 | `GET /v1/poems/poem/<id>` | 无 | 一首诗；`s…` 是课本古诗，`k…` 是考级里课本没有的，`p…` 是诗库。讲过的诗带着 `explanation`；诗库里和课本同题同作者的带 `textbookId` |
-| `POST /v1/poems/explain` | 同源会话或 `TUTOR_DEVICE_TOKEN` | `{id}` → `{pinyin, scene, lines, words, feeling, story, poet}`。诗文由服务端按 id 查出来再交给模型；最长 24 行、400 字；结果存在 `littlebear.db` 的 `poem_explanations` 表，同一首诗只问一次模型。每分钟最多 30 次新讲解 |
+| `POST /v1/poems/explain` | 同源会话或 `TUTOR_DEVICE_TOKEN` | `{id}` → `{pinyin, scene, lines, words, feeling, story, poet}`。诗文由服务端按 id 查出来再交给模型；最长 24 行、400 字；先用随代码发布的 `src/poems-explanations.json`（课本和考级的诗），没有再查 `littlebear.db` 的 `poem_explanations` 表，再没有才问模型并存下来。每分钟最多 30 次新讲解 |
+| `POST /v1/poems/pinyin` | 同源会话或 `TUTOR_DEVICE_TOKEN` | `{id}` → `{pinyin}`，只标拼音（给没讲过的诗）；最长 48 行、800 字；存在同一张表。每分钟最多 60 次新的 |
+| `GET /v1/poems/audio?id=&part=` | 同源会话或 `TUTOR_DEVICE_TOKEN` | 读诗的一段 mp3：`part=0` 是“题目，朝代，作者”，`1…` 是各句。用火山语音合成，存在 `DATA_DIR/poem-audio/`，同一句只合成一次；没配语音合成时 503 `tts_not_configured`。每分钟最多 120 段新的 |
 
 `POEMS_MODEL_NAME` 可单独指定讲诗用的模型，默认用 `MODEL_NAME`；`POEMS_MODEL_THINKING` 同 `HANZI_MODEL_THINKING`，默认 `disabled`。只读接口每分钟最多 600 次。
 
@@ -166,6 +168,8 @@ npm start
 | `TEACHER_MODEL_NAME` | 小熊老师用的模型 ID，默认 `MODEL_NAME` |
 | `POEMS_MODEL_NAME` | 讲古诗用的模型 ID，默认 `MODEL_NAME` |
 | `POEMS_DB` | 诗库文件，默认 `DATA_DIR/poems.db` |
+| `POEMS_TTS_SPEAKER` | 读古诗用的音色，默认 `VOLC_TTS_SPEAKER` |
+| `POEMS_TTS_SPEECH_RATE` | 读古诗的语速，默认 `-15`（比小熊老师慢一点） |
 | `MODEL_VISION_NAME` | 可选。同一供应商下支持图片输入的模型 ID，只用于带照片的请求（拍照识题、带图求助/检查） |
 | `MODEL_SUPPORTS_IMAGES` | 默认 `true`。`MODEL_NAME` 不能看图且未配置 `MODEL_VISION_NAME` 时设为 `false`：带图请求直接返回 422 `images_not_supported`，App 提示改用文字，不再请求上游 |
 | `MODEL_JSON_MODE` | 默认为 `true`，发送 `response_format: {type: "json_object"}`；供应商不支持时设 `false`，仍严格校验返回 JSON |

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createGateway } from '../src/gateway.mjs';
-import { createPoems, loadSchoolPoems, loadLevelPoems, validateExplanation, explainKey, explainBody } from '../src/poems.mjs';
+import { createPoems, loadSchoolPoems, loadLevelPoems, validateExplanation, validatePinyin, explainKey, explainBody, pinyinBody } from '../src/poems.mjs';
 
 const token = 'device-test-token-not-a-secret-12345';
 const model = { apiUrl: 'https://model.test/chat/completions', apiKey: 'k', model: 'm', jsonMode: true };
@@ -53,7 +53,7 @@ const goodExplanation = lines => ({
   feeling: '想家。', story: '', poet: '唐朝诗人。'
 });
 
-async function setup(t, { replies = [], library = true, schoolList = school, levels = levelList } = {}) {
+async function setup(t, { replies = [], library = true, schoolList = school, levels = levelList, shippedFile = {}, tts = null } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), 'poems-'));
   const webDir = join(dataDir, 'web');
   mkdirSync(webDir);
@@ -63,13 +63,15 @@ async function setup(t, { replies = [], library = true, schoolList = school, lev
   const levelsPath = join(dataDir, 'levels.json');
   writeFileSync(levelsPath, JSON.stringify(levels));
   if (library) makeLibrary(join(dataDir, 'poems.db'));
+  const explanationsPath = join(dataDir, 'explanations.json');
+  writeFileSync(explanationsPath, JSON.stringify(typeof shippedFile === 'function' ? shippedFile(loadSchoolPoems(schoolPath)) : shippedFile));
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push(JSON.parse(init.body));
     const content = replies.shift();
     return new Response(JSON.stringify({ choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }] }));
   };
-  const poems = createPoems({ token, model, dataDir, schoolPath, levelsPath, webDir, fetchImpl });
+  const poems = createPoems({ token, model, dataDir, schoolPath, levelsPath, explanationsPath, tts, webDir, fetchImpl });
   const server = createGateway({ token, poems });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -78,7 +80,9 @@ async function setup(t, { replies = [], library = true, schoolList = school, lev
   const get = async path => { const r = await fetch(`${base}${path}`); return { status: r.status, body: await r.json() }; };
   const explain = (id, auth = token) => fetch(`${base}/v1/poems/explain`, { method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: `Bearer ${auth}` } : {}) }, body: JSON.stringify({ id }) });
-  return { base, calls, get, explain };
+  const post = (path, body, auth = token) => fetch(`${base}${path}`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: `Bearer ${auth}` } : {}) }, body: JSON.stringify(body) });
+  return { base, calls, get, explain, post, dataDir };
 }
 
 test('school poems get ids by grade, term and order', () => {
@@ -252,4 +256,92 @@ test('the page is served without escaping its folder', async t => {
   const cookie = page.headers.get('set-cookie').split(';')[0];
   const withSession = await fetch(`${base}/v1/poems/explain`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ id: 'nope' }) });
   assert.equal(withSession.status, 404);
+});
+
+const rowsFor = lines => lines.map(line => [...line].filter(c => /\p{Script=Han}/u.test(c)).map(() => 'mā'));
+
+test('shipped explanations are served without asking the model, but only while the poem text matches', async t => {
+  const explanation = goodExplanation(school[0].lines);
+  const { get, explain, calls } = await setup(t, { shippedFile: list => ({
+    s1b01: { key: explainKey(list[0]), title: '静夜思', explanation },
+    s2a01: { key: 'v1|s2a01|old-digest', title: '登鹳雀楼', explanation: goodExplanation(school[1].lines) } }) });
+  const { body } = await get('/v1/poems/poem/s1b01');
+  assert.equal(body.explanation.scene, explanation.scene);
+  assert.deepEqual(body.pinyin, explanation.pinyin);
+  assert.equal((await explain('s1b01')).status, 200);
+  assert.equal(calls.length, 0);
+  // 诗文改过（摘要对不上）的旧条目不用。
+  const stale = (await get('/v1/poems/poem/s2a01')).body;
+  assert.equal(stale.explanation, null);
+  assert.equal(stale.pinyin, null);
+});
+
+test('pinyin is asked once, retried when a row is off, saved, and comes with the poem afterwards', async t => {
+  const lines = ['床前看月光，疑是地上霜。', '举头望山月，低头思故乡。'];
+  const half = { pinyin: [rowsFor(lines)[0], ['bad']] };
+  const { get, post, calls } = await setup(t, { replies: [half, { pinyin: rowsFor(lines) }] });
+  assert.equal((await post('/v1/poems/pinyin', { id: 'p1' }, '')).status, 401);
+  const first = (await get('/v1/poems/poem/p1')).body;
+  assert.equal(first.pinyin, null);
+  assert.equal(first.pinyinable, true);
+  const response = await post('/v1/poems/pinyin', { id: 'p1' });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).pinyin, rowsFor(lines));
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].messages[0].content, /逐字标拼音/);
+  assert.equal((await post('/v1/poems/pinyin', { id: 'p1' })).status, 200);
+  assert.equal(calls.length, 2);
+  assert.deepEqual((await get('/v1/poems/poem/p1')).body.pinyin, rowsFor(lines));
+});
+
+test('pinyin keeps the better reply when both have an off row, and comes from the explanation when there is one', async t => {
+  const lines = school[0].lines;
+  const { post, explain, calls } = await setup(t, { replies: [{ pinyin: [null, null] }, { pinyin: [rowsFor(lines)[0], ['x']] }, goodExplanation(school[1].lines)] });
+  assert.deepEqual((await (await post('/v1/poems/pinyin', { id: 's1b01' })).json()).pinyin, [rowsFor(lines)[0], null]);
+  assert.equal(calls.length, 2);
+  assert.equal((await explain('s2a01')).status, 200);
+  assert.deepEqual((await (await post('/v1/poems/pinyin', { id: 's2a01' })).json()).pinyin, rowsFor(school[1].lines));
+  assert.equal(calls.length, 3);
+});
+
+test('pinyin replies are checked row by row', () => {
+  const poem = { lines: ['白日依山尽，', '黄河入海流。'] };
+  assert.deepEqual(validatePinyin(JSON.stringify({ pinyin: [['bái', 'rì', 'yī', 'shān', 'jìn'], ['huáng', 'hé']] }), poem), [['bái', 'rì', 'yī', 'shān', 'jìn'], null]);
+  assert.throws(() => validatePinyin('{"pinyin":[]}', poem));
+  assert.throws(() => validatePinyin('not json', poem));
+  assert.equal(pinyinBody({ ...poem, title: 't', author: 'a', dynasty: '唐' }, { ...model, jsonMode: true }).response_format.type, 'json_object');
+});
+
+test('read-aloud audio is made once per line, saved, and needs the token and a voice', async t => {
+  const said = [];
+  const tts = { voice: 'test-voice', async *synthesize(text) { said.push(text); yield Buffer.from(`mp3:${text}`); } };
+  const { base, get, dataDir } = await setup(t, { tts });
+  const audio = (part, auth = token) => fetch(`${base}/v1/poems/audio?id=s1b01&part=${part}`, { headers: auth ? { Authorization: `Bearer ${auth}` } : {} });
+  assert.equal((await get('/v1/poems/poem/s1b01')).body.speakable, true);
+  assert.equal((await audio(1, '')).status, 401);
+  let response = await audio(0);
+  assert.equal(response.headers.get('content-type'), 'audio/mpeg');
+  assert.equal(await response.text(), 'mp3:静夜思，唐，李白');
+  response = await audio(2);
+  assert.equal(await response.text(), 'mp3:举头望明月，低头思故乡。');
+  assert.equal(await (await audio(2)).text(), 'mp3:举头望明月，低头思故乡。');
+  assert.deepEqual(said, ['静夜思，唐，李白', '举头望明月，低头思故乡。']);
+  assert.equal(readdirSync(join(dataDir, 'poem-audio')).length, 2);
+  assert.equal((await audio(3)).status, 404);
+  assert.equal((await audio(-1)).status, 404);
+});
+
+test('without a voice the page falls back to the browser and audio says so', async t => {
+  const { base, get } = await setup(t);
+  assert.equal((await get('/v1/poems/poem/s1b01')).body.speakable, false);
+  assert.equal((await fetch(`${base}/v1/poems/audio?id=s1b01&part=1`, { headers: { Authorization: `Bearer ${token}` } })).status, 503);
+});
+
+test('pinyin split by clause instead of by line is put back on the lines', () => {
+  const poem = { lines: ['湖光秋月两相和，潭面无风镜未磨。', '遥望洞庭山水翠，白银盘里一青螺。'] };
+  const clauses = [['hú', 'guāng', 'qiū', 'yuè', 'liǎng', 'xiāng', 'hé'], ['tán', 'miàn', 'wú', 'fēng', 'jìng', 'wèi', 'mó'],
+    ['yáo', 'wàng', 'dòng', 'tíng', 'shān', 'shuǐ', 'cuì'], ['bái', 'yín', 'pán', 'lǐ', 'yì', 'qīng', 'luó']];
+  assert.deepEqual(validatePinyin(JSON.stringify({ pinyin: clauses }), poem), [clauses[0].concat(clauses[1]), clauses[2].concat(clauses[3])]);
+  // 总数不对就不硬分，对不上的行照旧不显示。
+  assert.throws(() => validatePinyin(JSON.stringify({ pinyin: clauses.slice(0, 3) }), poem));
 });
