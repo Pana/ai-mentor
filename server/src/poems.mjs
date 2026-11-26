@@ -20,6 +20,7 @@ const defaultWebDir = fileURLToPath(new URL('../../web/poems/', import.meta.url)
 const defaultSchool = fileURLToPath(new URL('./poems-school.json', import.meta.url));
 const defaultLevels = fileURLToPath(new URL('./poems-levels.json', import.meta.url));
 const defaultExplanations = fileURLToPath(new URL('./poems-explanations.json', import.meta.url));
+const defaultArt = fileURLToPath(new URL('./poems-art.json', import.meta.url));
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json; charset=utf-8' };
 
@@ -177,7 +178,11 @@ export function explainBody(poem, config) {
   };
 }
 
-const poemDigest = poem => createHash('sha256').update(JSON.stringify([poem.title, poem.author, poem.lines])).digest('hex').slice(0, 16);
+/** 诗文的摘要：讲解缓存和配图都用它判断原文有没有改过。 */
+export const poemDigest = poem => createHash('sha256').update(JSON.stringify([poem.title, poem.author, poem.lines])).digest('hex').slice(0, 16);
+
+/** 按标点分句：课本一行常是两句（“春眠不觉晓，处处闻啼鸟。”）。配图的分镜按句对应（poems-art.json 里的 lines 是句子下标）。 */
+export const poemSentences = poem => poem.lines.flatMap(line => line.match(/[^，。？！；]+[，。？！；]*/g) ?? [line]);
 
 /** 缓存的键：版本 + id + 诗文的摘要。课本里改了原文，旧讲解就不再用。 */
 export function explainKey(poem) {
@@ -266,6 +271,34 @@ export function loadShippedExplanations(path = defaultExplanations) {
 }
 
 /**
+ * 配图（poems-art.json，scripts/poems/publish-art.mjs 生成；图在 web/poems/art/<id>/<n>.svg）。
+ * 只认诗文摘要对得上的，返回 id → [{ src, caption, line, at }]：这张图从第 line 行（poem.lines 的下标）的 at 处（0–1，按字数）开始，
+ * 页面读诗时按读到的位置换图。分镜按句子（poemSentences）分，一行两句时可能一行两张图。
+ */
+export function loadArt(poems, path = defaultArt) {
+  const art = new Map();
+  if (!existsSync(path)) return art;
+  const file = JSON.parse(readFileSync(path, 'utf8'));
+  for (const poem of poems) {
+    const entry = file[poem.id];
+    if (!entry || entry.key !== poemDigest(poem) || !Array.isArray(entry.scenes)) continue;
+    // 每一句在哪一行、从这一行的第几个字开始。
+    const starts = poem.lines.flatMap((line, i) => {
+      let offset = 0;
+      return (line.match(/[^，。？！；]+[，。？！；]*/g) ?? [line]).map(part => { const at = offset / line.length; offset += part.length; return { line: i, at }; });
+    });
+    const scenes = entry.scenes.map((scene, n) => {
+      const first = starts[Math.min(...(scene.lines ?? []))];
+      return first && /^[0-9a-f]{0,16}$/.test(scene.v ?? '') && {
+        src: `/poems/art/${encodeURIComponent(poem.id)}/${n + 1}.svg${scene.v ? `?v=${scene.v}` : ''}`,
+        caption: String(scene.caption ?? ''), line: first.line, at: Math.round(first.at * 1000) / 1000 };
+    });
+    if (scenes.every(Boolean)) art.set(poem.id, scenes);
+  }
+  return art;
+}
+
+/**
  * 检查模型的讲解，不对就抛错（调用方重试一次，再不对就 502）。
  * 逐行意思的行数必须对上；拼音哪一行字数对不上，那一行就不显示拼音（null），其他照常用。
  * 字词注释只留原文里真有的。
@@ -304,7 +337,7 @@ async function readJson(stream, max) {
  * to the same-origin page.
  */
 export function createPoems({ token, model = {}, dataDir, libraryPath = join(dataDir, 'poems.db'), schoolPath = defaultSchool,
-  levelsPath = defaultLevels, explanationsPath = defaultExplanations, tts = null, webDir = defaultWebDir, fetchImpl = fetch, now = Date.now }) {
+  levelsPath = defaultLevels, explanationsPath = defaultExplanations, artPath = defaultArt, tts = null, webDir = defaultWebDir, fetchImpl = fetch, now = Date.now }) {
   const school = loadSchoolPoems(schoolPath);
   const levels = loadLevelPoems(levelsPath, school);
   // 课本古诗加上考级里课本没有的诗：都是整理过的版本，按 id 能打开，查找时排在诗库前面。
@@ -312,6 +345,7 @@ export function createPoems({ token, model = {}, dataDir, libraryPath = join(dat
   const schoolById = new Map(curated.map(p => [p.id, p]));
   const library = openLibrary(libraryPath);
   const shipped = loadShippedExplanations(explanationsPath);
+  const art = loadArt(curated, artPath);
   const audioDir = join(dataDir, 'poem-audio');
   const db = openDatabase(join(dataDir, 'littlebear.db'));
   const cacheGet = db.prepare('SELECT explanation FROM poem_explanations WHERE key = ?');
@@ -522,7 +556,11 @@ export function createPoems({ token, model = {}, dataDir, libraryPath = join(dat
     try {
       const body = await readFile(join(webDir, relative));
       if (relative === 'index.html' && !sessionFor(req)) newSession(res);
-      send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': type, 'Cache-Control': 'no-cache',
+      // 配图的网址带着图的摘要（?v=…），重画后网址就变了，可以放心长缓存。
+      const cache = relative.startsWith(`art${sep}`) ? 'public, max-age=2592000' : 'no-cache';
+      send(res, 200, req.method === 'HEAD' ? '' : body, { 'Content-Type': type, 'Cache-Control': cache,
+        // SVG 被直接打开时也不许跑脚本、连外部资源（发布前已经检查过，这里再挡一层）。
+        ...(type === 'image/svg+xml' ? { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'" } : {}),
         ...(type.startsWith('text/html') ? { 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'none'" } : {}) });
     } catch { send(res, 404, { error: 'not_found' }); }
   }
@@ -561,8 +599,8 @@ export function createPoems({ token, model = {}, dataDir, libraryPath = join(dat
         const poem = poemById(id);
         if (!poem) send(res, 404, { error: 'poem_not_found' });
         else {
-          // 讲过的诗把讲解和拼音一起带上，页面不用再等；没有拼音时页面再要（POST /v1/poems/pinyin）。
-          send(res, 200, { ...poem, explanation: cachedExplanation(poem), pinyin: cachedPinyin(poem),
+          // 讲过的诗把讲解和拼音一起带上，页面不用再等；没有拼音时页面再要（POST /v1/poems/pinyin）。课本诗带上配图。
+          send(res, 200, { ...poem, explanation: cachedExplanation(poem), pinyin: cachedPinyin(poem), art: art.get(poem.id) ?? [],
             explainable: fits(poem, EXPLAIN_LIMITS), pinyinable: fits(poem, PINYIN_LIMITS), speakable: !!tts && fits(poem, PINYIN_LIMITS) });
         }
       } else send(res, 404, { error: 'not_found' });

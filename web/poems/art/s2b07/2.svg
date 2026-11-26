@@ -1,0 +1,64 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="古风工笔插画：君看一叶舟，出没风波里"><defs><linearGradient id="s2b07-2-j2-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe0d6"/><stop offset="1" stop-color="#eef0dc"/></linearGradient><linearGradient id="s2b07-2-j2-water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa999"/><stop offset="1" stop-color="#2f7276"/></linearGradient><filter id="s2b07-2-j2-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" seed="9"/><feColorMatrix type="matrix" values="0 0 0 0 0.5 0 0 0 0 0.42 0 0 0 0 0.28 .9 0 0 0 -.38"/></filter></defs>
+<rect width="800" height="600" fill="#efe3c6"/>
+<rect width="800" height="240" fill="url(#s2b07-2-j2-sky)"/>
+<path d="M0 210 Q100 168 220 200 T460 192 T680 202 T800 186 L800 240 L0 240Z" fill="#a9c5b4"/>
+<path d="M0 232 Q160 210 300 228 T600 226 T800 232 L800 240 L0 240Z" fill="#7aa68f" stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round"/>
+<g fill="#f4ecd8" stroke="#2a1f17" stroke-width="1.6" stroke-linejoin="round" opacity=".85"><path d="M60 120 q10 -30 44 -18 q18 -28 50 -6 q30 -8 32 22 q-60 14 -126 2Z"/><path d="M470 80 q10 -26 40 -14 q18 -24 46 -4 q28 -6 28 20 q-56 12 -114 -2Z"/></g>
+<g fill="none" stroke="#2a1f17" stroke-width="1.4" stroke-linecap="round" opacity=".55"><path d="M260 70 q50 -12 90 0 q26 8 30 -8 q-2 -12 -14 -8"/><path d="M620 140 q50 -10 90 2 q24 6 28 -8 q-2 -12 -14 -8"/><path d="M220 140 q40 -8 80 0"/></g>
+<g fill="#c0582f"><ellipse cx="420" cy="130" rx="6" ry="3" transform="rotate(30 420 130)"/><ellipse cx="380" cy="170" rx="6" ry="3" transform="rotate(-20 380 170)"/><ellipse cx="450" cy="200" rx="5" ry="2.6" transform="rotate(50 450 200)" fill="#d8a443"/></g>
+<rect y="240" width="800" height="360" fill="url(#s2b07-2-j2-water)"/>
+<g stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+<path d="M0 290 Q50 270 100 286 T200 282 T300 286 T400 280 T500 286 T600 280 T700 286 T800 280 L800 600 L0 600Z" fill="#5c9a7c"/>
+<g transform="translate(300 330) rotate(-12)">
+<path d="M-60 26 L30 -54" fill="none" stroke="#552619" stroke-width="4"/>
+<ellipse cx="-64" cy="30" rx="12" ry="5" transform="rotate(-42 -64 30)" fill="#8a3f2c"/>
+<g transform="translate(20 -8)">
+<path d="M-22 -60 Q-34 -30 -40 0 L36 0 Q28 -30 18 -60Z" fill="#b5842d"/>
+<path d="M-14 -50 L-22 -6 M-4 -52 L-8 -4 M6 -52 L8 -4 M14 -48 L24 -6" fill="none" stroke="#8a3f2c" stroke-width="1.2"/>
+<ellipse cx="-14" cy="-40" rx="4.5" ry="3.6" fill="#f3dcc2"/>
+<ellipse cx="-28" cy="-26" rx="4.5" ry="3.6" fill="#f3dcc2"/>
+<path d="M10 -54 Q-4 -46 -12 -40 M8 -44 Q-12 -32 -26 -26" fill="none" stroke="#8a3f2c" stroke-width="7"/>
+<circle cx="0" cy="-70" r="12" fill="#f3dcc2"/>
+<circle cx="-6" cy="-69" r="1.6" fill="#2a1f17" stroke="none"/>
+<path d="M-9 -63 q3 1 6 0" fill="none" stroke-width="1.3"/>
+<path d="M-36 -72 L0 -98 L36 -72 Q0 -80 -36 -72Z" fill="#d8a443"/>
+<path d="M0 -98 L-18 -76 M0 -98 L0 -78 M0 -98 L18 -76" fill="none" stroke="#b5842d" stroke-width="1.2"/>
+</g>
+<path d="M-90 0 Q0 30 90 0 L82 -14 Q0 6 -82 -14Z" fill="#8a3f2c"/>
+<path d="M-80 -6 Q0 14 80 -6" fill="none" stroke="#552619" stroke-width="1.4"/>
+</g>
+<path d="M0 360 Q60 330 120 352 Q170 334 210 340 Q260 346 300 338 Q340 342 380 318 Q410 288 446 296 Q426 308 436 328 Q470 350 520 346 Q580 330 640 350 Q700 330 760 348 L800 344 L800 600 L0 600Z" fill="#3f7a6d"/>
+<path d="M0 452 Q70 420 140 444 T280 440 T420 446 T560 440 L560 600 L0 600Z" fill="#2f7276"/>
+</g>
+<g fill="none" stroke="#e3f1ea" stroke-width="2.4" stroke-linecap="round" opacity=".9"><path d="M90 284 q10 -8 20 0"/><path d="M490 284 q10 -8 20 0"/><path d="M690 284 q10 -8 20 0"/><path d="M100 350 q10 -10 22 -2"/><path d="M600 342 q10 -10 22 -2"/><path d="M446 296 q-12 6 -10 20 M440 304 q-8 4 -6 14"/><path d="M120 444 q12 -10 24 0"/><path d="M380 442 q12 -10 24 0"/><path d="M60 520 h60"/><path d="M240 540 h70"/><path d="M200 400 h50"/></g>
+<g fill="#e3f1ea" opacity=".9"><circle cx="456" cy="290" r="3"/><circle cx="466" cy="282" r="2.2"/><circle cx="452" cy="276" r="2"/><circle cx="196" cy="332" r="2.6"/><circle cx="186" cy="322" r="2"/></g>
+<g stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+<path d="M470 600 Q500 520 580 500 Q690 478 800 484 L800 600Z" fill="#c7b086"/>
+<path d="M556 512 Q546 470 520 440 M572 506 Q566 460 548 428 M590 500 Q590 462 574 432" fill="none" stroke="#b5842d" stroke-width="2.4"/>
+<ellipse cx="516" cy="434" rx="5" ry="11" transform="rotate(-50 516 434)" fill="#e8dcbf"/><ellipse cx="544" cy="422" rx="5" ry="11" transform="rotate(-40 544 422)" fill="#e8dcbf"/><ellipse cx="570" cy="426" rx="5" ry="11" transform="rotate(-35 570 426)" fill="#e8dcbf"/>
+</g>
+<g fill="none" stroke="#b39c72" stroke-width="1.5" stroke-linecap="round"><path d="M520 570 Q640 556 790 560"/></g>
+<g transform="translate(650 575) scale(1.4)" stroke="#2a1f17" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
+<ellipse cx="22" cy="-94" rx="12" ry="22" fill="#245b5f"/>
+<rect x="-5" y="-178" width="10" height="14" fill="#f3dcc2"/>
+<path d="M-24 -170 Q-32 -85 -46 0 L46 0 Q32 -85 24 -170Z" fill="#2f7276"/>
+<path d="M-46 0 L46 0 L43 -12 L-43 -12Z" fill="#1d4a4d"/>
+<path d="M-6 -93 Q-14 -42 -23 -14 M10 -93 Q13 -42 24 -14 M-1 -85 L0 -14" fill="none" stroke="#245b5f" stroke-width="1.4"/>
+<path d="M-13 -170 L8 -109" fill="none" stroke="#f4ecd8" stroke-width="6.8"/>
+<path d="M11 -170 L-1 -139" fill="none" stroke="#f4ecd8" stroke-width="6"/>
+<rect x="-27" y="-105" width="54" height="9" fill="#b9442f"/>
+<path d="M-6 -96 L-12 -60 M-1 -96 L-6 -68" fill="none" stroke="#b9442f" stroke-width="3.7"/>
+<ellipse cx="-20" cy="0" rx="14.7" ry="5" fill="#1d1a18"/><ellipse cx="11.5" cy="0" rx="13.8" ry="5" fill="#1d1a18"/>
+<path d="M-66 -140 l-8 -2" fill="none" stroke="#f3dcc2" stroke-width="3"/>
+<ellipse cx="-62" cy="-139" rx="5" ry="4" fill="#f3dcc2"/>
+<path d="M8 -158 Q-20 -152 -50 -148 Q-60 -146 -58 -134 Q-46 -128 -30 -130 Q-6 -132 6 -126Z" fill="#2f7276"/>
+<path d="M-50 -148 Q-60 -146 -58 -134" fill="none" stroke="#1d4a4d" stroke-width="3"/>
+<path d="M-6 -144 Q-24 -140 -40 -138" fill="none" stroke="#245b5f" stroke-width="1.3"/>
+<g transform="translate(0 -186) rotate(6)"><path d="M13 -6 C28 -6 34 4 44 8" fill="none" stroke="#1d1a18" stroke-width="3.2"/><path d="M12 -2 C24 0 28 10 38 16" fill="none" stroke="#1d1a18" stroke-width="2.8"/><circle cx="2" cy="-19" r="7.6" fill="#1d1a18"/><circle r="19" fill="#f3dcc2"/><circle cx="4.5" cy="2" r="3.2" fill="#f3dcc2"/><path d="M-19.8 -0.4 A19.8 19.8 0 0 1 19.4 1.9 L18.6 6 Q11.8 1 5.7 -3.4 Q-5.7 -5.7 -19.8 -0.4Z" fill="#1d1a18"/><path d="M-15 -4 Q-11 -2 -6 -5" fill="none" stroke-width="1.6"/><ellipse cx="-10" cy="1.5" rx="2.3" ry="1.5" fill="#2a1f17" stroke="none"/><path d="M-18.2 0.4 Q-20.9 4.9 -21.3 6.5 Q-19.4 7.6 -17.7 7.6" fill="none" stroke-width="1.5"/><path d="M-18.6 10.3 q4.2 -1.9 9.1 0.4" fill="none" stroke="#1d1a18" stroke-width="1.4"/><path d="M-16.5 13.5 q2.3 -1 4.6 0" fill="none" stroke-width="1.3"/><path d="M-15.2 15.5 Q-14.8 26.2 -8.7 28.5 Q-10.3 20.5 -6.1 16.8Z" fill="#1d1a18" stroke="none"/></g>
+</g>
+<rect width="800" height="600" filter="url(#s2b07-2-j2-grain)" opacity=".4"/>
+<g fill="none" stroke="#7b3b2a" stroke-linecap="round" stroke-linejoin="round"><rect x="12" y="12" width="776" height="576" stroke-width="3"/><rect x="20" y="20" width="760" height="560" stroke-width="1"/></g>
+<g fill="#7b3b2a"><rect x="4" y="4" width="16" height="16"/><rect x="780" y="4" width="16" height="16"/><rect x="4" y="580" width="16" height="16"/><rect x="780" y="580" width="16" height="16"/></g>
+<g fill="none" stroke="#efe3c6" stroke-width="1.4"><rect x="8" y="8" width="8" height="8"/><rect x="784" y="8" width="8" height="8"/><rect x="8" y="584" width="8" height="8"/><rect x="784" y="584" width="8" height="8"/></g>
+<g transform="translate(732 514) rotate(-3)"><rect width="40" height="44" rx="3" fill="#b3372b" opacity=".92"/><text x="20" y="19" text-anchor="middle" font-size="16" font-family="STKaiti, KaiTi, 'Kaiti SC', serif" fill="#f7ead8">仲</text><text x="20" y="37" text-anchor="middle" font-size="16" font-family="STKaiti, KaiTi, 'Kaiti SC', serif" fill="#f7ead8">淹</text></g>
+</svg>

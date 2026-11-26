@@ -1,5 +1,6 @@
 /**
- * 批量给课本古诗画配图（古风工笔，SVG），用 Claude 画。结果放在单独的目录，不进 git，之后再定怎么接到页面。
+ * 批量给课本古诗画配图（古风工笔，SVG），用 Claude 画。结果先放在单独的目录（不进 git）看一遍，满意了再用 publish-art.mjs
+ * 把 SVG 和配图清单放进仓库（web/poems/art/、server/src/poems-art.json）。
  *
  *   cd scripts/poems && npm install && cd ../..                              # 第一次：装 Claude 的 SDK
  *   node --env-file=server/.env scripts/poems/illustrate.mjs --dry-run       # 看要画哪些、大概花多少钱，不调用模型
@@ -12,21 +13,21 @@
  *   --out 目录        默认 server/data/poem-art（已在 .gitignore 里）
  *   --concurrency N  同时画几首，默认 2     --effort low|medium|high   默认 medium
  *   --model 模型      默认 claude-opus-5-5
+ *   --png            另外导出 800×600 的 PNG 预览（默认不导出，SVG 浏览器直接能看）
  *
  * 需要 ANTHROPIC_API_KEY（放在 server/.env 里，用 --env-file 读）。
  *
  * 每首诗一次请求：模型先按诗意给出分镜（几张由诗的内容定，每张对应哪几句、人物什么样），再一次画完所有 SVG，这样同一首诗里人物前后一致。
  * 画法说明和定稿样张（art-style/）放在系统提示里并开缓存，每首诗都一样，只在第一次计全价。
- * 每张图检查：只能是 800×600 的纯 SVG，没有脚本、外链、外部图片；装了 rsvg-convert 的话实际渲染一遍并导出 PNG 预览。
- * 不合格的那一张单独重画。结果：<out>/<诗id>/<n>.svg（id 加了前缀，放进同一页面不会重名）、<n>.png、meta.json，
+ * 每张图检查：只能是 800×600 的纯 SVG，没有脚本、外链、外部图片；装了 rsvg-convert 的话实际渲染一遍。
+ * 不合格的那一张单独重画。结果：<out>/<诗id>/<n>.svg（id 加了前缀，放进同一页面不会重名）、meta.json，
  * 以及 <out>/index.html（所有画好的诗，浏览器直接打开看）。
  */
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadLevelPoems, loadSchoolPoems } from '../../server/src/poems.mjs';
+import { loadLevelPoems, loadSchoolPoems, poemDigest as textKey, poemSentences as sentences } from '../../server/src/poems.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const repo = join(here, '../..');
@@ -38,7 +39,7 @@ const option = (name, fallback) => { const i = args.indexOf(`--${name}`); return
 const list = name => new Set((option(name, '') || '').split(',').map(s => s.trim()).filter(Boolean));
 const config = {
   out: option('out', join(repo, 'server/data/poem-art')),
-  only: list('only'), redo: list('redo'), levels: flag('levels'), dryRun: flag('dry-run'),
+  only: list('only'), redo: list('redo'), levels: flag('levels'), dryRun: flag('dry-run'), png: flag('png'),
   concurrency: Math.max(1, Math.min(6, Number(option('concurrency', 2)) || 2)),
   effort: ['low', 'medium', 'high', 'xhigh', 'max'].includes(option('effort', 'medium')) ? option('effort', 'medium') : 'medium',
   model: option('model', 'claude-opus-5-5')
@@ -80,9 +81,6 @@ const school = loadSchoolPoems();
 let poems = school.map(p => ({ ...p, where: `${p.school.grade}年级${p.school.term}册` }));
 if (config.levels) poems.push(...loadLevelPoems(undefined, school).own.map(p => ({ ...p, where: `古诗考级${p.level}级` })));
 if (config.only.size) poems = poems.filter(p => config.only.has(p.id));
-/** 按标点分句：课本一行常是两句（“春眠不觉晓，处处闻啼鸟。”），分图按句来。 */
-const sentences = poem => poem.lines.flatMap(line => line.match(/[^，。？！；]+[，。？！；]*/g) ?? [line]);
-const textKey = p => createHash('sha256').update(JSON.stringify([p.title, p.author, p.lines])).digest('hex').slice(0, 16);
 
 // ---------- SVG 检查和整理 ----------
 const hasRsvg = spawnSync('rsvg-convert', ['--version']).status === 0;
@@ -232,7 +230,7 @@ function save(poem, { plan, svgs, model, source, usage }) {
   svgs.forEach((svg, i) => {
     const file = join(temp, `${i + 1}.svg`);
     writeFileSync(file, `${prefixIds(svg, `${poem.id}-${i + 1}`)}\n`);
-    if (hasRsvg && spawnSync('rsvg-convert', ['-w', '800', file, '-o', join(temp, `${i + 1}.png`)]).status !== 0) warnings.push(`第 ${i + 1} 张导出 PNG 失败`);
+    if (config.png && hasRsvg && spawnSync('rsvg-convert', ['-w', '800', file, '-o', join(temp, `${i + 1}.png`)]).status !== 0) warnings.push(`第 ${i + 1} 张导出 PNG 失败`);
     if (!svg.includes('#b3372b')) warnings.push(`第 ${i + 1} 张好像没有印章`);
     if (!svg.includes('#7b3b2a')) warnings.push(`第 ${i + 1} 张好像没有边框`);
   });
@@ -298,7 +296,7 @@ seedExamples();
 const todo = poems.filter(p => config.redo.has(p.id) || !isDone(p));
 const systemChars = system.reduce((n, b) => n + b.text.length, 0);
 console.log(`共 ${poems.length} 首，要画 ${todo.length} 首；输出到 ${config.out}`);
-console.log(`模型 ${config.model}，effort ${config.effort}，同时 ${config.concurrency} 首；${hasRsvg ? '会用 rsvg-convert 检查并导出 PNG' : '没有 rsvg-convert：只做文本检查，不导出 PNG（brew install librsvg）'}`);
+console.log(`模型 ${config.model}，effort ${config.effort}，同时 ${config.concurrency} 首；${hasRsvg ? '会用 rsvg-convert 检查' + (config.png ? '并导出 PNG' : '') : '没有 rsvg-convert：只做文本检查（brew install librsvg）'}`);
 
 if (config.dryRun) {
   // 粗估：系统提示按 2.5 个字符一个 token；每首诗输出（含思考）按 2.5 万 token 估（试画两首是 2.1 万和 2.7 万）。实际以运行后的统计为准。
