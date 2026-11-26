@@ -1,0 +1,9 @@
+{
+  "name": "littlebear-poem-scripts",
+  "private": true,
+  "type": "module",
+  "description": "小熊读诗的离线脚本（配图生成），不随服务端部署",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.136.0"
+  }
+}
