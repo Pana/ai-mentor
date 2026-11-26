@@ -52,7 +52,63 @@ function pickVoice() {
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
 let speakRun = 0;
-function stopSpeaking() { speakRun++; if ('speechSynthesis' in window) speechSynthesis.cancel(); document.querySelectorAll('.line.reading').forEach(n => n.classList.remove('reading')); }
+function stopSpeaking() {
+  speakRun++;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  if (player) { player.audio.pause(); player.done(); player = null; }
+  document.querySelectorAll('.line.reading').forEach(n => n.classList.remove('reading'));
+}
+
+// 云端语音读诗：一段（题目、每一句）一个 mp3，服务端合成一次就存下来。边放这一段边取下一段。
+let player = null;
+// 一小段静音：在点击里先放它，iPad 的 Safari 才允许之后（等网络回来再）放声音。
+const silence = (() => {
+  const header = new DataView(new ArrayBuffer(44)); const text = (o, t) => [...t].forEach((c, i) => header.setUint8(o + i, c.charCodeAt(0)));
+  const samples = 800;
+  text(0, 'RIFF'); header.setUint32(4, 36 + samples * 2, true); text(8, 'WAVEfmt '); header.setUint32(16, 16, true);
+  header.setUint16(20, 1, true); header.setUint16(22, 1, true); header.setUint32(24, 8000, true); header.setUint32(28, 16000, true);
+  header.setUint16(32, 2, true); header.setUint16(34, 16, true); text(36, 'data'); header.setUint32(40, samples * 2, true);
+  return URL.createObjectURL(new Blob([header, new Uint8Array(samples * 2)], { type: 'audio/wav' }));
+})();
+async function fetchAudio(id, part) {
+  const token = store.get('token', '');
+  const response = await fetch(`/v1/poems/audio?id=${encodeURIComponent(id)}&part=${part}`, { credentials: 'same-origin',
+    headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok) throw Object.assign(new Error('audio'), { status: response.status });
+  return URL.createObjectURL(await response.blob());
+}
+/**
+ * 用云端语音读一首诗，读到第 i 段时调用 onPart(i)。第一段就取不到时返回 false（调用方改用系统语音）；
+ * 中途被打断或出错就停下。必须在点击里同步调用（见 silence）。
+ */
+async function playPoem(poem, onPart) {
+  stopSpeaking();
+  const run = speakRun;
+  const audio = new Audio(silence);
+  audio.play().catch(() => {});
+  const count = poem.lines.length + 1;
+  let next = fetchAudio(poem.id, 0);
+  for (let i = 0; i < count; i++) {
+    let url;
+    try { url = await next; } catch { return i > 0; }
+    if (run !== speakRun) { URL.revokeObjectURL(url); return true; }
+    next = i + 1 < count ? fetchAudio(poem.id, i + 1) : null;
+    next?.catch(() => {});
+    onPart(i);
+    const ok = await new Promise(resolve => {
+      player = { audio, done: () => resolve(false) };
+      audio.onended = () => resolve(true);
+      audio.onerror = () => resolve(false);
+      audio.src = url;
+      audio.play().catch(() => resolve(false));
+    });
+    URL.revokeObjectURL(url);
+    if (!ok || run !== speakRun) return true;
+  }
+  player = null;
+  onPart(-1);
+  return true;
+}
 /** 依次读出 parts，每段开始时调用 onPart(i)。被新的朗读打断就停。 */
 function speakParts(parts, { rate = 0.85, onPart = () => {} } = {}) {
   if (!('speechSynthesis' in window)) return Promise.resolve();
@@ -263,7 +319,8 @@ async function showAuthor(name, dynasty) {
 }
 
 // ---------- 一首诗 ----------
-const poemState = { poem: null, explanation: null, pinyin: store.get('pinyin', true) };
+// rows：每一行的拼音（来自讲解，或单独标的），没有时是 null。
+const poemState = { poem: null, explanation: null, rows: null, pinyin: store.get('pinyin', true) };
 
 async function showPoem(id) {
   view.replaceChildren(waiting('正在打开……'));
@@ -271,16 +328,22 @@ async function showPoem(id) {
   try { poem = await api(`/v1/poems/poem/${encodeURIComponent(id)}`); } catch (error) {
     return view.replaceChildren(status(error.status === 404 ? '没有这首诗。' : '打不开这首诗，请稍后再试。', true));
   }
-  poemState.poem = poem; poemState.explanation = poem.explanation;
+  poemState.poem = poem; poemState.explanation = poem.explanation; poemState.rows = poem.pinyin ?? null;
   const linesBox = el('div', { class: 'poem-lines', lang: 'zh-CN' });
   const pickedBar = el('div', { class: 'picked-bar', hidden: true });
   const pinyinButton = el('button', { class: 'btn', type: 'button', 'aria-pressed': String(poemState.pinyin), onclick: () => {
     poemState.pinyin = !poemState.pinyin; store.set('pinyin', poemState.pinyin);
     pinyinButton.setAttribute('aria-pressed', String(poemState.pinyin)); renderLines(linesBox);
+    if (poemState.pinyin) loadPinyin(linesBox, pinyinButton);
   } }, '拼音');
-  const readButton = el('button', { class: 'btn', type: 'button', onclick: () => {
+  const readButton = el('button', { class: 'btn', type: 'button', onclick: async () => {
+    const highlight = i => linesBox.querySelectorAll('.line').forEach((n, k) => n.classList.toggle('reading', k === i - 1));
     const parts = [`${poem.title}，${poem.dynasty ? poem.dynasty + '，' : ''}${poem.author}`, ...poem.lines];
-    speakParts(parts, { onPart: i => linesBox.querySelectorAll('.line').forEach((n, k) => n.classList.toggle('reading', k === i - 1)) });
+    if (!poem.speakable) return speakParts(parts, { onPart: highlight });
+    readButton.textContent = '🔊 准备中…';
+    const played = await playPoem(poem, i => { readButton.textContent = '🔊 读诗'; highlight(i); });
+    readButton.textContent = '🔊 读诗';
+    if (!played) speakParts(parts, { onPart: highlight });
   } }, '🔊 读诗');
   const explainBox = el('div', { class: 'explain' });
   const explainButton = el('button', { class: 'btn primary', type: 'button', onclick: () => loadExplanation(explainBox, explainButton, linesBox) }, '🐻 小熊讲一讲');
@@ -308,14 +371,30 @@ async function showPoem(id) {
       notes),
     explainBox);
   renderLines(linesBox);
+  if (poemState.pinyin) loadPinyin(linesBox, pinyinButton);
   linesBox.addEventListener('click', event => pickChar(event, linesBox, pickedBar));
   if (poem.explanation) renderExplanation(explainBox, poem.explanation, linesBox);
 }
 
+/** 没讲过的诗打开时还没有拼音：单独请小熊标一下（几秒），标好的服务端会存下来。 */
+async function loadPinyin(linesBox, button) {
+  const { poem } = poemState;
+  if (poemState.rows || !poem.pinyinable || poemState.loadingPinyin === poem.id) return;
+  poemState.loadingPinyin = poem.id;
+  button.textContent = '拼音…'; button.setAttribute('aria-busy', 'true');
+  try {
+    const { pinyin } = await api('/v1/poems/pinyin', { method: 'POST', body: JSON.stringify({ id: poem.id }) });
+    if (poemState.poem === poem && !poemState.rows) { poemState.rows = pinyin; renderLines(linesBox); }
+  } catch { /* 标不了就不显示拼音 */ } finally {
+    if (poemState.loadingPinyin === poem.id) poemState.loadingPinyin = null;
+    button.textContent = '拼音'; button.removeAttribute('aria-busy');
+  }
+}
+
 /** 诗句：每个汉字一个可以点的 span，有拼音时套上 ruby。 */
 function renderLines(box) {
-  const { poem, explanation } = poemState;
-  const pinyin = explanation?.pinyin;
+  const { poem } = poemState;
+  const pinyin = poemState.rows;
   box.classList.toggle('with-pinyin', poemState.pinyin && !!pinyin);
   box.replaceChildren(...poem.lines.map((line, i) => {
     const syllables = pinyin?.[i] ?? null;
@@ -347,6 +426,7 @@ async function loadExplanation(box, button, linesBox) {
   try {
     const explanation = await api('/v1/poems/explain', { method: 'POST', body: JSON.stringify({ id: poemState.poem.id }) });
     poemState.explanation = explanation;
+    if (explanation.pinyin?.some(Boolean)) poemState.rows = explanation.pinyin;
     button.remove();
     renderLines(linesBox);
     renderExplanation(box, explanation, linesBox);

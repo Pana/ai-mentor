@@ -5,20 +5,23 @@ const FINISHED = 20_000_000;
 
 /**
  * Volcengine/Doubao speech synthesis over the V3 HTTP chunked endpoint. Each response line is a JSON object;
- * `data` holds base64 audio, and code 20000000 ends the stream. Audio is 24 kHz mono PCM16LE.
+ * `data` holds base64 audio, and code 20000000 ends the stream. Audio is 24 kHz mono PCM16LE, or `format` ('mp3' for
+ * audio that is saved as a file, like the poems page's read-aloud).
  */
 export function createVolcTts({ apiKey, resourceId = DEFAULT_RESOURCE_ID, speaker, url = DEFAULT_URL, speechRate = 0,
-  fetchImpl = fetch } = {}) {
+  format = 'pcm', fetchImpl = fetch } = {}) {
   if (!apiKey || !speaker) return null;
   resourceId ||= DEFAULT_RESOURCE_ID; url ||= DEFAULT_URL;
   return {
     sampleRate: TTS_SAMPLE_RATE,
+    /** Says which voice this is, so saved audio is redone when the voice or speed changes. */
+    voice: `${resourceId}|${speaker}|${speechRate}|${format}`,
     /** Yields PCM chunks for `text` as they arrive. */
     async *synthesize(text, { signal } = {}) {
       const response = await fetchImpl(url, { method: 'POST', redirect: 'error', signal,
         headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey, 'X-Api-Resource-Id': resourceId },
         body: JSON.stringify({ user: { uid: 'littlebear-teacher' }, req_params: { text, speaker,
-          audio_params: { format: 'pcm', sample_rate: TTS_SAMPLE_RATE, speech_rate: speechRate } } }) });
+          audio_params: { format, sample_rate: TTS_SAMPLE_RATE, speech_rate: speechRate } } }) });
       if (!response.ok) throw new Error(`volc_tts_http_${response.status}`);
       const decoder = new TextDecoder();
       let buffer = '', finished = false;

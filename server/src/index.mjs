@@ -15,8 +15,12 @@ const tts = createVolcTts({ apiKey: process.env.VOLC_TTS_API_KEY || process.env.
   speechRate: Number(process.env.VOLC_TTS_SPEECH_RATE || 0) });
 const hanzi = createHanzi({ token: process.env.TUTOR_DEVICE_TOKEN, dataDir: process.env.DATA_DIR || './data',
   model: { ...model, model: process.env.HANZI_MODEL_NAME || model.model, thinking: process.env.HANZI_MODEL_THINKING || 'disabled' }, asr });
+// 读诗用同一个火山语音账号，存成 mp3；声音和语速可以和小熊老师分开设，默认读得慢一点。
+const poemsTts = createVolcTts({ apiKey: process.env.VOLC_TTS_API_KEY || process.env.VOLC_ASR_API_KEY,
+  resourceId: process.env.VOLC_TTS_RESOURCE_ID, speaker: process.env.POEMS_TTS_SPEAKER || process.env.VOLC_TTS_SPEAKER,
+  url: process.env.VOLC_TTS_URL, speechRate: Number(process.env.POEMS_TTS_SPEECH_RATE ?? -15), format: 'mp3' });
 const poems = createPoems({ token: process.env.TUTOR_DEVICE_TOKEN, dataDir: process.env.DATA_DIR || './data',
-  libraryPath: process.env.POEMS_DB || undefined,
+  libraryPath: process.env.POEMS_DB || undefined, tts: poemsTts,
   model: { ...model, model: process.env.POEMS_MODEL_NAME || model.model, thinking: process.env.POEMS_MODEL_THINKING || 'disabled' } });
 const server = createGateway({ updateDir: process.env.ANDROID_UPDATE_DIR || (process.env.DATA_DIR || './data') + '/android-updates', token: process.env.TUTOR_DEVICE_TOKEN, ...model,
   visionModel: process.env.MODEL_VISION_NAME || '', imagesSupported: process.env.MODEL_SUPPORTS_IMAGES !== 'false',
