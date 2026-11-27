@@ -275,6 +275,8 @@ export function loadShippedExplanations(path = defaultExplanations) {
  * 只认诗文摘要对得上的，返回 id → [{ src, caption, line, at }]：这张图从第 line 行（poem.lines 的下标）的 at 处（0–1，按字数）开始，
  * 页面读诗时按读到的位置换图。分镜按句子（poemSentences）分，一行两句时可能一行两张图。
  */
+const artExts = new Set(['svg', 'webp', 'jpg', 'jpeg', 'png']);
+
 export function loadArt(poems, path = defaultArt) {
   const art = new Map();
   if (!existsSync(path)) return art;
@@ -289,8 +291,9 @@ export function loadArt(poems, path = defaultArt) {
     });
     const scenes = entry.scenes.map((scene, n) => {
       const first = starts[Math.min(...(scene.lines ?? []))];
-      return first && /^[0-9a-f]{0,16}$/.test(scene.v ?? '') && {
-        src: `/poems/art/${encodeURIComponent(poem.id)}/${n + 1}.svg${scene.v ? `?v=${scene.v}` : ''}`,
+      const ext = scene.ext ?? 'svg';
+      return first && artExts.has(ext) && /^[0-9a-f]{0,16}$/.test(scene.v ?? '') && {
+        src: `/poems/art/${encodeURIComponent(poem.id)}/${n + 1}.${ext}${scene.v ? `?v=${scene.v}` : ''}`,
         caption: String(scene.caption ?? ''), line: first.line, at: Math.round(first.at * 1000) / 1000 };
     });
     if (scenes.every(Boolean)) art.set(poem.id, scenes);

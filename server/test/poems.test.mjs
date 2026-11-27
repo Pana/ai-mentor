@@ -372,3 +372,23 @@ test('textbook poems come with their pictures, placed by sentence', async t => {
   assert.match(image.headers.get('content-security-policy'), /default-src 'none'/);
   assert.equal(await image.text(), svg);
 });
+
+test('raster poem art (jpg/webp/png) is served with the matching extension and mime type', async t => {
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const { base, get, dataDir } = await setup(t, { artFile: poems => ({
+    s1b01: { key: poemDigest(poems[0]), scenes: [
+      { lines: [0, 1], caption: '前两句', v: '11223344', ext: 'jpg' },
+      { lines: [2, 3], caption: '后两句', v: '55667788', ext: 'webp' }
+    ] }
+  }) });
+  mkdirSync(join(dataDir, 'web/art/s1b01'), { recursive: true });
+  writeFileSync(join(dataDir, 'web/art/s1b01/1.jpg'), jpg);
+
+  const { body } = await get('/v1/poems/poem/s1b01');
+  assert.equal(body.art[0].src, '/poems/art/s1b01/1.jpg?v=11223344');
+  assert.equal(body.art[1].src, '/poems/art/s1b01/2.webp?v=55667788');
+  const image = await fetch(`${base}${body.art[0].src}`);
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('content-type'), 'image/jpeg');
+  assert.equal(image.headers.get('content-security-policy'), null);
+});

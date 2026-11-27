@@ -27,6 +27,16 @@ const school = loadSchoolPoems();
 const poems = new Map([...school, ...loadLevelPoems(undefined, school).own].map(p => [p.id, p]));
 if (!existsSync(from)) { console.error(`没有 ${from}，先用 illustrate.mjs 画。`); process.exit(1); }
 
+// 支持位图与 SVG；同一分镜同时存在多种格式时优先位图（webp > jpg > jpeg > png > svg）。
+const exts = ['webp', 'jpg', 'jpeg', 'png', 'svg'];
+const findImage = (dir, n) => {
+  for (const ext of exts) {
+    const file = join(dir, `${n}.${ext}`);
+    if (existsSync(file)) return { file, ext };
+  }
+  return null;
+};
+
 const manifest = {};
 const skipped = [];
 for (const id of readdirSync(from).sort()) {
@@ -38,20 +48,27 @@ for (const id of readdirSync(from).sort()) {
   if (meta.textKey !== poemDigest(poem)) { skipped.push(`${id} ${poem.title}：诗文改过了，要重画（--redo ${id}）`); continue; }
   const scenes = meta.plan?.scenes ?? [];
   const count = poemSentences(poem).length;
-  const files = scenes.map((_, i) => join(from, id, `${i + 1}.svg`));
-  if (!scenes.length || scenes.length !== meta.images || !files.every(f => existsSync(f))
+  const found = scenes.map((_, i) => findImage(join(from, id), i + 1));
+  if (!scenes.length || scenes.length !== meta.images || !found.every(Boolean)
     || scenes.some(s => !Array.isArray(s.lines) || s.lines.some(n => !Number.isInteger(n) || n < 0 || n >= count))) {
     skipped.push(`${id} ${poem.title}：分镜和图片对不上`); continue;
   }
   const version = file => createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 8);
-  manifest[id] = { key: meta.textKey, scenes: scenes.map((s, i) => ({ lines: s.lines, caption: s.caption, v: version(files[i]) })), files };
+  manifest[id] = {
+    key: meta.textKey,
+    scenes: scenes.map((s, i) => ({
+      lines: s.lines, caption: s.caption, v: version(found[i].file),
+      ...(found[i].ext !== 'svg' ? { ext: found[i].ext } : {})
+    })),
+    files: found
+  };
 }
 
 rmSync(artDir, { recursive: true, force: true });
 let images = 0;
 for (const [id, entry] of Object.entries(manifest)) {
   mkdirSync(join(artDir, id), { recursive: true });
-  entry.files.forEach((file, i) => { copyFileSync(file, join(artDir, id, `${i + 1}.svg`)); images++; });
+  entry.files.forEach(({ file, ext }, i) => { copyFileSync(file, join(artDir, id, `${i + 1}.${ext}`)); images++; });
   delete entry.files;
 }
 // 一首一行，重画某首时 diff 只动那一行。
