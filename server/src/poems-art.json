@@ -1,127 +1,3303 @@
 {
-"k1a01": {"key":"ea362ebe724900a7","scenes":[{"lines":[0,1],"caption":"少小离家老大回，乡音无改鬓毛衰。","v":"c471f1ce","ext":"webp"},{"lines":[2,3],"caption":"儿童相见不相识，笑问客从何处来。","v":"e765747c","ext":"webp"}]},
-"k1a02": {"key":"6097103c4c4cd0fa","scenes":[{"lines":[0,1],"caption":"孩儿立志出乡关，学不成名誓不还。","v":"fe15dd94","ext":"webp"},{"lines":[2,3],"caption":"埋骨何须桑梓地，人生无处不青山。","v":"b3a337fb","ext":"webp"}]},
-"k2a01": {"key":"097da555b466827c","scenes":[{"lines":[0,1],"caption":"独坐池塘如虎踞，绿荫树下养精神。","v":"315cff8a","ext":"webp"},{"lines":[2,3],"caption":"春来我不先开口，哪个虫儿敢作声？","v":"7d411b6e","ext":"webp"}]},
-"k3a01": {"key":"4dc71f404dfb5286","scenes":[{"lines":[0,1,2,3],"caption":"小时不识月，呼作白玉盘。又疑瑶台镜，飞在青云端。","v":"4689fa70","ext":"webp"},{"lines":[4,5],"caption":"仙人垂两足，桂树何团团。","v":"b603018e","ext":"webp"},{"lines":[6,7],"caption":"白兔捣药成，问言与谁餐。","v":"d46ce806","ext":"webp"}]},
-"k3a02": {"key":"467895c36197b6ec","scenes":[{"lines":[0,1,2,3],"caption":"人生易老天难老，岁岁重阳。今又重阳，战地黄花分外香。","v":"62ac14f6","ext":"webp"},{"lines":[4,5,6,7],"caption":"一年一度秋风劲，不似春光。胜似春光，寥廓江天万里霜。","v":"b3dbe973","ext":"webp"}]},
-"k4a01": {"key":"3192e21dbe02885a","scenes":[{"lines":[0,1],"caption":"飒爽英姿五尺枪，曙光初照演兵场。","v":"e035000e","ext":"webp"},{"lines":[2,3],"caption":"中华儿女多奇志，不爱红装爱武装。","v":"3eea26e8","ext":"webp"}]},
-"k5a01": {"key":"105279c82080f04b","scenes":[{"lines":[0,1],"caption":"常记溪亭日暮，沉醉不知归路。","v":"19d37816","ext":"webp"},{"lines":[2,3],"caption":"兴尽晚回舟，误入藕花深处。","v":"79146fa9","ext":"webp"},{"lines":[4,5,6],"caption":"争渡，争渡，惊起一滩鸥鹭。","v":"7fdc229d","ext":"webp"}]},
-"k5a02": {"key":"bfbacb63d7c5c6dd","scenes":[{"lines":[0,1],"caption":"翻身跃入七人房，回首峰峦入莽苍。","v":"dddd2fa9","ext":"webp"},{"lines":[2,3],"caption":"四十八盘才走过，风驰又已到钱塘。","v":"ff0c54e5","ext":"webp"}]},
-"k6a01": {"key":"97e0f16053d1dadb","scenes":[{"lines":[0,1,2,3],"caption":"离离原上草，一岁一枯荣。野火烧不尽，春风吹又生。","v":"22b8237f","ext":"webp"},{"lines":[4,5],"caption":"远芳侵古道，晴翠接荒城。","v":"4c818bdc","ext":"webp"},{"lines":[6,7],"caption":"又送王孙去，萋萋满别情。","v":"c24883ce","ext":"webp"}]},
-"k6a02": {"key":"216073341be04f1e","scenes":[{"lines":[0,1,2,3],"caption":"昨夜雨疏风骤，浓睡不消残酒。试问卷帘人，却道海棠依旧。","v":"e6437bab","ext":"webp"},{"lines":[4,5,6],"caption":"知否，知否，应是绿肥红瘦。","v":"b8b2453f","ext":"webp"}]},
-"k6a03": {"key":"2f984abfc736386b","scenes":[{"lines":[0,1],"caption":"一山飞峙大江边，跃上葱茏四百旋。","v":"23390ee7","ext":"webp"},{"lines":[2,3,4,5],"caption":"冷眼向洋看世界，热风吹雨洒江天。云横九派浮黄鹤，浪下三吴起白烟。","v":"a44acf87","ext":"webp"},{"lines":[6,7],"caption":"陶令不知何处去，桃花源里可耕田。","v":"ea61b200","ext":"webp"}]},
-"s1a01": {"key":"e62889e65f292c49","scenes":[{"lines":[0],"caption":"鹅，鹅，鹅","v":"85ec4ba9","ext":"webp"},{"lines":[1],"caption":"曲项向天歌","v":"f1b01921","ext":"webp"},{"lines":[2],"caption":"白毛浮绿水","v":"33cfcc0c","ext":"webp"},{"lines":[3],"caption":"红掌拨清波","v":"3299d5a4","ext":"webp"}]},
-"s1a02": {"key":"89618c4f8a3218ca","scenes":[{"lines":[0,1],"caption":"远看山有色，近听水无声。","v":"c44ca240","ext":"webp"},{"lines":[2,3],"caption":"春去花还在，人来鸟不惊。","v":"e625b366","ext":"webp"}]},
-"s1a03": {"key":"ef6683b94903cf92","scenes":[{"lines":[0,1],"caption":"锄禾日当午，汗滴禾下土。","v":"52037695","ext":"webp"},{"lines":[2,3],"caption":"谁知盘中餐，粒粒皆辛苦？","v":"113d2fca","ext":"webp"}]},
-"s1a04": {"key":"91aae90acd4d10db","scenes":[{"lines":[0,1],"caption":"江南可采莲，莲叶何田田。","v":"0918fb91","ext":"webp"},{"lines":[2,3,4,5,6],"caption":"鱼戏莲叶间。鱼戏莲叶东，鱼戏莲叶西，鱼戏莲叶南，鱼戏莲叶北。","v":"1ceeb3a8","ext":"webp"}]},
-"s1a05": {"key":"3d24637bb41f147c","scenes":[{"lines":[0,1],"caption":"小时不识月，呼作白玉盘。","v":"4735bace","ext":"webp"},{"lines":[2,3],"caption":"又疑瑶台镜，飞在青云端。","v":"5d5d658b","ext":"webp"}]},
-"s1a06": {"key":"28745f286361aad8","scenes":[{"lines":[0],"caption":"解落三秋叶，","v":"4b33f95f","ext":"webp"},{"lines":[1],"caption":"能开二月花。","v":"d9ff32ae","ext":"webp"},{"lines":[2],"caption":"过江千尺浪，","v":"81e19d92","ext":"webp"},{"lines":[3],"caption":"入竹万竿斜。","v":"580e30eb","ext":"webp"}]},
-"s1b01": {"key":"b24f2ffb7a9b5aec","scenes":[{"lines":[0,1],"caption":"春眠不觉晓，处处闻啼鸟。","v":"4f473e81","ext":"webp"},{"lines":[2],"caption":"夜来风雨声，","v":"f9fb2a71","ext":"webp"},{"lines":[3],"caption":"花落知多少。","v":"76090f27","ext":"webp"}]},
-"s1b02": {"key":"894d52f77bd1013d","scenes":[{"lines":[0,1],"caption":"松下问童子，言师采药去。","v":"72b34f48","ext":"webp"},{"lines":[2,3],"caption":"只在此山中，云深不知处。","v":"7d2608c7","ext":"webp"}]},
-"s1b03": {"key":"a9dc04fa1201adb6","scenes":[{"lines":[0],"caption":"李白乘舟将欲行，","v":"64aafc9e","ext":"webp"},{"lines":[1],"caption":"忽闻岸上踏歌声。","v":"cec415b5","ext":"webp"},{"lines":[2,3],"caption":"桃花潭水深千尺，不及汪伦送我情。","v":"6b780634","ext":"webp"}]},
-"s1b04": {"key":"b0f7cde0fab60b8c","scenes":[{"lines":[0],"caption":"床前明月光","v":"a48af91a","ext":"webp"},{"lines":[1],"caption":"疑是地上霜","v":"b7511c16","ext":"webp"},{"lines":[2],"caption":"举头望明月","v":"c6f4fd50","ext":"webp"},{"lines":[3],"caption":"低头思故乡","v":"ab5fdda7","ext":"webp"}]},
-"s1b05": {"key":"51b299919191935d","scenes":[{"lines":[0,1],"caption":"小娃撑小艇，偷采白莲回。","v":"beb84acd","ext":"webp"},{"lines":[2,3],"caption":"不解藏踪迹，浮萍一道开。","v":"e16671b8","ext":"webp"}]},
-"s1b06": {"key":"e98e96caf5637105","scenes":[{"lines":[0,1],"caption":"泉眼无声惜细流，树阴照水爱晴柔。","v":"05979bc7","ext":"webp"},{"lines":[2,3],"caption":"小荷才露尖尖角，早有蜻蜓立上头。","v":"a23c97b0","ext":"webp"}]},
-"s1b07": {"key":"accd612905d510c8","scenes":[{"lines":[0,1],"caption":"头上红冠不用裁，满身雪白走将来。","v":"8b9070bb","ext":"webp"},{"lines":[2,3],"caption":"平生不敢轻言语，一叫千门万户开。","v":"f6e19621","ext":"webp"}]},
-"s2a01": {"key":"8f7760559912e661","scenes":[{"lines":[0,1],"caption":"墙角数枝梅，凌寒独自开。","v":"40dda257","ext":"webp"},{"lines":[2,3],"caption":"遥知不是雪，为有暗香来。","v":"a3744da5","ext":"webp"}]},
-"s2a02": {"key":"b8ec449da9bcb665","scenes":[{"lines":[0,1],"caption":"蓬头稚子学垂纶，侧坐莓苔草映身。","v":"44d72b18","ext":"webp"},{"lines":[2,3],"caption":"路人借问遥招手，怕得鱼惊不应人。","v":"49cc54bd","ext":"webp"}]},
-"s2a03": {"key":"60c87b62373b95a9","scenes":[{"lines":[0,1],"caption":"白日依山尽，黄河入海流。","v":"0400e929","ext":"webp"},{"lines":[2,3],"caption":"欲穷千里目，更上一层楼。","v":"45003c83","ext":"webp"}]},
-"s2a04": {"key":"75058d2cab77e78e","scenes":[{"lines":[0,1],"caption":"日照香炉生紫烟，遥看瀑布挂前川。","v":"e75f6239","ext":"webp"},{"lines":[2],"caption":"飞流直下三千尺，","v":"d5e8b5f2","ext":"webp"},{"lines":[3],"caption":"疑是银河落九天。","v":"e4a363f5","ext":"webp"}]},
-"s2a05": {"key":"ae932691c1aacef4","scenes":[{"lines":[0,1],"caption":"千山鸟飞绝，万径人踪灭。","v":"ba9db7f5","ext":"webp"},{"lines":[2,3],"caption":"孤舟蓑笠翁，独钓寒江雪。","v":"d39d3872","ext":"webp"}]},
-"s2a06": {"key":"068937cad75427a8","scenes":[{"lines":[0,1],"caption":"敕勒川，阴山下。","v":"77fd8b64","ext":"webp"},{"lines":[2,3],"caption":"天似穹庐，笼盖四野。","v":"299d58de","ext":"webp"},{"lines":[4,5,6],"caption":"天苍苍，野茫茫，风吹草低见牛羊。","v":"8af7dedf","ext":"webp"}]},
-"s2a07": {"key":"99b162de3c265202","scenes":[{"lines":[0,1],"caption":"危楼高百尺，手可摘星辰。","v":"97cce986","ext":"webp"},{"lines":[2,3],"caption":"不敢高声语，恐惊天上人。","v":"b5790e42","ext":"webp"}]},
-"s2b01": {"key":"dc0c6a442c709da2","scenes":[{"lines":[0,1],"caption":"碧玉妆成一树高，万条垂下绿丝绦。","v":"6ba55d47","ext":"webp"},{"lines":[2,3],"caption":"不知细叶谁裁出，二月春风似剪刀。","v":"617eca7d","ext":"webp"}]},
-"s2b02": {"key":"14adcb16e677ac9f","scenes":[{"lines":[0,1],"caption":"草长莺飞二月天，拂堤杨柳醉春烟。","v":"1ee0f6bc","ext":"webp"},{"lines":[2,3],"caption":"儿童散学归来早，忙趁东风放纸鸢。","v":"8f8f3f2a","ext":"webp"}]},
-"s2b03": {"key":"4582251a869b60fe","scenes":[{"lines":[0,1],"caption":"离离原上草，一岁一枯荣。","v":"58347670","ext":"webp"},{"lines":[2],"caption":"野火烧不尽，","v":"db1f32d4","ext":"webp"},{"lines":[3],"caption":"春风吹又生。","v":"e57aa9a8","ext":"webp"}]},
-"s2b04": {"key":"dfcf9314c33d0caf","scenes":[{"lines":[0,1],"caption":"两个黄鹂鸣翠柳，一行白鹭上青天。","v":"94fddf26","ext":"webp"},{"lines":[2,3],"caption":"窗含西岭千秋雪，门泊东吴万里船。","v":"f3df7f61","ext":"webp"}]},
-"s2b05": {"key":"19840613acb36e2c","scenes":[{"lines":[0,1],"caption":"毕竟西湖六月中，风光不与四时同。","v":"7c6a967f","ext":"webp"},{"lines":[2,3],"caption":"接天莲叶无穷碧，映日荷花别样红。","v":"803969a1","ext":"webp"}]},
-"s2b06": {"key":"c9261eb0061f66b4","scenes":[{"lines":[0],"caption":"春种一粒粟，","v":"5bcfdb43","ext":"webp"},{"lines":[1],"caption":"秋收万颗子。","v":"b9eeedc6","ext":"webp"},{"lines":[2],"caption":"四海无闲田，","v":"adb4bd94","ext":"webp"},{"lines":[3],"caption":"农夫犹饿死。","v":"557a328a","ext":"webp"}]},
-"s2b07": {"key":"cdadfa703d591722","scenes":[{"lines":[0,1],"caption":"江上往来人，但爱鲈鱼美。","v":"daedeef5","ext":"webp"},{"lines":[2,3],"caption":"君看一叶舟，出没风波里。","v":"ab33e8f5","ext":"webp"}]},
-"s3a01": {"key":"58c4e4752877a1a2","scenes":[{"lines":[0,1],"caption":"牧童骑黄牛，歌声振林樾。","v":"2b633d7d"},{"lines":[2,3],"caption":"意欲捕鸣蝉，忽然闭口立。","v":"b9ecff2f"}]},
-"s3a02": {"key":"2ddbcb30df5bd770","scenes":[{"lines":[0,1],"caption":"湖光秋月两相和，潭面无风镜未磨。","v":"ed32641a"},{"lines":[2,3],"caption":"遥望洞庭山水翠，白银盘里一青螺。","v":"aa93bc70"}]},
-"s3a03": {"key":"4045d3413d1bf334","scenes":[{"lines":[0,1],"caption":"远上寒山石径斜，白云生处有人家。","v":"728fcdbb"},{"lines":[2],"caption":"停车坐爱枫林晚，","v":"852127a5"},{"lines":[3],"caption":"霜叶红于二月花。","v":"04aa7d0a"}]},
-"s3a04": {"key":"afaaa1fac6a5595d","scenes":[{"lines":[0,1],"caption":"萧萧梧叶送寒声，江上秋风动客情。","v":"04bedadf"},{"lines":[2,3],"caption":"知有儿童挑促织，夜深篱落一灯明。","v":"be60f9fb"}]},
-"s3a05": {"key":"7a2a48f2c93ac25f","scenes":[{"lines":[0,1],"caption":"月黑见渔灯，孤光一点萤。","v":"bf3d8026"},{"lines":[2,3],"caption":"微微风簇浪，散作满河星。","v":"5bf45dcd"}]},
-"s3a06": {"key":"e7e9b6da247c36ff","scenes":[{"lines":[0,1],"caption":"朝辞白帝彩云间，千里江陵一日还。","v":"957497a2"},{"lines":[2,3],"caption":"两岸猿声啼不住，轻舟已过万重山。","v":"e4e0efe9"}]},
-"s3a07": {"key":"bb27a0ff7a8abb8c","scenes":[{"lines":[0,1],"caption":"空山不见人，但闻人语响。","v":"08283bb5"},{"lines":[2,3],"caption":"返景入深林，复照青苔上。","v":"575e0324"}]},
-"s3a08": {"key":"b09e1a4465b5cc18","scenes":[{"lines":[0,1],"caption":"天门中断楚江开，碧水东流至此回。","v":"04481173"},{"lines":[2,3],"caption":"两岸青山相对出，孤帆一片日边来。","v":"72999e40"}]},
-"s3a09": {"key":"8b0af97cb6a66187","scenes":[{"lines":[0],"caption":"水光潋滟晴方好，","v":"ee60c077"},{"lines":[1],"caption":"山色空蒙雨亦奇。","v":"1f976192"},{"lines":[2,3],"caption":"欲把西湖比西子，淡妆浓抹总相宜。","v":"dd8f43e2"}]},
-"s3a10": {"key":"3fa1de48af3ac25e","scenes":[{"lines":[0,1],"caption":"荷叶罗裙一色裁，芙蓉向脸两边开。","v":"cb6d7bec"},{"lines":[2,3],"caption":"乱入池中看不见，闻歌始觉有人来。","v":"01e21ec5"}]},
-"s3b01": {"key":"15b220c8a0707f83","scenes":[{"lines":[0,1],"caption":"迟日江山丽，春风花草香。","v":"3e3884ef"},{"lines":[2,3],"caption":"泥融飞燕子，沙暖睡鸳鸯。","v":"86839bf1"}]},
-"s3b02": {"key":"bc05270d018f2e76","scenes":[{"lines":[0,1,2,3],"caption":"竹外桃花三两枝，春江水暖鸭先知。蒌蒿满地芦芽短，正是河豚欲上时。","v":"1264afcd"}]},
-"s3b03": {"key":"87f04c686f6a1130","scenes":[{"lines":[0,1],"caption":"梅子黄时日日晴，小溪泛尽却山行。","v":"88b46c03"},{"lines":[2,3],"caption":"绿阴不减来时路，添得黄鹂四五声。","v":"fb933563"}]},
-"s3b04": {"key":"4bb9213f2de31f76","scenes":[{"lines":[0,1],"caption":"江南好，风景旧曾谙。","v":"048c1c3b"},{"lines":[2,3],"caption":"日出江花红胜火，春来江水绿如蓝。","v":"838c259a"},{"lines":[4],"caption":"能不忆江南？","v":"d70f4b0e"}]},
-"s3b05": {"key":"60b65f7a3cdd0b64","scenes":[{"lines":[0],"caption":"爆竹声中一岁除，","v":"c4c8e7c5"},{"lines":[1],"caption":"春风送暖入屠苏。","v":"8af383bb"},{"lines":[2,3],"caption":"千门万户曈曈日，总把新桃换旧符。","v":"fde1af66"}]},
-"s3b06": {"key":"7ffa888f1224583d","scenes":[{"lines":[0,1],"caption":"清明时节雨纷纷，路上行人欲断魂。","v":"8a2e1436"},{"lines":[2,3],"caption":"借问酒家何处有？牧童遥指杏花村。","v":"d9389960"}]},
-"s3b07": {"key":"c85752eddab0892a","scenes":[{"lines":[0,1],"caption":"独在异乡为异客，每逢佳节倍思亲。","v":"8ad59a68"},{"lines":[2,3],"caption":"遥知兄弟登高处，遍插茱萸少一人。","v":"55cafb50"}]},
-"s3b08": {"key":"79ea3a483782ed84","scenes":[{"lines":[0,1],"caption":"独怜幽草涧边生，上有黄鹂深树鸣。","v":"6a4f678e"},{"lines":[2,3],"caption":"春潮带雨晚来急，野渡无人舟自横。","v":"a784c0c3"}]},
-"s3b09": {"key":"73e98c1bdde9f884","scenes":[{"lines":[0],"caption":"人间四月芳菲尽，","v":"432088c7"},{"lines":[1],"caption":"山寺桃花始盛开。","v":"43b0296f"},{"lines":[2,3],"caption":"长恨春归无觅处，不知转入此中来。","v":"d3e099ab"}]},
-"s4a01": {"key":"70c6b0925a2c35dc","scenes":[{"lines":[0,1],"caption":"一道残阳铺水中，半江瑟瑟半江红。","v":"7e39119a"},{"lines":[2,3],"caption":"可怜九月初三夜，露似真珠月似弓。","v":"34aa1eb8"}]},
-"s4a02": {"key":"4e398cf60eb47f3c","scenes":[{"lines":[0,1],"caption":"横看成岭侧成峰，远近高低各不同。","v":"3c219524"},{"lines":[2,3],"caption":"不识庐山真面目，只缘身在此山中。","v":"24533eee"}]},
-"s4a03": {"key":"8594c22984527902","scenes":[{"lines":[0],"caption":"梅雪争春未肯降，","v":"ce3ee054"},{"lines":[1],"caption":"骚人阁笔费评章。","v":"8e5c6c91"},{"lines":[2,3],"caption":"梅须逊雪三分白，雪却输梅一段香。","v":"822e31c9"}]},
-"s4a04": {"key":"9bcfba97b857176d","scenes":[{"lines":[0,1],"caption":"荷尽已无擎雨盖，菊残犹有傲霜枝。","v":"0dbf2059"},{"lines":[2,3],"caption":"一年好景君须记，最是橙黄橘绿时。","v":"76a948a3"}]},
-"s4a05": {"key":"e6ff10d618d2bd2a","scenes":[{"lines":[0,1],"caption":"云母屏风烛影深，长河渐落晓星沉。","v":"eb6b2be5"},{"lines":[2,3],"caption":"嫦娥应悔偷灵药，碧海青天夜夜心。","v":"38f21d29"}]},
-"s4a06": {"key":"ced0390a78322860","scenes":[{"lines":[0,1],"caption":"千里黄云白日曛，北风吹雁雪纷纷。","v":"6b730e7b"},{"lines":[2,3],"caption":"莫愁前路无知己，天下谁人不识君？","v":"18b729f6"}]},
-"s4a07": {"key":"8bee8d4b0bcea6da","scenes":[{"lines":[0,1],"caption":"葡萄美酒夜光杯，欲饮琵琶马上催。","v":"f3f79865"},{"lines":[2],"caption":"醉卧沙场君莫笑，","v":"fae7f258"},{"lines":[3],"caption":"古来征战几人回？","v":"493d6881"}]},
-"s4a08": {"key":"367e03bea770e35d","scenes":[{"lines":[0],"caption":"秦时明月汉时关，","v":"94898344"},{"lines":[1],"caption":"万里长征人未还。","v":"ae87bfd3"},{"lines":[2,3],"caption":"但使龙城飞将在，不教胡马度阴山。","v":"02f28eb1"}]},
-"s4a09": {"key":"57491269cd05cd6b","scenes":[{"lines":[0,1],"caption":"生当作人杰，死亦为鬼雄。","v":"457695a3"},{"lines":[2,3],"caption":"至今思项羽，不肯过江东。","v":"4e7ddb1c"}]},
-"s4b01": {"key":"6f15fccfd071d3f3","scenes":[{"lines":[0,1],"caption":"梅子金黄杏子肥，麦花雪白菜花稀。","v":"2790d576"},{"lines":[2,3],"caption":"日长篱落无人过，惟有蜻蜓蛱蝶飞。","v":"fa826cba"}]},
-"s4b02": {"key":"eb0ea0bd6cc2688a","scenes":[{"lines":[0,1],"caption":"篱落疏疏一径深，树头新绿未成阴。","v":"55beddf1"},{"lines":[2],"caption":"儿童急走追黄蝶，","v":"9cc16538"},{"lines":[3],"caption":"飞入菜花无处寻。","v":"74ccae33"}]},
-"s4b03": {"key":"1ef0689e7a16ca17","scenes":[{"lines":[0,1],"caption":"茅檐低小，溪上青青草。","v":"f01b18dc"},{"lines":[2,3],"caption":"醉里吴音相媚好，白发谁家翁媪？","v":"2d9251c2"},{"lines":[4,5],"caption":"大儿锄豆溪东，中儿正织鸡笼。","v":"a6979faa"},{"lines":[6,7],"caption":"最喜小儿亡赖，溪头卧剥莲蓬。","v":"651d5592"}]},
-"s4b04": {"key":"48e82f22d95c13d1","scenes":[{"lines":[0,1],"caption":"风雨送春归，飞雪迎春到。","v":"68d7ad9f"},{"lines":[2,3],"caption":"已是悬崖百丈冰，犹有花枝俏。","v":"32a03acb"},{"lines":[4,5],"caption":"俏也不争春，只把春来报。","v":"ab1a8b5f"},{"lines":[6,7],"caption":"待到山花烂漫时，她在丛中笑。","v":"559229ee"}]},
-"s4b05": {"key":"82e6274cd8ab43dd","scenes":[{"lines":[0,1],"caption":"黄四娘家花满蹊，千朵万朵压枝低。","v":"4ff613e2"},{"lines":[2,3],"caption":"留连戏蝶时时舞，自在娇莺恰恰啼。","v":"98779e5c"}]},
-"s4b06": {"key":"c4700d4e045e334c","scenes":[{"lines":[0,1],"caption":"不论平地与山尖，无限风光尽被占。","v":"0a531339"},{"lines":[2,3],"caption":"采得百花成蜜后，为谁辛苦为谁甜？","v":"6fe61f51"}]},
-"s4b07": {"key":"42c89c66a245aa53","scenes":[{"lines":[0,1],"caption":"众鸟高飞尽，孤云独去闲。","v":"1a67785d"},{"lines":[2,3],"caption":"相看两不厌，只有敬亭山。","v":"b1943cdf"}]},
-"s4b08": {"key":"ce5617f56f3636c2","scenes":[{"lines":[0],"caption":"寒雨连江夜入吴，","v":"f09b14b7"},{"lines":[1],"caption":"平明送客楚山孤。","v":"6e1c7641"},{"lines":[2,3],"caption":"洛阳亲友如相问，一片冰心在玉壶。","v":"9a525751"}]},
-"s4b09": {"key":"e9c16e09f0fdf8c3","scenes":[{"lines":[0,1],"caption":"月黑雁飞高，单于夜遁逃。","v":"c0f0a1bb"},{"lines":[2,3],"caption":"欲将轻骑逐，大雪满弓刀。","v":"143c293b"}]},
-"s4b10": {"key":"a99b89ced1ec9acf","scenes":[{"lines":[0,1],"caption":"我家洗砚池头树，朵朵花开淡墨痕。","v":"7624834e"},{"lines":[2,3],"caption":"不要人夸好颜色，只留清气满乾坤。","v":"54e456dd"}]},
-"s5a01": {"key":"ce755b504b066cc3","scenes":[{"lines":[0,1],"caption":"七夕今宵看碧霄，牵牛织女渡河桥。","v":"d41fa9eb"},{"lines":[2,3],"caption":"家家乞巧望秋月，穿尽红丝几万条。","v":"8eca047e"}]},
-"s5a02": {"key":"f8e7b1385d814b1d","scenes":[{"lines":[0,1],"caption":"死去元知万事空，但悲不见九州同。","v":"61fcfc7c"},{"lines":[2],"caption":"王师北定中原日，","v":"3e02c416"},{"lines":[3],"caption":"家祭无忘告乃翁。","v":"91dfb59f"}]},
-"s5a03": {"key":"27bb94dd1fbeda47","scenes":[{"lines":[0,1],"caption":"山外青山楼外楼，西湖歌舞几时休？","v":"a91b3c45"},{"lines":[2,3],"caption":"暖风熏得游人醉，直把杭州作汴州。","v":"a6f76589"}]},
-"s5a04": {"key":"9ff6a216ebe136a4","scenes":[{"lines":[0,1],"caption":"九州生气恃风雷，万马齐喑究可哀。","v":"56ba8f98"},{"lines":[2,3],"caption":"我劝天公重抖擞，不拘一格降人才。","v":"4d0d7414"}]},
-"s5a05": {"key":"7ebeb0df934205ac","scenes":[{"lines":[0,1,2,3],"caption":"慈母手中线，游子身上衣。临行密密缝，意恐迟迟归。","v":"4c47cb1d"},{"lines":[4,5],"caption":"谁言寸草心，报得三春晖。","v":"4066d14a"}]},
-"s5a06": {"key":"8e7e1f8f61f47f47","scenes":[{"lines":[0,1],"caption":"空山新雨后，天气晚来秋。","v":"13756275"},{"lines":[2,3],"caption":"明月松间照，清泉石上流。","v":"4683657a"},{"lines":[4,5],"caption":"竹喧归浣女，莲动下渔舟。","v":"b90b4012"},{"lines":[6,7],"caption":"随意春芳歇，王孙自可留。","v":"3c473ddf"}]},
-"s5a07": {"key":"f868db3db07c6022","scenes":[{"lines":[0,1],"caption":"月落乌啼霜满天，江枫渔火对愁眠。","v":"f082a472"},{"lines":[2,3],"caption":"姑苏城外寒山寺，夜半钟声到客船。","v":"8fa390bf"}]},
-"s5a08": {"key":"a46ff7a8a11fa9ee","scenes":[{"lines":[0,1],"caption":"天街小雨润如酥，草色遥看近却无。","v":"b290ca47"},{"lines":[2,3],"caption":"最是一年春好处，绝胜烟柳满皇都。","v":"89249968"}]},
-"s5a09": {"key":"9beddd596880a35e","scenes":[{"lines":[0],"caption":"西塞山前白鹭飞，","v":"d4e7db89"},{"lines":[1],"caption":"桃花流水鳜鱼肥。","v":"3dd00b5a"},{"lines":[2,3,4],"caption":"青箬笠，绿蓑衣，斜风细雨不须归。","v":"9c3a6fb8"}]},
-"s5a10": {"key":"f9ac619cd59ff0c4","scenes":[{"lines":[0,1],"caption":"半亩方塘一鉴开，天光云影共徘徊。","v":"a4021d44"},{"lines":[2],"caption":"问渠那得清如许？","v":"c6238937"},{"lines":[3],"caption":"为有源头活水来。","v":"9499e4fd"}]},
-"s5b01": {"key":"71a59f935c6a51dc","scenes":[{"lines":[0,1],"caption":"昼出耘田夜绩麻，村庄儿女各当家。","v":"0f719dff"},{"lines":[2,3],"caption":"童孙未解供耕织，也傍桑阴学种瓜。","v":"e07da23a"}]},
-"s5b02": {"key":"5b4b39b33cfbdc62","scenes":[{"lines":[0,1],"caption":"稚子金盆脱晓冰，彩丝穿取当银钲。","v":"8baaf458"},{"lines":[2],"caption":"敲成玉磬穿林响，","v":"7bdf0f3e"},{"lines":[3],"caption":"忽作玻璃碎地声。","v":"9177675b"}]},
-"s5b03": {"key":"7b724b49f851ad0e","scenes":[{"lines":[0,1],"caption":"草满池塘水满陂，山衔落日浸寒漪。","v":"3c5e4554"},{"lines":[2,3],"caption":"牧童归去横牛背，短笛无腔信口吹。","v":"e3d825a0"}]},
-"s5b04": {"key":"7ebeb0df934205ac","scenes":[{"lines":[0,1,2,3],"caption":"慈母手中线，游子身上衣。临行密密缝，意恐迟迟归。","v":"2e5afd5f"},{"lines":[4,5],"caption":"谁言寸草心，报得三春晖。","v":"acabd3e2"}]},
-"s5b05": {"key":"a4572e0129d8e2c3","scenes":[{"lines":[0,1],"caption":"人闲桂花落，夜静春山空。","v":"5f38bfbd"},{"lines":[2,3],"caption":"月出惊山鸟，时鸣春涧中。","v":"73b8dddd"}]},
-"s5b06": {"key":"4a526d7a5df67dfe","scenes":[{"lines":[0,1],"caption":"青海长云暗雪山，孤城遥望玉门关。","v":"d9944c60"},{"lines":[2],"caption":"黄沙百战穿金甲，","v":"404e5b26"},{"lines":[3],"caption":"不破楼兰终不还。","v":"4f7ef06f"}]},
-"s5b07": {"key":"2575a17989357b50","scenes":[{"lines":[0,1],"caption":"三万里河东入海，五千仞岳上摩天。","v":"1ff0ec4c"},{"lines":[2,3],"caption":"遗民泪尽胡尘里，南望王师又一年。","v":"d3263c33"}]},
-"s5b08": {"key":"7a78c0634bf23cc7","scenes":[{"lines":[0,1],"caption":"剑外忽传收蓟北，初闻涕泪满衣裳。","v":"60e5387e"},{"lines":[2,3],"caption":"却看妻子愁何在，漫卷诗书喜欲狂。","v":"9c5c941c"},{"lines":[4,5],"caption":"白日放歌须纵酒，青春作伴好还乡。","v":"14ceb521"},{"lines":[6,7],"caption":"即从巴峡穿巫峡，便下襄阳向洛阳。","v":"f2f9c54a"}]},
-"s5b09": {"key":"0188e15ded8cdfd0","scenes":[{"lines":[0,1],"caption":"黄河远上白云间，一片孤城万仞山。","v":"3d7158af"},{"lines":[2,3],"caption":"羌笛何须怨杨柳，春风不度玉门关。","v":"22c9c916"}]},
-"s5b10": {"key":"203108478e41f364","scenes":[{"lines":[0,1],"caption":"故人西辞黄鹤楼，烟花三月下扬州。","v":"4906ca33"},{"lines":[2,3],"caption":"孤帆远影碧空尽，唯见长江天际流。","v":"5585214c"}]},
-"s5b11": {"key":"88aee6a89b94977d","scenes":[{"lines":[0,1],"caption":"绿遍山原白满川，子规声里雨如烟。","v":"a1163841"},{"lines":[2,3],"caption":"乡村四月闲人少，才了蚕桑又插田。","v":"1761ea17"}]},
-"s6a01": {"key":"7fc9f490091e2eea","scenes":[{"lines":[0,1],"caption":"移舟泊烟渚，日暮客愁新。","v":"47cc6420"},{"lines":[2,3],"caption":"野旷天低树，江清月近人。","v":"5c820cf7"}]},
-"s6a02": {"key":"95e89cbba4d02143","scenes":[{"lines":[0],"caption":"黑云翻墨未遮山，","v":"2871fdf1"},{"lines":[1],"caption":"白雨跳珠乱入船。","v":"e9660ae3"},{"lines":[2,3],"caption":"卷地风来忽吹散，望湖楼下水如天。","v":"5a2e1e58"}]},
-"s6a03": {"key":"4670e0edb5e0eabd","scenes":[{"lines":[0,1],"caption":"明月别枝惊鹊，清风半夜鸣蝉。","v":"fbe03274"},{"lines":[2,3],"caption":"稻花香里说丰年，听取蛙声一片。","v":"37288c6d"},{"lines":[4,5],"caption":"七八个星天外，两三点雨山前。","v":"22fe31ac"},{"lines":[6,7],"caption":"旧时茅店社林边，路转溪桥忽见。","v":"3ee6fbc6"}]},
-"s6a04": {"key":"6eb1157041f94e4a","scenes":[{"lines":[0,1],"caption":"黄师塔前江水东，春光懒困倚微风。","v":"0bc9c35a"},{"lines":[2,3],"caption":"桃花一簇开无主，可爱深红爱浅红？","v":"2128d485"}]},
-"s6a05": {"key":"b29d45011b220da9","scenes":[{"lines":[0,1],"caption":"红军不怕远征难，万水千山只等闲。","v":"c90202fe"},{"lines":[2,3],"caption":"五岭逶迤腾细浪，乌蒙磅礴走泥丸。","v":"1ac8731d"},{"lines":[4],"caption":"金沙水拍云崖暖，","v":"04e214f5"},{"lines":[5],"caption":"大渡桥横铁索寒。","v":"cb1d6ee7"},{"lines":[6,7],"caption":"更喜岷山千里雪，三军过后尽开颜。","v":"3ebe8c00"}]},
-"s6a06": {"key":"888ff19b8f1f03d6","scenes":[{"lines":[0,1],"caption":"昨夜江边春水生，蒙冲巨舰一毛轻。","v":"a64601ad"},{"lines":[2],"caption":"向来枉费推移力，","v":"82678233"},{"lines":[3],"caption":"此日中流自在行。","v":"867116e1"}]},
-"s6a07": {"key":"4a2c0cbf2bdd9b17","scenes":[{"lines":[0,1],"caption":"渭城朝雨浥轻尘，客舍青青柳色新。","v":"7051d2d1"},{"lines":[2],"caption":"劝君更尽一杯酒，","v":"0aadb364"},{"lines":[3],"caption":"西出阳关无故人。","v":"36cd491b"}]},
-"s6a08": {"key":"600d0a283909d00e","scenes":[{"lines":[0,1],"caption":"故人具鸡黍，邀我至田家。","v":"c9389f9a"},{"lines":[2,3],"caption":"绿树村边合，青山郭外斜。","v":"565221cf"},{"lines":[4,5],"caption":"开轩面场圃，把酒话桑麻。","v":"73792f3b"},{"lines":[6,7],"caption":"待到重阳日，还来就菊花。","v":"b97ff7da"}]},
-"s6a09": {"key":"1a3b65978cea92df","scenes":[{"lines":[0,1],"caption":"九曲黄河万里沙，浪淘风簸自天涯。","v":"0138eb45"},{"lines":[2],"caption":"如今直上银河去，","v":"d7ac6a6a"},{"lines":[3],"caption":"同到牵牛织女家。","v":"58b59a52"}]},
-"s6a10": {"key":"497b191840c1b70f","scenes":[{"lines":[0,1],"caption":"千里莺啼绿映红，水村山郭酒旗风。","v":"b627ce3d"},{"lines":[2,3],"caption":"南朝四百八十寺，多少楼台烟雨中。","v":"961ddc93"}]},
-"s6a11": {"key":"28642c6fade5fade","scenes":[{"lines":[0,1],"caption":"茅檐长扫净无苔，花木成畦手自栽。","v":"3b37e89a"},{"lines":[2,3],"caption":"一水护田将绿绕，两山排闼送青来。","v":"3a015d7c"}]},
-"s6b01": {"key":"b1bf9a943086eb53","scenes":[{"lines":[0,1],"caption":"春城无处不飞花，寒食东风御柳斜。","v":"4fb1ab10"},{"lines":[2,3],"caption":"日暮汉宫传蜡烛，轻烟散入五侯家。","v":"2df67429"}]},
-"s6b02": {"key":"af12c1a4a494e46c","scenes":[{"lines":[0,1],"caption":"迢迢牵牛星，皎皎河汉女。","v":"b51f503d"},{"lines":[2,3],"caption":"纤纤擢素手，札札弄机杼。","v":"4e46cf9f"},{"lines":[4,5],"caption":"终日不成章，泣涕零如雨。","v":"50833192"},{"lines":[6,7,8,9],"caption":"河汉清且浅，相去复几许？盈盈一水间，脉脉不得语。","v":"30efcf13"}]},
-"s6b03": {"key":"93431ee3a15d0603","scenes":[{"lines":[0,1],"caption":"中庭地白树栖鸦，冷露无声湿桂花。","v":"4892a460"},{"lines":[2,3],"caption":"今夜月明人尽望，不知秋思落谁家。","v":"a96e91cd"}]},
-"s6b04": {"key":"4c9853d72fa50d9d","scenes":[{"lines":[0,1],"caption":"青青园中葵，朝露待日晞。","v":"37d67e7a"},{"lines":[2,3],"caption":"阳春布德泽，万物生光辉。","v":"5a1f503a"},{"lines":[4,5],"caption":"常恐秋节至，焜黄华叶衰。","v":"53c0d53b"},{"lines":[6,7],"caption":"百川东到海，何时复西归？","v":"f5c0b045"},{"lines":[8,9],"caption":"少壮不努力，老大徒伤悲！","v":"4114f248"}]},
-"s6b05": {"key":"3510f23f4ab7e13c","scenes":[{"lines":[0,1],"caption":"大漠沙如雪，燕山月似钩。","v":"9892fb15"},{"lines":[2,3],"caption":"何当金络脑，快走踏清秋。","v":"d3c75239"}]},
-"s6b06": {"key":"c9d3afa973f0a770","scenes":[{"lines":[0],"caption":"千锤万凿出深山，","v":"b79cb163"},{"lines":[1],"caption":"烈火焚烧若等闲。","v":"04c64d86"},{"lines":[2],"caption":"粉骨碎身浑不怕，","v":"3c51e98e"},{"lines":[3],"caption":"要留清白在人间。","v":"4a3a4e40"}]},
-"s6b07": {"key":"825d87804b2721db","scenes":[{"lines":[0,1],"caption":"咬定青山不放松，立根原在破岩中。","v":"468b3e2a"},{"lines":[2,3],"caption":"千磨万击还坚劲，任尔东西南北风。","v":"427faa0e"}]},
-"s6b08": {"key":"ca208602253c943e","scenes":[{"lines":[0,1],"caption":"昔我往矣，杨柳依依。","v":"e6a82dd1"},{"lines":[2,3],"caption":"今我来思，雨雪霏霏。","v":"8cc95a89"},{"lines":[4,5],"caption":"行道迟迟，载渴载饥。","v":"88de12b0"},{"lines":[6,7],"caption":"我心伤悲，莫知我哀！","v":"3ea2fd1b"}]},
-"s6b09": {"key":"4a2c0cbf2bdd9b17","scenes":[{"lines":[0,1],"caption":"渭城朝雨浥轻尘，客舍青青柳色新。","v":"0eff720f"},{"lines":[2],"caption":"劝君更尽一杯酒，","v":"4a6fa36d"},{"lines":[3],"caption":"西出阳关无故人。","v":"06656e0c"}]},
-"s6b10": {"key":"0ca6f2deb97986c5","scenes":[{"lines":[0,1],"caption":"好雨知时节，当春乃发生。","v":"fc6050fe"},{"lines":[2,3],"caption":"随风潜入夜，润物细无声。","v":"72cec75e"},{"lines":[4,5],"caption":"野径云俱黑，江船火独明。","v":"5e1db5e5"},{"lines":[6,7],"caption":"晓看红湿处，花重锦官城。","v":"68362769"}]},
-"s6b11": {"key":"a46ff7a8a11fa9ee","scenes":[{"lines":[0,1],"caption":"天街小雨润如酥，草色遥看近却无。","v":"2d10bd00"},{"lines":[2,3],"caption":"最是一年春好处，绝胜烟柳满皇都。","v":"a62bc247"}]},
-"s6b12": {"key":"cdadfa703d591722","scenes":[{"lines":[0,1],"caption":"江上往来人，但爱鲈鱼美。","v":"7b2988c9"},{"lines":[2,3],"caption":"君看一叶舟，出没风波里。","v":"5a8b9bd8"}]},
-"s6b13": {"key":"dd4a76bb135e1768","scenes":[{"lines":[0,1],"caption":"京口瓜洲一水间，钟山只隔数重山。","v":"5a1370eb"},{"lines":[2],"caption":"春风又绿江南岸，","v":"f144d2bc"},{"lines":[3],"caption":"明月何时照我还？","v":"bd4f4a1e"}]},
-"s6b14": {"key":"73455684446039ca","scenes":[{"lines":[0,1],"caption":"应怜屐齿印苍苔，小扣柴扉久不开。","v":"d7ab4542"},{"lines":[2,3],"caption":"春色满园关不住，一枝红杏出墙来。","v":"fcc86db2"}]},
-"s6b15": {"key":"25643e5690cb1fdf","scenes":[{"lines":[0,1,2,3],"caption":"水是眼波横，山是眉峰聚。欲问行人去那边？眉眼盈盈处。","v":"5f1a819f"},{"lines":[4,5],"caption":"才始送春归，又送君归去。","v":"a7914d6c"},{"lines":[6,7],"caption":"若到江南赶上春，千万和春住。","v":"2a15f248"}]},
-"s6b16": {"key":"994835c786a8aa16","scenes":[{"lines":[0,1],"caption":"山下兰芽短浸溪，松间沙路净无泥，","v":"ba0747ee"},{"lines":[2],"caption":"萧萧暮雨子规啼。","v":"b84d4e24"},{"lines":[3,4,5],"caption":"谁道人生无再少？门前流水尚能西！休将白发唱黄鸡。","v":"2eac8119"}]},
-"s6b17": {"key":"54426c4a38290f2f","scenes":[{"lines":[0,1],"caption":"春归何处？寂寞无行路。","v":"30ec159b"},{"lines":[2,3],"caption":"若有人知春去处，唤取归来同住。","v":"d8f75cd2"},{"lines":[4,5],"caption":"春无踪迹谁知？除非问取黄鹂。","v":"eecd5e71"},{"lines":[6,7],"caption":"百啭无人能解，因风飞过蔷薇。","v":"151075ce"}]}
+  "k1a01": {
+    "key": "ea362ebe724900a7",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "少小离家老大回，乡音无改鬓毛衰。",
+        "v": "c471f1ce",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "儿童相见不相识，笑问客从何处来。",
+        "v": "e765747c",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k1a02": {
+    "key": "6097103c4c4cd0fa",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "孩儿立志出乡关，学不成名誓不还。",
+        "v": "fe15dd94",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "埋骨何须桑梓地，人生无处不青山。",
+        "v": "b3a337fb",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k2a01": {
+    "key": "097da555b466827c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "独坐池塘如虎踞，绿荫树下养精神。",
+        "v": "315cff8a",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "春来我不先开口，哪个虫儿敢作声？",
+        "v": "7d411b6e",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k3a01": {
+    "key": "4dc71f404dfb5286",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "小时不识月，呼作白玉盘。又疑瑶台镜，飞在青云端。",
+        "v": "4689fa70",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "仙人垂两足，桂树何团团。",
+        "v": "b603018e",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "白兔捣药成，问言与谁餐。",
+        "v": "d46ce806",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k3a02": {
+    "key": "467895c36197b6ec",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "人生易老天难老，岁岁重阳。今又重阳，战地黄花分外香。",
+        "v": "62ac14f6",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "caption": "一年一度秋风劲，不似春光。胜似春光，寥廓江天万里霜。",
+        "v": "b3dbe973",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k4a01": {
+    "key": "3192e21dbe02885a",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "飒爽英姿五尺枪，曙光初照演兵场。",
+        "v": "e035000e",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "中华儿女多奇志，不爱红装爱武装。",
+        "v": "3eea26e8",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k5a01": {
+    "key": "105279c82080f04b",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "常记溪亭日暮，沉醉不知归路。",
+        "v": "19d37816",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "兴尽晚回舟，误入藕花深处。",
+        "v": "79146fa9",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5,
+          6
+        ],
+        "caption": "争渡，争渡，惊起一滩鸥鹭。",
+        "v": "7fdc229d",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k5a02": {
+    "key": "bfbacb63d7c5c6dd",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "翻身跃入七人房，回首峰峦入莽苍。",
+        "v": "dddd2fa9",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "四十八盘才走过，风驰又已到钱塘。",
+        "v": "ff0c54e5",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k6a01": {
+    "key": "97e0f16053d1dadb",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "离离原上草，一岁一枯荣。野火烧不尽，春风吹又生。",
+        "v": "22b8237f",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "远芳侵古道，晴翠接荒城。",
+        "v": "4c818bdc",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "又送王孙去，萋萋满别情。",
+        "v": "c24883ce",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k6a02": {
+    "key": "216073341be04f1e",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "昨夜雨疏风骤，浓睡不消残酒。试问卷帘人，却道海棠依旧。",
+        "v": "e6437bab",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5,
+          6
+        ],
+        "caption": "知否，知否，应是绿肥红瘦。",
+        "v": "b8b2453f",
+        "ext": "webp"
+      }
+    ]
+  },
+  "k6a03": {
+    "key": "2f984abfc736386b",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "一山飞峙大江边，跃上葱茏四百旋。",
+        "v": "23390ee7",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "caption": "冷眼向洋看世界，热风吹雨洒江天。云横九派浮黄鹤，浪下三吴起白烟。",
+        "v": "a44acf87",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "陶令不知何处去，桃花源里可耕田。",
+        "v": "ea61b200",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1a01": {
+    "key": "e62889e65f292c49",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "鹅，鹅，鹅",
+        "v": "85ec4ba9",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "曲项向天歌",
+        "v": "f1b01921",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "白毛浮绿水",
+        "v": "33cfcc0c",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "红掌拨清波",
+        "v": "3299d5a4",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1a02": {
+    "key": "89618c4f8a3218ca",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "远看山有色，近听水无声。",
+        "v": "c44ca240",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "春去花还在，人来鸟不惊。",
+        "v": "e625b366",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1a03": {
+    "key": "ef6683b94903cf92",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "锄禾日当午，汗滴禾下土。",
+        "v": "52037695",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "谁知盘中餐，粒粒皆辛苦？",
+        "v": "113d2fca",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1a04": {
+    "key": "91aae90acd4d10db",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "江南可采莲，莲叶何田田。",
+        "v": "0918fb91",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "caption": "鱼戏莲叶间。鱼戏莲叶东，鱼戏莲叶西，鱼戏莲叶南，鱼戏莲叶北。",
+        "v": "1ceeb3a8",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1a05": {
+    "key": "3d24637bb41f147c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "小时不识月，呼作白玉盘。",
+        "v": "4735bace",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "又疑瑶台镜，飞在青云端。",
+        "v": "5d5d658b",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1a06": {
+    "key": "28745f286361aad8",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "解落三秋叶，",
+        "v": "4b33f95f",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "能开二月花。",
+        "v": "d9ff32ae",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "过江千尺浪，",
+        "v": "81e19d92",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "入竹万竿斜。",
+        "v": "580e30eb",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1b01": {
+    "key": "b24f2ffb7a9b5aec",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "春眠不觉晓，处处闻啼鸟。",
+        "v": "4f473e81",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "夜来风雨声，",
+        "v": "f9fb2a71",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "花落知多少。",
+        "v": "76090f27",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1b02": {
+    "key": "894d52f77bd1013d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "松下问童子，言师采药去。",
+        "v": "72b34f48",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "只在此山中，云深不知处。",
+        "v": "7d2608c7",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1b03": {
+    "key": "a9dc04fa1201adb6",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "李白乘舟将欲行，",
+        "v": "64aafc9e",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "忽闻岸上踏歌声。",
+        "v": "cec415b5",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "桃花潭水深千尺，不及汪伦送我情。",
+        "v": "6b780634",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1b04": {
+    "key": "b0f7cde0fab60b8c",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "床前明月光",
+        "v": "a48af91a",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "疑是地上霜",
+        "v": "b7511c16",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "举头望明月",
+        "v": "c6f4fd50",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "低头思故乡",
+        "v": "ab5fdda7",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1b05": {
+    "key": "51b299919191935d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "小娃撑小艇，偷采白莲回。",
+        "v": "beb84acd",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "不解藏踪迹，浮萍一道开。",
+        "v": "e16671b8",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1b06": {
+    "key": "e98e96caf5637105",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "泉眼无声惜细流，树阴照水爱晴柔。",
+        "v": "05979bc7",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "小荷才露尖尖角，早有蜻蜓立上头。",
+        "v": "a23c97b0",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s1b07": {
+    "key": "accd612905d510c8",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "头上红冠不用裁，满身雪白走将来。",
+        "v": "8b9070bb",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "平生不敢轻言语，一叫千门万户开。",
+        "v": "f6e19621",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2a01": {
+    "key": "8f7760559912e661",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "墙角数枝梅，凌寒独自开。",
+        "v": "40dda257",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "遥知不是雪，为有暗香来。",
+        "v": "a3744da5",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2a02": {
+    "key": "b8ec449da9bcb665",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "蓬头稚子学垂纶，侧坐莓苔草映身。",
+        "v": "44d72b18",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "路人借问遥招手，怕得鱼惊不应人。",
+        "v": "49cc54bd",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2a03": {
+    "key": "60c87b62373b95a9",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "白日依山尽，黄河入海流。",
+        "v": "0400e929",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "欲穷千里目，更上一层楼。",
+        "v": "45003c83",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2a04": {
+    "key": "75058d2cab77e78e",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "日照香炉生紫烟，遥看瀑布挂前川。",
+        "v": "e75f6239",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "飞流直下三千尺，",
+        "v": "d5e8b5f2",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "疑是银河落九天。",
+        "v": "e4a363f5",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2a05": {
+    "key": "ae932691c1aacef4",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "千山鸟飞绝，万径人踪灭。",
+        "v": "ba9db7f5",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "孤舟蓑笠翁，独钓寒江雪。",
+        "v": "d39d3872",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2a06": {
+    "key": "068937cad75427a8",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "敕勒川，阴山下。",
+        "v": "77fd8b64",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "天似穹庐，笼盖四野。",
+        "v": "299d58de",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5,
+          6
+        ],
+        "caption": "天苍苍，野茫茫，风吹草低见牛羊。",
+        "v": "8af7dedf",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2a07": {
+    "key": "99b162de3c265202",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "危楼高百尺，手可摘星辰。",
+        "v": "97cce986",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "不敢高声语，恐惊天上人。",
+        "v": "b5790e42",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2b01": {
+    "key": "dc0c6a442c709da2",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "碧玉妆成一树高，万条垂下绿丝绦。",
+        "v": "6ba55d47",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "不知细叶谁裁出，二月春风似剪刀。",
+        "v": "617eca7d",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2b02": {
+    "key": "14adcb16e677ac9f",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "草长莺飞二月天，拂堤杨柳醉春烟。",
+        "v": "1ee0f6bc",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "儿童散学归来早，忙趁东风放纸鸢。",
+        "v": "8f8f3f2a",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2b03": {
+    "key": "4582251a869b60fe",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "离离原上草，一岁一枯荣。",
+        "v": "58347670",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "野火烧不尽，",
+        "v": "db1f32d4",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "春风吹又生。",
+        "v": "e57aa9a8",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2b04": {
+    "key": "dfcf9314c33d0caf",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "两个黄鹂鸣翠柳，一行白鹭上青天。",
+        "v": "94fddf26",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "窗含西岭千秋雪，门泊东吴万里船。",
+        "v": "f3df7f61",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2b05": {
+    "key": "19840613acb36e2c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "毕竟西湖六月中，风光不与四时同。",
+        "v": "7c6a967f",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "接天莲叶无穷碧，映日荷花别样红。",
+        "v": "803969a1",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2b06": {
+    "key": "c9261eb0061f66b4",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "春种一粒粟，",
+        "v": "5bcfdb43",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "秋收万颗子。",
+        "v": "b9eeedc6",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "四海无闲田，",
+        "v": "adb4bd94",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "农夫犹饿死。",
+        "v": "557a328a",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s2b07": {
+    "key": "cdadfa703d591722",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "江上往来人，但爱鲈鱼美。",
+        "v": "daedeef5",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "君看一叶舟，出没风波里。",
+        "v": "ab33e8f5",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a01": {
+    "key": "58c4e4752877a1a2",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "牧童骑黄牛，歌声振林樾。",
+        "v": "8f7c02a5",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "意欲捕鸣蝉，忽然闭口立。",
+        "v": "760f4b70",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a02": {
+    "key": "2ddbcb30df5bd770",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "湖光秋月两相和，潭面无风镜未磨。",
+        "v": "7495ccdd",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "遥望洞庭山水翠，白银盘里一青螺。",
+        "v": "c827d0eb",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a03": {
+    "key": "4045d3413d1bf334",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "远上寒山石径斜，白云生处有人家。",
+        "v": "be6144b5",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "停车坐爱枫林晚，",
+        "v": "7f5fb7da",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "霜叶红于二月花。",
+        "v": "8b14983b",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a04": {
+    "key": "afaaa1fac6a5595d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "萧萧梧叶送寒声，江上秋风动客情。",
+        "v": "6bb4017c",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "知有儿童挑促织，夜深篱落一灯明。",
+        "v": "bb13c3fe",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a05": {
+    "key": "7a2a48f2c93ac25f",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "月黑见渔灯，孤光一点萤。",
+        "v": "75b4238a",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "微微风簇浪，散作满河星。",
+        "v": "4d83e571",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a06": {
+    "key": "e7e9b6da247c36ff",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "朝辞白帝彩云间，千里江陵一日还。",
+        "v": "a8475bfc",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "两岸猿声啼不住，轻舟已过万重山。",
+        "v": "df5dedd0",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a07": {
+    "key": "bb27a0ff7a8abb8c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "空山不见人，但闻人语响。",
+        "v": "2717e846",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "返景入深林，复照青苔上。",
+        "v": "a3b76f82",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a08": {
+    "key": "b09e1a4465b5cc18",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "天门中断楚江开，碧水东流至此回。",
+        "v": "6f62e2b9",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "两岸青山相对出，孤帆一片日边来。",
+        "v": "e74cc443",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a09": {
+    "key": "8b0af97cb6a66187",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "水光潋滟晴方好，",
+        "v": "cde84cec",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "山色空蒙雨亦奇。",
+        "v": "e87cd5a9",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "欲把西湖比西子，淡妆浓抹总相宜。",
+        "v": "b37ec20c",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3a10": {
+    "key": "3fa1de48af3ac25e",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "荷叶罗裙一色裁，芙蓉向脸两边开。",
+        "v": "6ad0a427",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "乱入池中看不见，闻歌始觉有人来。",
+        "v": "cd1759be",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b01": {
+    "key": "15b220c8a0707f83",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "迟日江山丽，春风花草香。",
+        "v": "3e19130a",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "泥融飞燕子，沙暖睡鸳鸯。",
+        "v": "c76ea9d2",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b02": {
+    "key": "bc05270d018f2e76",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "竹外桃花三两枝，春江水暖鸭先知。蒌蒿满地芦芽短，正是河豚欲上时。",
+        "v": "4cdb5856",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b03": {
+    "key": "87f04c686f6a1130",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "梅子黄时日日晴，小溪泛尽却山行。",
+        "v": "1088689c",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "绿阴不减来时路，添得黄鹂四五声。",
+        "v": "bc4eacc4",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b04": {
+    "key": "4bb9213f2de31f76",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "江南好，风景旧曾谙。",
+        "v": "ec7d7faa",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "日出江花红胜火，春来江水绿如蓝。",
+        "v": "bd2bf4ce",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4
+        ],
+        "caption": "能不忆江南？",
+        "v": "5c1623a0",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b05": {
+    "key": "60b65f7a3cdd0b64",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "爆竹声中一岁除，",
+        "v": "a9238005",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "春风送暖入屠苏。",
+        "v": "dd3146eb",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "千门万户曈曈日，总把新桃换旧符。",
+        "v": "97c794d4",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b06": {
+    "key": "7ffa888f1224583d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "清明时节雨纷纷，路上行人欲断魂。",
+        "v": "7e6d423d",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "借问酒家何处有？牧童遥指杏花村。",
+        "v": "e66d8487",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b07": {
+    "key": "c85752eddab0892a",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "独在异乡为异客，每逢佳节倍思亲。",
+        "v": "b4b4a0f2",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "遥知兄弟登高处，遍插茱萸少一人。",
+        "v": "fcbe5fe4",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b08": {
+    "key": "79ea3a483782ed84",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "独怜幽草涧边生，上有黄鹂深树鸣。",
+        "v": "34a12212",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "春潮带雨晚来急，野渡无人舟自横。",
+        "v": "75a4629f",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s3b09": {
+    "key": "73e98c1bdde9f884",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "人间四月芳菲尽，",
+        "v": "6700db68",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "山寺桃花始盛开。",
+        "v": "e79aad30",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "长恨春归无觅处，不知转入此中来。",
+        "v": "79dcf9da",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a01": {
+    "key": "70c6b0925a2c35dc",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "一道残阳铺水中，半江瑟瑟半江红。",
+        "v": "cd4c61bf",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "可怜九月初三夜，露似真珠月似弓。",
+        "v": "7c7349f9",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a02": {
+    "key": "4e398cf60eb47f3c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "横看成岭侧成峰，远近高低各不同。",
+        "v": "52c9b022",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "不识庐山真面目，只缘身在此山中。",
+        "v": "3a70a39e",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a03": {
+    "key": "8594c22984527902",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "梅雪争春未肯降，",
+        "v": "64adfdb7",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "骚人阁笔费评章。",
+        "v": "b3029aed",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "梅须逊雪三分白，雪却输梅一段香。",
+        "v": "5d90b364",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a04": {
+    "key": "9bcfba97b857176d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "荷尽已无擎雨盖，菊残犹有傲霜枝。",
+        "v": "b5ddabc7",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "一年好景君须记，最是橙黄橘绿时。",
+        "v": "e8e00629",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a05": {
+    "key": "e6ff10d618d2bd2a",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "云母屏风烛影深，长河渐落晓星沉。",
+        "v": "4c7c4e22",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "嫦娥应悔偷灵药，碧海青天夜夜心。",
+        "v": "354a0510",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a06": {
+    "key": "ced0390a78322860",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "千里黄云白日曛，北风吹雁雪纷纷。",
+        "v": "e2f9f264",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "莫愁前路无知己，天下谁人不识君？",
+        "v": "521f2b2d",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a07": {
+    "key": "8bee8d4b0bcea6da",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "葡萄美酒夜光杯，欲饮琵琶马上催。",
+        "v": "369685a7",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "醉卧沙场君莫笑，",
+        "v": "839ac636",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "古来征战几人回？",
+        "v": "803e2fec",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a08": {
+    "key": "367e03bea770e35d",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "秦时明月汉时关，",
+        "v": "28df8254",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "万里长征人未还。",
+        "v": "89fa9b9e",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "但使龙城飞将在，不教胡马度阴山。",
+        "v": "c64baf45",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4a09": {
+    "key": "57491269cd05cd6b",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "生当作人杰，死亦为鬼雄。",
+        "v": "c303769a",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "至今思项羽，不肯过江东。",
+        "v": "a4892c1c",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b01": {
+    "key": "6f15fccfd071d3f3",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "梅子金黄杏子肥，麦花雪白菜花稀。",
+        "v": "88e0bded",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "日长篱落无人过，惟有蜻蜓蛱蝶飞。",
+        "v": "aafb9b4b",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b02": {
+    "key": "eb0ea0bd6cc2688a",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "篱落疏疏一径深，树头新绿未成阴。",
+        "v": "49106637",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "儿童急走追黄蝶，",
+        "v": "f17852db",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "飞入菜花无处寻。",
+        "v": "d058a7a2",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b03": {
+    "key": "1ef0689e7a16ca17",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "茅檐低小，溪上青青草。",
+        "v": "71baea5d",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "醉里吴音相媚好，白发谁家翁媪？",
+        "v": "b864c360",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "大儿锄豆溪东，中儿正织鸡笼。",
+        "v": "b2693621",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "最喜小儿亡赖，溪头卧剥莲蓬。",
+        "v": "1d916fb3",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b04": {
+    "key": "48e82f22d95c13d1",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "风雨送春归，飞雪迎春到。",
+        "v": "2fbfde13",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "已是悬崖百丈冰，犹有花枝俏。",
+        "v": "8b7855f0",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "俏也不争春，只把春来报。",
+        "v": "0f5a1649",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "待到山花烂漫时，她在丛中笑。",
+        "v": "5848c823",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b05": {
+    "key": "82e6274cd8ab43dd",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "黄四娘家花满蹊，千朵万朵压枝低。",
+        "v": "f291ffd8",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "留连戏蝶时时舞，自在娇莺恰恰啼。",
+        "v": "824d8891",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b06": {
+    "key": "c4700d4e045e334c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "不论平地与山尖，无限风光尽被占。",
+        "v": "081dab4a",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "采得百花成蜜后，为谁辛苦为谁甜？",
+        "v": "d0424916",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b07": {
+    "key": "42c89c66a245aa53",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "众鸟高飞尽，孤云独去闲。",
+        "v": "cf7cb61e",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "相看两不厌，只有敬亭山。",
+        "v": "4a447269",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b08": {
+    "key": "ce5617f56f3636c2",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "寒雨连江夜入吴，",
+        "v": "2ae17e7d",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "平明送客楚山孤。",
+        "v": "01c8f4f6",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "洛阳亲友如相问，一片冰心在玉壶。",
+        "v": "509e43b8",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b09": {
+    "key": "e9c16e09f0fdf8c3",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "月黑雁飞高，单于夜遁逃。",
+        "v": "4f134298",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "欲将轻骑逐，大雪满弓刀。",
+        "v": "d434811e",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s4b10": {
+    "key": "a99b89ced1ec9acf",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "我家洗砚池头树，朵朵花开淡墨痕。",
+        "v": "3c20e77b",
+        "ext": "webp"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "不要人夸好颜色，只留清气满乾坤。",
+        "v": "074d4149",
+        "ext": "webp"
+      }
+    ]
+  },
+  "s5a01": {
+    "key": "ce755b504b066cc3",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "七夕今宵看碧霄，牵牛织女渡河桥。",
+        "v": "d41fa9eb"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "家家乞巧望秋月，穿尽红丝几万条。",
+        "v": "8eca047e"
+      }
+    ]
+  },
+  "s5a02": {
+    "key": "f8e7b1385d814b1d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "死去元知万事空，但悲不见九州同。",
+        "v": "61fcfc7c"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "王师北定中原日，",
+        "v": "3e02c416"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "家祭无忘告乃翁。",
+        "v": "91dfb59f"
+      }
+    ]
+  },
+  "s5a03": {
+    "key": "27bb94dd1fbeda47",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "山外青山楼外楼，西湖歌舞几时休？",
+        "v": "a91b3c45"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "暖风熏得游人醉，直把杭州作汴州。",
+        "v": "a6f76589"
+      }
+    ]
+  },
+  "s5a04": {
+    "key": "9ff6a216ebe136a4",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "九州生气恃风雷，万马齐喑究可哀。",
+        "v": "56ba8f98"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "我劝天公重抖擞，不拘一格降人才。",
+        "v": "4d0d7414"
+      }
+    ]
+  },
+  "s5a05": {
+    "key": "7ebeb0df934205ac",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "慈母手中线，游子身上衣。临行密密缝，意恐迟迟归。",
+        "v": "4c47cb1d"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "谁言寸草心，报得三春晖。",
+        "v": "4066d14a"
+      }
+    ]
+  },
+  "s5a06": {
+    "key": "8e7e1f8f61f47f47",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "空山新雨后，天气晚来秋。",
+        "v": "13756275"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "明月松间照，清泉石上流。",
+        "v": "4683657a"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "竹喧归浣女，莲动下渔舟。",
+        "v": "b90b4012"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "随意春芳歇，王孙自可留。",
+        "v": "3c473ddf"
+      }
+    ]
+  },
+  "s5a07": {
+    "key": "f868db3db07c6022",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "月落乌啼霜满天，江枫渔火对愁眠。",
+        "v": "f082a472"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "姑苏城外寒山寺，夜半钟声到客船。",
+        "v": "8fa390bf"
+      }
+    ]
+  },
+  "s5a08": {
+    "key": "a46ff7a8a11fa9ee",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "天街小雨润如酥，草色遥看近却无。",
+        "v": "b290ca47"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "最是一年春好处，绝胜烟柳满皇都。",
+        "v": "89249968"
+      }
+    ]
+  },
+  "s5a09": {
+    "key": "9beddd596880a35e",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "西塞山前白鹭飞，",
+        "v": "d4e7db89"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "桃花流水鳜鱼肥。",
+        "v": "3dd00b5a"
+      },
+      {
+        "lines": [
+          2,
+          3,
+          4
+        ],
+        "caption": "青箬笠，绿蓑衣，斜风细雨不须归。",
+        "v": "9c3a6fb8"
+      }
+    ]
+  },
+  "s5a10": {
+    "key": "f9ac619cd59ff0c4",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "半亩方塘一鉴开，天光云影共徘徊。",
+        "v": "a4021d44"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "问渠那得清如许？",
+        "v": "c6238937"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "为有源头活水来。",
+        "v": "9499e4fd"
+      }
+    ]
+  },
+  "s5b01": {
+    "key": "71a59f935c6a51dc",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "昼出耘田夜绩麻，村庄儿女各当家。",
+        "v": "0f719dff"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "童孙未解供耕织，也傍桑阴学种瓜。",
+        "v": "e07da23a"
+      }
+    ]
+  },
+  "s5b02": {
+    "key": "5b4b39b33cfbdc62",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "稚子金盆脱晓冰，彩丝穿取当银钲。",
+        "v": "8baaf458"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "敲成玉磬穿林响，",
+        "v": "7bdf0f3e"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "忽作玻璃碎地声。",
+        "v": "9177675b"
+      }
+    ]
+  },
+  "s5b03": {
+    "key": "7b724b49f851ad0e",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "草满池塘水满陂，山衔落日浸寒漪。",
+        "v": "3c5e4554"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "牧童归去横牛背，短笛无腔信口吹。",
+        "v": "e3d825a0"
+      }
+    ]
+  },
+  "s5b04": {
+    "key": "7ebeb0df934205ac",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "慈母手中线，游子身上衣。临行密密缝，意恐迟迟归。",
+        "v": "2e5afd5f"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "谁言寸草心，报得三春晖。",
+        "v": "acabd3e2"
+      }
+    ]
+  },
+  "s5b05": {
+    "key": "a4572e0129d8e2c3",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "人闲桂花落，夜静春山空。",
+        "v": "5f38bfbd"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "月出惊山鸟，时鸣春涧中。",
+        "v": "73b8dddd"
+      }
+    ]
+  },
+  "s5b06": {
+    "key": "4a526d7a5df67dfe",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "青海长云暗雪山，孤城遥望玉门关。",
+        "v": "d9944c60"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "黄沙百战穿金甲，",
+        "v": "404e5b26"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "不破楼兰终不还。",
+        "v": "4f7ef06f"
+      }
+    ]
+  },
+  "s5b07": {
+    "key": "2575a17989357b50",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "三万里河东入海，五千仞岳上摩天。",
+        "v": "1ff0ec4c"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "遗民泪尽胡尘里，南望王师又一年。",
+        "v": "d3263c33"
+      }
+    ]
+  },
+  "s5b08": {
+    "key": "7a78c0634bf23cc7",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "剑外忽传收蓟北，初闻涕泪满衣裳。",
+        "v": "60e5387e"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "却看妻子愁何在，漫卷诗书喜欲狂。",
+        "v": "9c5c941c"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "白日放歌须纵酒，青春作伴好还乡。",
+        "v": "14ceb521"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "即从巴峡穿巫峡，便下襄阳向洛阳。",
+        "v": "f2f9c54a"
+      }
+    ]
+  },
+  "s5b09": {
+    "key": "0188e15ded8cdfd0",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "黄河远上白云间，一片孤城万仞山。",
+        "v": "3d7158af"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "羌笛何须怨杨柳，春风不度玉门关。",
+        "v": "22c9c916"
+      }
+    ]
+  },
+  "s5b10": {
+    "key": "203108478e41f364",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "故人西辞黄鹤楼，烟花三月下扬州。",
+        "v": "4906ca33"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "孤帆远影碧空尽，唯见长江天际流。",
+        "v": "5585214c"
+      }
+    ]
+  },
+  "s5b11": {
+    "key": "88aee6a89b94977d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "绿遍山原白满川，子规声里雨如烟。",
+        "v": "a1163841"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "乡村四月闲人少，才了蚕桑又插田。",
+        "v": "1761ea17"
+      }
+    ]
+  },
+  "s6a01": {
+    "key": "7fc9f490091e2eea",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "移舟泊烟渚，日暮客愁新。",
+        "v": "47cc6420"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "野旷天低树，江清月近人。",
+        "v": "5c820cf7"
+      }
+    ]
+  },
+  "s6a02": {
+    "key": "95e89cbba4d02143",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "黑云翻墨未遮山，",
+        "v": "2871fdf1"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "白雨跳珠乱入船。",
+        "v": "e9660ae3"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "卷地风来忽吹散，望湖楼下水如天。",
+        "v": "5a2e1e58"
+      }
+    ]
+  },
+  "s6a03": {
+    "key": "4670e0edb5e0eabd",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "明月别枝惊鹊，清风半夜鸣蝉。",
+        "v": "fbe03274"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "稻花香里说丰年，听取蛙声一片。",
+        "v": "37288c6d"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "七八个星天外，两三点雨山前。",
+        "v": "22fe31ac"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "旧时茅店社林边，路转溪桥忽见。",
+        "v": "3ee6fbc6"
+      }
+    ]
+  },
+  "s6a04": {
+    "key": "6eb1157041f94e4a",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "黄师塔前江水东，春光懒困倚微风。",
+        "v": "0bc9c35a"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "桃花一簇开无主，可爱深红爱浅红？",
+        "v": "2128d485"
+      }
+    ]
+  },
+  "s6a05": {
+    "key": "b29d45011b220da9",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "红军不怕远征难，万水千山只等闲。",
+        "v": "c90202fe"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "五岭逶迤腾细浪，乌蒙磅礴走泥丸。",
+        "v": "1ac8731d"
+      },
+      {
+        "lines": [
+          4
+        ],
+        "caption": "金沙水拍云崖暖，",
+        "v": "04e214f5"
+      },
+      {
+        "lines": [
+          5
+        ],
+        "caption": "大渡桥横铁索寒。",
+        "v": "cb1d6ee7"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "更喜岷山千里雪，三军过后尽开颜。",
+        "v": "3ebe8c00"
+      }
+    ]
+  },
+  "s6a06": {
+    "key": "888ff19b8f1f03d6",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "昨夜江边春水生，蒙冲巨舰一毛轻。",
+        "v": "a64601ad"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "向来枉费推移力，",
+        "v": "82678233"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "此日中流自在行。",
+        "v": "867116e1"
+      }
+    ]
+  },
+  "s6a07": {
+    "key": "4a2c0cbf2bdd9b17",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "渭城朝雨浥轻尘，客舍青青柳色新。",
+        "v": "7051d2d1"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "劝君更尽一杯酒，",
+        "v": "0aadb364"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "西出阳关无故人。",
+        "v": "36cd491b"
+      }
+    ]
+  },
+  "s6a08": {
+    "key": "600d0a283909d00e",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "故人具鸡黍，邀我至田家。",
+        "v": "c9389f9a"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "绿树村边合，青山郭外斜。",
+        "v": "565221cf"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "开轩面场圃，把酒话桑麻。",
+        "v": "73792f3b"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "待到重阳日，还来就菊花。",
+        "v": "b97ff7da"
+      }
+    ]
+  },
+  "s6a09": {
+    "key": "1a3b65978cea92df",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "九曲黄河万里沙，浪淘风簸自天涯。",
+        "v": "0138eb45"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "如今直上银河去，",
+        "v": "d7ac6a6a"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "同到牵牛织女家。",
+        "v": "58b59a52"
+      }
+    ]
+  },
+  "s6a10": {
+    "key": "497b191840c1b70f",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "千里莺啼绿映红，水村山郭酒旗风。",
+        "v": "b627ce3d"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "南朝四百八十寺，多少楼台烟雨中。",
+        "v": "961ddc93"
+      }
+    ]
+  },
+  "s6a11": {
+    "key": "28642c6fade5fade",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "茅檐长扫净无苔，花木成畦手自栽。",
+        "v": "3b37e89a"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "一水护田将绿绕，两山排闼送青来。",
+        "v": "3a015d7c"
+      }
+    ]
+  },
+  "s6b01": {
+    "key": "b1bf9a943086eb53",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "春城无处不飞花，寒食东风御柳斜。",
+        "v": "4fb1ab10"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "日暮汉宫传蜡烛，轻烟散入五侯家。",
+        "v": "2df67429"
+      }
+    ]
+  },
+  "s6b02": {
+    "key": "af12c1a4a494e46c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "迢迢牵牛星，皎皎河汉女。",
+        "v": "b51f503d"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "纤纤擢素手，札札弄机杼。",
+        "v": "4e46cf9f"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "终日不成章，泣涕零如雨。",
+        "v": "50833192"
+      },
+      {
+        "lines": [
+          6,
+          7,
+          8,
+          9
+        ],
+        "caption": "河汉清且浅，相去复几许？盈盈一水间，脉脉不得语。",
+        "v": "30efcf13"
+      }
+    ]
+  },
+  "s6b03": {
+    "key": "93431ee3a15d0603",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "中庭地白树栖鸦，冷露无声湿桂花。",
+        "v": "4892a460"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "今夜月明人尽望，不知秋思落谁家。",
+        "v": "a96e91cd"
+      }
+    ]
+  },
+  "s6b04": {
+    "key": "4c9853d72fa50d9d",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "青青园中葵，朝露待日晞。",
+        "v": "37d67e7a"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "阳春布德泽，万物生光辉。",
+        "v": "5a1f503a"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "常恐秋节至，焜黄华叶衰。",
+        "v": "53c0d53b"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "百川东到海，何时复西归？",
+        "v": "f5c0b045"
+      },
+      {
+        "lines": [
+          8,
+          9
+        ],
+        "caption": "少壮不努力，老大徒伤悲！",
+        "v": "4114f248"
+      }
+    ]
+  },
+  "s6b05": {
+    "key": "3510f23f4ab7e13c",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "大漠沙如雪，燕山月似钩。",
+        "v": "9892fb15"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "何当金络脑，快走踏清秋。",
+        "v": "d3c75239"
+      }
+    ]
+  },
+  "s6b06": {
+    "key": "c9d3afa973f0a770",
+    "scenes": [
+      {
+        "lines": [
+          0
+        ],
+        "caption": "千锤万凿出深山，",
+        "v": "b79cb163"
+      },
+      {
+        "lines": [
+          1
+        ],
+        "caption": "烈火焚烧若等闲。",
+        "v": "04c64d86"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "粉骨碎身浑不怕，",
+        "v": "3c51e98e"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "要留清白在人间。",
+        "v": "4a3a4e40"
+      }
+    ]
+  },
+  "s6b07": {
+    "key": "825d87804b2721db",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "咬定青山不放松，立根原在破岩中。",
+        "v": "468b3e2a"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "千磨万击还坚劲，任尔东西南北风。",
+        "v": "427faa0e"
+      }
+    ]
+  },
+  "s6b08": {
+    "key": "ca208602253c943e",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "昔我往矣，杨柳依依。",
+        "v": "e6a82dd1"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "今我来思，雨雪霏霏。",
+        "v": "8cc95a89"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "行道迟迟，载渴载饥。",
+        "v": "88de12b0"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "我心伤悲，莫知我哀！",
+        "v": "3ea2fd1b"
+      }
+    ]
+  },
+  "s6b09": {
+    "key": "4a2c0cbf2bdd9b17",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "渭城朝雨浥轻尘，客舍青青柳色新。",
+        "v": "0eff720f"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "劝君更尽一杯酒，",
+        "v": "4a6fa36d"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "西出阳关无故人。",
+        "v": "06656e0c"
+      }
+    ]
+  },
+  "s6b10": {
+    "key": "0ca6f2deb97986c5",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "好雨知时节，当春乃发生。",
+        "v": "fc6050fe"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "随风潜入夜，润物细无声。",
+        "v": "72cec75e"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "野径云俱黑，江船火独明。",
+        "v": "5e1db5e5"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "晓看红湿处，花重锦官城。",
+        "v": "68362769"
+      }
+    ]
+  },
+  "s6b11": {
+    "key": "a46ff7a8a11fa9ee",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "天街小雨润如酥，草色遥看近却无。",
+        "v": "2d10bd00"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "最是一年春好处，绝胜烟柳满皇都。",
+        "v": "a62bc247"
+      }
+    ]
+  },
+  "s6b12": {
+    "key": "cdadfa703d591722",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "江上往来人，但爱鲈鱼美。",
+        "v": "7b2988c9"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "君看一叶舟，出没风波里。",
+        "v": "5a8b9bd8"
+      }
+    ]
+  },
+  "s6b13": {
+    "key": "dd4a76bb135e1768",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "京口瓜洲一水间，钟山只隔数重山。",
+        "v": "5a1370eb"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "春风又绿江南岸，",
+        "v": "f144d2bc"
+      },
+      {
+        "lines": [
+          3
+        ],
+        "caption": "明月何时照我还？",
+        "v": "bd4f4a1e"
+      }
+    ]
+  },
+  "s6b14": {
+    "key": "73455684446039ca",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "应怜屐齿印苍苔，小扣柴扉久不开。",
+        "v": "d7ab4542"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "春色满园关不住，一枝红杏出墙来。",
+        "v": "fcc86db2"
+      }
+    ]
+  },
+  "s6b15": {
+    "key": "25643e5690cb1fdf",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "caption": "水是眼波横，山是眉峰聚。欲问行人去那边？眉眼盈盈处。",
+        "v": "5f1a819f"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "才始送春归，又送君归去。",
+        "v": "a7914d6c"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "若到江南赶上春，千万和春住。",
+        "v": "2a15f248"
+      }
+    ]
+  },
+  "s6b16": {
+    "key": "994835c786a8aa16",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "山下兰芽短浸溪，松间沙路净无泥，",
+        "v": "ba0747ee"
+      },
+      {
+        "lines": [
+          2
+        ],
+        "caption": "萧萧暮雨子规啼。",
+        "v": "b84d4e24"
+      },
+      {
+        "lines": [
+          3,
+          4,
+          5
+        ],
+        "caption": "谁道人生无再少？门前流水尚能西！休将白发唱黄鸡。",
+        "v": "2eac8119"
+      }
+    ]
+  },
+  "s6b17": {
+    "key": "54426c4a38290f2f",
+    "scenes": [
+      {
+        "lines": [
+          0,
+          1
+        ],
+        "caption": "春归何处？寂寞无行路。",
+        "v": "30ec159b"
+      },
+      {
+        "lines": [
+          2,
+          3
+        ],
+        "caption": "若有人知春去处，唤取归来同住。",
+        "v": "d8f75cd2"
+      },
+      {
+        "lines": [
+          4,
+          5
+        ],
+        "caption": "春无踪迹谁知？除非问取黄鹂。",
+        "v": "eecd5e71"
+      },
+      {
+        "lines": [
+          6,
+          7
+        ],
+        "caption": "百啭无人能解，因风飞过蔷薇。",
+        "v": "151075ce"
+      }
+    ]
+  }
 }
